@@ -16,7 +16,7 @@ description: >
 tags: [basic,setup]
 ---
 q`
-	test, err := Load(([]byte)(data))
+	test, err := LoadTest(([]byte)(data))
 	assert.Nil(err)
 	assert.Equal(test.Name, "boot")
 	assert.NotNil(test.Description)
@@ -30,7 +30,7 @@ depends:
 ---
 $ /bin/true
 `
-	test, err = Load(([]byte)(data))
+	test, err = LoadTest(([]byte)(data))
 	assert.Nil(err)
 	assert.Equal(test.Name, "shell")
 	assert.Equal(test.Description, "")

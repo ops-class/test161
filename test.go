@@ -14,7 +14,7 @@ type Test struct {
 	Content     string   `fm:"content" yaml:"-"`
 }
 
-func Load(data []byte) (*Test, error) {
+func LoadTest(data []byte) (*Test, error) {
 	test := new(Test)
 	err := frontmatter.Unmarshal(data, test)
 	return test, err
