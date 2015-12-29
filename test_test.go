@@ -40,15 +40,17 @@ func TestLoad(t *testing.T) {
 func TestPrintConf(t *testing.T) {
 	assert := assert.New(t)
 
-	test, err := LoadTest("./fixtures/tests/parallelvm.yml")
-	assert.Nil(err)
-	conf, err := test.PrintConf()
-	assert.Nil(err)
-	assert.NotNil(conf)
-	fmt.Println(conf)
+	for _, test := range []string{"boot", "shell", "parallelvm"} {
+		test, err := LoadTest(fmt.Sprintf("./fixtures/tests/%v.yml", test))
+		assert.Nil(err)
+		conf, err := test.PrintConf()
+		assert.Nil(err)
+		assert.NotNil(conf)
+		t.Log(conf)
+	}
 }
 
-func TestRun(t *testing.T) {
+func TestRunBoot(t *testing.T) {
 	assert := assert.New(t)
 
 	test, err := LoadTest("./fixtures/tests/boot.yml")

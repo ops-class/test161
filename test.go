@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 	"text/template"
@@ -21,6 +23,7 @@ type DiskConfig struct {
 	Defaults bool   `yaml:"defaults"`
 	RPM      uint   `yaml:"rpm"`
 	Sectors  string `yaml:"sectors"`
+	Bytes    string
 	NoDoom   string `yaml:"nodoom"`
 	File     string
 }
@@ -67,6 +70,7 @@ func convertNumber(in string, unit int) (string, error) {
 	}
 }
 
+// LoadTest parses the test file and sets configuration defaults.
 func LoadTest(filename string) (*Test, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -100,7 +104,11 @@ func LoadTest(filename string) (*Test, error) {
 		return nil, err
 	}
 
-	test.Conf.Disk1.Sectors, err = convertNumber(test.Conf.Disk1.Sectors, 512)
+	test.Conf.Disk1.Bytes, err = convertNumber(test.Conf.Disk1.Sectors, 1)
+	if err != nil {
+		return nil, err
+	}
+	test.Conf.Disk1.Sectors, err = convertNumber(test.Conf.Disk1.Bytes, 512)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +117,11 @@ func LoadTest(filename string) (*Test, error) {
 	}
 
 	if test.Conf.Disk2.Sectors != "" {
-		test.Conf.Disk2.Sectors, err = convertNumber(test.Conf.Disk2.Sectors, 512)
+		test.Conf.Disk2.Bytes, err = convertNumber(test.Conf.Disk2.Sectors, 1)
+		if err != nil {
+			return nil, err
+		}
+		test.Conf.Disk2.Sectors, err = convertNumber(test.Conf.Disk2.Bytes, 512)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +143,7 @@ func LoadTest(filename string) (*Test, error) {
 	return test, err
 }
 
-func (*Test) Run(kernel string, root string, tempRoot string) error {
+func (t *Test) Run(kernel string, root string, tempRoot string) error {
 	tempDir, err := ioutil.TempDir(tempRoot, "test161")
 	if err != nil {
 		return err
@@ -145,6 +157,30 @@ func (*Test) Run(kernel string, root string, tempRoot string) error {
 		}
 	}
 
+	kernelTarget := path.Join(tempDir, "kernel")
+	if kernel != "" {
+		_, err = shutil.Copy(kernel, kernelTarget, true)
+		if err != nil {
+			return err
+		}
+	}
+	if _, err := os.Stat(kernelTarget); os.IsNotExist(err) {
+		return err
+	}
+
+	confTarget := path.Join(tempDir, "sys161.conf")
+	conf, err := t.PrintConf()
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(confTarget, []byte(conf), 0440)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(confTarget); os.IsNotExist(err) {
+		return err
+	}
+
 	currentDir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -152,9 +188,23 @@ func (*Test) Run(kernel string, root string, tempRoot string) error {
 	defer os.Chdir(currentDir)
 	os.Chdir(tempDir)
 
+	if t.Conf.Disk1.Sectors != "" {
+		err = exec.Command("disk161", "create", t.Conf.Disk1.File, t.Conf.Disk1.Bytes).Run()
+		if err != nil {
+			return err
+		}
+	}
+	if t.Conf.Disk2.Sectors != "" {
+		err = exec.Command("disk161", "create", t.Conf.Disk2.File, t.Conf.Disk2.Bytes).Run()
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
+// PrintConf formats the test configuration for use by sys161 through the sys161.conf file.
 func (t *Test) PrintConf() (string, error) {
 	const base = `0	serial
 1	emufs{{if .Disk1.Sectors}}
@@ -163,8 +213,7 @@ func (t *Test) PrintConf() (string, error) {
 28	random	{{.Random}}
 29	timer
 30	trace
-31	mainboard  ramsize={{.RAM}}  cpus={{.CPUs}}
-`
+31	mainboard  ramsize={{.RAM}}  cpus={{.CPUs}}`
 
 	conf, err := template.New("conf").Parse(base)
 	if err != nil {
