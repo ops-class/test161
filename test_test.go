@@ -3,6 +3,7 @@ package test161
 import (
 	"github.com/stretchr/testify/assert"
 	"math/rand"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -40,8 +41,9 @@ func TestPrintConf(t *testing.T) {
 
 	test, err := LoadTest("./fixtures/tests/boot.yml")
 	assert.Nil(err)
-	err = test.PrintConf()
+	conf, err := test.PrintConf()
 	assert.Nil(err)
+	assert.NotNil(conf)
 }
 
 func TestRun(t *testing.T) {
