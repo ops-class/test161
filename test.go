@@ -20,16 +20,15 @@ import (
 )
 
 type DiskConfig struct {
-	Defaults bool   `yaml:"defaults"`
-	RPM      uint   `yaml:"rpm"`
-	Sectors  string `yaml:"sectors"`
-	Bytes    string
-	NoDoom   string `yaml:"nodoom"`
-	File     string
+	RPM     string `yaml:"rpm"`
+	Sectors string `yaml:"sectors"`
+	Bytes   string
+	NoDoom  string `yaml:"nodoom"`
+	File    string
 }
 
 type Config struct {
-	CPUs   string     `yaml:"cpus"` // Default 1
+	CPUs   string     `yaml:"cpus"`
 	RAM    string     `yaml:"ram"`
 	Random string     `yaml:"random"`
 	Disk1  DiskConfig `yaml:"disk1"`
@@ -41,13 +40,15 @@ type Test struct {
 	Description string   `yaml:"description"`
 	Tags        []string `yaml:"tags"`
 	Depends     []string `yaml:"depends"`
-	Conf        Config   `yaml:"conf"`
+	Conf        Config   `yaml:"-"`
+	OrigConf    Config   `yaml:"conf"`
 	Content     string   `fm:"content" yaml:"-"`
+	tempDir     string
 }
 
-func convertNumber(in string, unit int) (string, error) {
+func parseAndSetDefault(in string, backup string, unit int) (string, error) {
 	if in == "" {
-		return "", nil
+		in = backup
 	}
 	if unit == 0 {
 		unit = 1
@@ -82,82 +83,77 @@ func LoadTest(filename string) (*Test, error) {
 		return nil, err
 	}
 
-	if test.Conf.CPUs == "" {
-		test.Conf.CPUs = "1"
+	test.Conf.CPUs, err = parseAndSetDefault(test.OrigConf.CPUs, "1", 1)
+	if err != nil {
+		return nil, err
 	}
-	if test.Conf.RAM == "" {
-		test.Conf.RAM = "1M"
+	test.Conf.RAM, err = parseAndSetDefault(test.OrigConf.RAM, "1M", 1)
+	if err != nil {
+		return nil, err
 	}
-	if test.Conf.Disk1.RPM == 0 {
-		test.Conf.Disk1.RPM = 7200
+
+	test.Conf.Disk1.RPM, err = parseAndSetDefault(test.OrigConf.Disk1.RPM, "7200", 1)
+	if err != nil {
+		return nil, err
 	}
-	if test.Conf.Disk1.Sectors == "" {
-		test.Conf.Disk1.Sectors = "5M"
+	test.Conf.Disk1.Sectors, err = parseAndSetDefault(test.OrigConf.Disk1.Sectors, "5M", 512)
+	if err != nil {
+		return nil, err
 	}
+	test.Conf.Disk1.Bytes, err = parseAndSetDefault(test.OrigConf.Disk1.Sectors, "5M", 1)
+	if err != nil {
+		return nil, err
+	}
+	test.Conf.Disk1.NoDoom = test.OrigConf.Disk1.NoDoom
 	if test.Conf.Disk1.NoDoom == "" {
 		test.Conf.Disk1.NoDoom = "true"
 	}
 	test.Conf.Disk1.File = "LDH0.img"
 
-	test.Conf.RAM, err = convertNumber(test.Conf.RAM, 1)
-	if err != nil {
-		return nil, err
-	}
-
-	test.Conf.Disk1.Bytes, err = convertNumber(test.Conf.Disk1.Sectors, 1)
-	if err != nil {
-		return nil, err
-	}
-	test.Conf.Disk1.Sectors, err = convertNumber(test.Conf.Disk1.Bytes, 512)
-	if err != nil {
-		return nil, err
-	}
-	if test.Conf.Disk1.NoDoom == "false" {
-		test.Conf.Disk1.NoDoom = ""
-	}
-
-	if test.Conf.Disk2.Sectors != "" {
-		test.Conf.Disk2.Bytes, err = convertNumber(test.Conf.Disk2.Sectors, 1)
+	if test.OrigConf.Disk2.Sectors != "" {
+		test.Conf.Disk2.RPM, err = parseAndSetDefault(test.OrigConf.Disk2.RPM, "7200", 1)
 		if err != nil {
 			return nil, err
 		}
-		test.Conf.Disk2.Sectors, err = convertNumber(test.Conf.Disk2.Bytes, 512)
+		test.Conf.Disk2.Sectors, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, "5M", 512)
 		if err != nil {
 			return nil, err
 		}
-		if test.Conf.Disk2.RPM == 0 {
-			test.Conf.Disk2.RPM = 7200
+		test.Conf.Disk2.Bytes, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, "5M", 1)
+		if err != nil {
+			return nil, err
 		}
+		test.Conf.Disk2.NoDoom = test.OrigConf.Disk2.NoDoom
 		if test.Conf.Disk2.NoDoom == "" {
 			test.Conf.Disk2.NoDoom = "false"
-		}
-		if test.Conf.Disk2.NoDoom == "false" {
-			test.Conf.Disk2.NoDoom = ""
 		}
 		test.Conf.Disk2.File = "LDH1.img"
 	}
 
+	test.Conf.Random = test.OrigConf.Random
 	if test.Conf.Random == "" {
 		test.Conf.Random = strconv.Itoa(int(rand.Int31() >> 16))
 	}
+
 	return test, err
 }
 
-func (t *Test) Run(kernel string, root string, tempRoot string) error {
-	tempDir, err := ioutil.TempDir(tempRoot, "test161")
+func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
+
+	t.tempDir, err = ioutil.TempDir(tempRoot, "test161")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tempDir)
+	defer os.RemoveAll(t.tempDir)
 
 	if root != "" {
-		err = shutil.CopyTree(root, tempDir, nil)
+		err = shutil.CopyTree(root, t.tempDir, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	kernelTarget := path.Join(tempDir, "kernel")
+	kernelTarget := path.Join(t.tempDir, "kernel")
 	if kernel != "" {
 		_, err = shutil.Copy(kernel, kernelTarget, true)
 		if err != nil {
@@ -168,7 +164,7 @@ func (t *Test) Run(kernel string, root string, tempRoot string) error {
 		return err
 	}
 
-	confTarget := path.Join(tempDir, "sys161.conf")
+	confTarget := path.Join(t.tempDir, "sys161.conf")
 	conf, err := t.PrintConf()
 	if err != nil {
 		return err
@@ -186,7 +182,7 @@ func (t *Test) Run(kernel string, root string, tempRoot string) error {
 		return err
 	}
 	defer os.Chdir(currentDir)
-	os.Chdir(tempDir)
+	os.Chdir(t.tempDir)
 
 	if t.Conf.Disk1.Sectors != "" {
 		err = exec.Command("disk161", "create", t.Conf.Disk1.File, t.Conf.Disk1.Bytes).Run()
@@ -204,16 +200,16 @@ func (t *Test) Run(kernel string, root string, tempRoot string) error {
 	return nil
 }
 
-// PrintConf formats the test configuration for use by sys161 through the sys161.conf file.
+// PrintConf formats the test configuration for use by sys161 via the sys161.conf file.
 func (t *Test) PrintConf() (string, error) {
 	const base = `0	serial
 1	emufs{{if .Disk1.Sectors}}
-2	disk	rpm={{.Disk1.RPM}}	sectors={{.Disk1.Sectors}}	file={{ .Disk1.File}} {{if .Disk1.NoDoom}}nodoom{{end}}{{end}}{{if .Disk2.Sectors}}
-3	disk	rpm={{.Disk2.RPM}}	sectors={{.Disk2.Sectors}}	file={{ .Disk2.File}} {{if .Disk2.NoDoom}}nodoom{{end}}{{end}}
-28	random	{{.Random}}
+2	disk	rpm={{.Disk1.RPM}}	sectors={{.Disk1.Sectors}}	file={{.Disk1.File}} {{if eq .Disk1.NoDoom "true"}}nodoom{{end}}{{end}}{{if .Disk2.Sectors}}
+3	disk	rpm={{.Disk2.RPM}}	sectors={{.Disk2.Sectors}}	file={{.Disk2.File}} {{if eq .Disk2.NoDoom "true"}}nodoom{{end}}{{end}}
+28	random {{.Random}}
 29	timer
 30	trace
-31	mainboard  ramsize={{.RAM}}  cpus={{.CPUs}}`
+31	mainboard ramsize={{.RAM}} cpus={{.CPUs}}`
 
 	conf, err := template.New("conf").Parse(base)
 	if err != nil {

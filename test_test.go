@@ -26,6 +26,8 @@ func TestLoad(t *testing.T) {
 	assert.Nil(test.Depends)
 	assert.Equal(test.Conf.CPUs, "4")
 	assert.Equal(test.Conf.RAM, "16777216")
+	assert.Equal(test.Conf.Disk1.Sectors, "10240")
+	assert.Equal(test.Conf.Disk1.RPM, "7200")
 
 	test, err = LoadTest("./fixtures/tests/shell.yml")
 	assert.Nil(err)
@@ -35,6 +37,17 @@ func TestLoad(t *testing.T) {
 	assert.Equal(reflect.DeepEqual(test.Depends, []string{"boot"}), true)
 	assert.Equal(test.Conf.CPUs, "1")
 	assert.Equal(test.Conf.RAM, "16777216")
+
+	test, err = LoadTest("./fixtures/tests/parallelvm.yml")
+	assert.Nil(err)
+	assert.Equal(test.Name, "parallelvm")
+	assert.Equal(test.Description, "")
+	assert.Nil(test.Tags)
+	assert.Equal(reflect.DeepEqual(test.Depends, []string{"shell"}), true)
+	assert.Equal(test.Conf.CPUs, "1")
+	assert.Equal(test.Conf.RAM, "2097152")
+	assert.Equal(test.Conf.Disk2.Sectors, "10240")
+	assert.Equal(test.Conf.Disk2.RPM, "14400")
 }
 
 func TestPrintConf(t *testing.T) {

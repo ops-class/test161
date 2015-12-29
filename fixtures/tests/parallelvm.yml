@@ -4,5 +4,8 @@ depends:
 - shell
 conf:
   ram: "2M"
+  disk2:
+    sectors: 5M
+    rpm: 14400
 ---
 $ /bin/true
