@@ -2,5 +2,7 @@
 name: shell
 depends:
 - boot
+conf:
+  ram: "16M"
 ---
 $ /bin/true
