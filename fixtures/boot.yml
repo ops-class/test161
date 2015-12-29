@@ -1,0 +1,7 @@
+---
+name: boot
+description: >
+  Ensure that the kernel can boot.
+tags: [basic,setup]
+---
+q

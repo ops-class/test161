@@ -1,0 +1,6 @@
+---
+name: shell
+depends:
+- boot
+---
+$ /bin/true

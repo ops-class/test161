@@ -2,6 +2,7 @@ package test161
 
 import (
 	"github.com/ericaro/frontmatter"
+	"io/ioutil"
 	// "github.com/jamesharr/expect"
 	// "gopkg.in/yaml.v2"
 )
@@ -14,8 +15,12 @@ type Test struct {
 	Content     string   `fm:"content" yaml:"-"`
 }
 
-func LoadTest(data []byte) (*Test, error) {
+func LoadTest(filename string) (*Test, error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
 	test := new(Test)
-	err := frontmatter.Unmarshal(data, test)
+	err = frontmatter.Unmarshal(data, test)
 	return test, err
 }
