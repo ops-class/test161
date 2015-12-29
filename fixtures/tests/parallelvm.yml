@@ -1,0 +1,8 @@
+---
+name: parallelvm
+depends:
+- shell
+conf:
+  ram: "2M"
+---
+$ /bin/true

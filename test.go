@@ -18,8 +18,11 @@ import (
 )
 
 type DiskConfig struct {
-	Sectors string `yaml:"sectors"`
-	NoDoom  bool   `yaml:"nodoom"`
+	Defaults bool   `yaml:"defaults"`
+	RPM      uint   `yaml:"rpm"`
+	Sectors  string `yaml:"sectors"`
+	NoDoom   string `yaml:"nodoom"`
+	File     string
 }
 
 type Config struct {
@@ -39,9 +42,12 @@ type Test struct {
 	Content     string   `fm:"content" yaml:"-"`
 }
 
-func convertNumber(in string) (string, error) {
+func convertNumber(in string, unit int) (string, error) {
 	if in == "" {
 		return "", nil
+	}
+	if unit == 0 {
+		unit = 1
 	}
 	if unicode.IsDigit(rune(in[len(in)-1])) {
 		return in, nil
@@ -52,9 +58,9 @@ func convertNumber(in string) (string, error) {
 		}
 		multiplier := strings.ToUpper(string(in[len(in)-1]))
 		if multiplier == "K" {
-			return strconv.Itoa(1024 * number), nil
+			return strconv.Itoa(1024 * number / unit), nil
 		} else if multiplier == "M" {
-			return strconv.Itoa(1024 * 1024 * number), nil
+			return strconv.Itoa(1024 * 1024 * number / unit), nil
 		} else {
 			return "", errors.New("test161: could not convert formatted string to integer")
 		}
@@ -78,22 +84,45 @@ func LoadTest(filename string) (*Test, error) {
 	if test.Conf.RAM == "" {
 		test.Conf.RAM = "1M"
 	}
-	test.Conf.RAM, err = convertNumber(test.Conf.RAM)
+	if test.Conf.Disk1.RPM == 0 {
+		test.Conf.Disk1.RPM = 7200
+	}
+	if test.Conf.Disk1.Sectors == "" {
+		test.Conf.Disk1.Sectors = "5M"
+	}
+	if test.Conf.Disk1.NoDoom == "" {
+		test.Conf.Disk1.NoDoom = "true"
+	}
+	test.Conf.Disk1.File = "LDH0.img"
+
+	test.Conf.RAM, err = convertNumber(test.Conf.RAM, 1)
 	if err != nil {
 		return nil, err
 	}
 
-	if test.Conf.Disk1.Sectors != "" {
-		test.Conf.Disk1.Sectors, err = convertNumber(test.Conf.Disk1.Sectors)
-		if err != nil {
-			return nil, err
-		}
+	test.Conf.Disk1.Sectors, err = convertNumber(test.Conf.Disk1.Sectors, 512)
+	if err != nil {
+		return nil, err
 	}
+	if test.Conf.Disk1.NoDoom == "false" {
+		test.Conf.Disk1.NoDoom = ""
+	}
+
 	if test.Conf.Disk2.Sectors != "" {
-		test.Conf.Disk2.Sectors, err = convertNumber(test.Conf.Disk2.Sectors)
+		test.Conf.Disk2.Sectors, err = convertNumber(test.Conf.Disk2.Sectors, 512)
 		if err != nil {
 			return nil, err
 		}
+		if test.Conf.Disk2.RPM == 0 {
+			test.Conf.Disk2.RPM = 7200
+		}
+		if test.Conf.Disk2.NoDoom == "" {
+			test.Conf.Disk2.NoDoom = "false"
+		}
+		if test.Conf.Disk2.NoDoom == "false" {
+			test.Conf.Disk2.NoDoom = ""
+		}
+		test.Conf.Disk2.File = "LDH1.img"
 	}
 
 	if test.Conf.Random == "" {
@@ -129,8 +158,8 @@ func (*Test) Run(kernel string, root string, tempRoot string) error {
 func (t *Test) PrintConf() (string, error) {
 	const base = `0	serial
 1	emufs{{if .Disk1.Sectors}}
-2	disk	rpm=7200	sectors={{.Disk1.Sectors}}	file=LHD1.img {{if .Disk1.NoDoom}}nodoom{{end}}{{end}}{{if .Disk2.Sectors}}
-3	disk	rpm=7200	sectors={{.Disk2.Sectors}}	file=LHD2.img {{if .Disk2.NoDoom}}nodoom{{end}}{{end}}
+2	disk	rpm={{.Disk1.RPM}}	sectors={{.Disk1.Sectors}}	file={{ .Disk1.File}} {{if .Disk1.NoDoom}}nodoom{{end}}{{end}}{{if .Disk2.Sectors}}
+3	disk	rpm={{.Disk2.RPM}}	sectors={{.Disk2.Sectors}}	file={{ .Disk2.File}} {{if .Disk2.NoDoom}}nodoom{{end}}{{end}}
 28	random	{{.Random}}
 29	timer
 30	trace

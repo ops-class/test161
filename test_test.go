@@ -1,6 +1,7 @@
 package test161
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"os"
@@ -39,11 +40,12 @@ func TestLoad(t *testing.T) {
 func TestPrintConf(t *testing.T) {
 	assert := assert.New(t)
 
-	test, err := LoadTest("./fixtures/tests/boot.yml")
+	test, err := LoadTest("./fixtures/tests/parallelvm.yml")
 	assert.Nil(err)
 	conf, err := test.PrintConf()
 	assert.Nil(err)
 	assert.NotNil(conf)
+	fmt.Println(conf)
 }
 
 func TestRun(t *testing.T) {
