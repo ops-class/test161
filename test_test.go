@@ -15,8 +15,8 @@ func TestLoad(t *testing.T) {
 	assert.NotNil(test.Description)
 	assert.Equal(reflect.DeepEqual(test.Tags, []string{"basic", "setup"}), true)
 	assert.Nil(test.Depends)
-	assert.Equal(test.Config.CPUs, (uint8)(4))
-	assert.Equal(test.Config.Memory, (uint32)(16777216))
+	assert.Equal(test.Config.CPUs, "4")
+	assert.Equal(test.Config.RAM, "16777216")
 
 	test, err = LoadTest("./fixtures/tests/shell.yml")
 	assert.Nil(err)
@@ -24,7 +24,8 @@ func TestLoad(t *testing.T) {
 	assert.Equal(test.Description, "")
 	assert.Nil(test.Tags)
 	assert.Equal(reflect.DeepEqual(test.Depends, []string{"boot"}), true)
-	assert.Equal(test.Config.Memory, (uint32)(16777216))
+	assert.Equal(test.Config.CPUs, "1")
+	assert.Equal(test.Config.RAM, "16777216")
 }
 
 func TestRun(t *testing.T) {
