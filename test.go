@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"errors"
 	//"fmt"
+	"bufio"
 	"github.com/ericaro/frontmatter"
 	"github.com/jamesharr/expect"
 	"github.com/termie/go-shutil"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -41,17 +43,29 @@ type Config struct {
 	Disk2  DiskConfig `yaml:"disk2"`
 }
 
+type Stat struct {
+	KernelCycles uint
+}
+type Command struct {
+	Input        string
+	Output       string
+	SummaryStats Stat
+	AllStats     []Stat
+}
+
 type Test struct {
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description"`
-	Tags        []string `yaml:"tags"`
-	Depends     []string `yaml:"depends"`
-	Timeout     uint     `yaml:"timeout"`
-	Conf        Config   `yaml:"-"`
-	OrigConf    Config   `yaml:"conf"`
-	Content     string   `fm:"content" yaml:"-"`
-	tempDir     string
-	sys161      *expect.Expect
+	Name           string   `yaml:"name"`
+	Description    string   `yaml:"description"`
+	Tags           []string `yaml:"tags"`
+	Depends        []string `yaml:"depends"`
+	Timeout        uint     `yaml:"timeout"`
+	Conf           Config   `yaml:"-"`
+	OrigConf       Config   `yaml:"conf"`
+	Content        string   `fm:"content" yaml:"-"`
+	tempDir        string
+	sys161         *expect.Expect
+	currentCommand *Command
+	Commands       []Command
 }
 
 func parseAndSetDefault(in string, backup string, unit int) (string, error) {
@@ -191,6 +205,20 @@ func (t *Test) PrintConf() (string, error) {
 	return buffer.String(), nil
 }
 
+func (t *Test) getStats() error {
+	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
+	if err != nil {
+		return err
+	}
+	statReader := bufio.NewReader(statConn)
+	for {
+		_, err := statReader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+	}
+}
+
 func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 
 	t.tempDir, err = ioutil.TempDir(tempRoot, "test161")
@@ -262,7 +290,9 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 	if err != nil {
 		return err
 	}
-	t.sys161.SendLn("q")
+	for _, command := range strings.Split(t.Content, "\n") {
+		t.sys161.SendLn(command)
+	}
 	t.sys161.ExpectEOF()
 
 	return nil
