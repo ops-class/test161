@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,8 +28,6 @@ import (
 
 const KERNEL_PROMPT = `OS/161 kernel [? for menu]:`
 
-var validRandom = regexp.MustCompile(`(autoseed|seed=\d+)`)
-
 type DiskConfig struct {
 	RPM     uint   `yaml:"rpm"`
 	Sectors string `yaml:"sectors"`
@@ -36,6 +35,8 @@ type DiskConfig struct {
 	NoDoom  string `yaml:"nodoom"`
 	File    string
 }
+
+var validRandom = regexp.MustCompile(`(autoseed|seed=\d+)`)
 
 type Config struct {
 	CPUs   uint       `yaml:"cpus"`
@@ -45,15 +46,28 @@ type Config struct {
 	Disk2  DiskConfig `yaml:"disk2"`
 }
 
-type Stat struct {
-	KernelCycles uint
-}
+type TimeDelta float64
 
 func (t TimeDelta) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("%.6f", t)), nil
 }
 
-type TimeDelta float64
+var validStat = regexp.MustCompile(`^DATA\s+(?P<Kern>\d+)\s+(?P<User>\d+)\s+(?P<Idle>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
+
+type Stat struct {
+	Delta  TimeDelta `json:"delta"`
+	Kern   uint32    `json:"kern"`
+	User   uint32    `json:"user"`
+	Idle   uint32    `json:"idle"`
+	Kinsns uint32    `json:"kinsns"`
+	Uinsns uint32    `json:"uinsns"`
+	IRQs   uint32    `json:"irqs"`
+	Exns   uint32    `json:"exns"`
+	Disk   uint32    `json:"disk"`
+	Con    uint32    `json:"con"`
+	Emu    uint32    `json:"emu"`
+	Net    uint32    `json:"net"`
+}
 
 type InputLine struct {
 	Delta TimeDelta `json:"delta"`
@@ -70,7 +84,7 @@ type Command struct {
 	Input        InputLine    `json:"input"`
 	Output       []OutputLine `json:"output"`
 	SummaryStats Stat         `json:"-"`
-	AllStats     []Stat       `json:"-"`
+	AllStats     []Stat       `json:"stats"`
 }
 
 type Test struct {
@@ -90,7 +104,8 @@ type Test struct {
 	startTime  int64
 	currentEnv string
 
-	statCond *sync.Cond
+	statCond  *sync.Cond
+	statError error
 
 	commandLock   *sync.Mutex
 	command       *Command
@@ -237,14 +252,40 @@ func (t *Test) PrintConf() (string, error) {
 
 func (t *Test) getStats(statConn net.Conn) {
 	statReader := bufio.NewReader(statConn)
+	var err error
+	var line string
 	for {
-		_, err := statReader.ReadString('\n')
+		if err == nil {
+			line, err = statReader.ReadString('\n')
+		}
 		t.statCond.L.Lock()
+		if err != nil {
+			t.statError = err
+		}
 		t.statCond.Signal()
 		t.statCond.L.Unlock()
 		if err != nil {
 			return
 		}
+		statMatch := validStat.FindStringSubmatch(line)
+		if statMatch == nil {
+			continue
+		}
+		newStats := Stat{
+			Delta: TimeDelta(t.getDelta()),
+		}
+		s := reflect.ValueOf(&newStats).Elem()
+		for i, name := range validStat.SubexpNames() {
+			f := s.FieldByName(name)
+			x, err := strconv.ParseUint(statMatch[i], 10, 32)
+			if err != nil {
+				continue
+			}
+			f.SetUint(x)
+		}
+		t.commandLock.Lock()
+		t.command.AllStats = append(t.command.AllStats, newStats)
+		t.commandLock.Unlock()
 	}
 }
 
@@ -343,6 +384,7 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 	commands := strings.Split(t.Content, "\n")
 	i := 0
 
+	var statError error
 	for {
 		var command string
 		if i < len(commands) {
@@ -356,7 +398,11 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 		if t.currentEnv != "" {
 			t.statCond.L.Lock()
 			t.statCond.Wait()
+			statError = t.statError
 			t.statCond.L.Unlock()
+		}
+		if statError != nil {
+			return statError
 		}
 		t.commandLock.Lock()
 		if t.currentOutput.Delta != 0.0 {
@@ -390,11 +436,11 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 		}
 	}
 
-	output, err := json.Marshal(t.Commands)
+	line, err := json.MarshalIndent(t.Commands, "", "  ")
 	if err != nil {
 		return err
 	}
-	fmt.Print(string(output[:]))
+	fmt.Println(string(line))
 
 	return nil
 }
