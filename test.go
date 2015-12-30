@@ -1,10 +1,11 @@
 package test161
 
 import (
-	"bytes"
-	"errors"
-	//"fmt"
 	"bufio"
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/ericaro/frontmatter"
 	"github.com/jamesharr/expect"
 	"github.com/termie/go-shutil"
@@ -17,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 	"unicode"
@@ -46,26 +48,54 @@ type Config struct {
 type Stat struct {
 	KernelCycles uint
 }
+
+func (t TimeDelta) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("%.6f", t)), nil
+}
+
+type TimeDelta float64
+
+type InputLine struct {
+	Delta TimeDelta `json:"delta"`
+	Line  string    `json:"line"`
+}
+
+type OutputLine struct {
+	Delta  TimeDelta    `json:"delta"`
+	Buffer bytes.Buffer `json:"-"`
+	Line   string       `json:"line"`
+}
+
 type Command struct {
-	Input        string
-	Output       string
-	SummaryStats Stat
-	AllStats     []Stat
+	Input        InputLine    `json:"input"`
+	Output       []OutputLine `json:"output"`
+	SummaryStats Stat         `json:"-"`
+	AllStats     []Stat       `json:"-"`
 }
 
 type Test struct {
-	Name           string   `yaml:"name"`
-	Description    string   `yaml:"description"`
-	Tags           []string `yaml:"tags"`
-	Depends        []string `yaml:"depends"`
-	Timeout        uint     `yaml:"timeout"`
-	Conf           Config   `yaml:"-"`
-	OrigConf       Config   `yaml:"conf"`
-	Content        string   `fm:"content" yaml:"-"`
-	tempDir        string
-	sys161         *expect.Expect
-	currentCommand *Command
-	Commands       []Command
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	Tags        []string `yaml:"tags"`
+	Depends     []string `yaml:"depends"`
+	Timeout     uint     `yaml:"timeout"`
+	Content     string   `fm:"content" yaml:"-"`
+
+	Conf     Config `yaml:"-"`
+	OrigConf Config `yaml:"conf"`
+
+	tempDir string
+
+	sys161     *expect.Expect
+	startTime  int64
+	currentEnv string
+
+	statCond *sync.Cond
+
+	commandLock   *sync.Mutex
+	command       *Command
+	Commands      []Command
+	currentOutput OutputLine
 }
 
 func parseAndSetDefault(in string, backup string, unit int) (string, error) {
@@ -205,18 +235,21 @@ func (t *Test) PrintConf() (string, error) {
 	return buffer.String(), nil
 }
 
-func (t *Test) getStats() error {
-	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
-	if err != nil {
-		return err
-	}
+func (t *Test) getStats(statConn net.Conn) {
 	statReader := bufio.NewReader(statConn)
 	for {
 		_, err := statReader.ReadString('\n')
+		t.statCond.L.Lock()
+		t.statCond.Signal()
+		t.statCond.L.Unlock()
 		if err != nil {
-			return err
+			return
 		}
 	}
+}
+
+func (t *Test) getDelta() float64 {
+	return float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000)
 }
 
 func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
@@ -265,6 +298,9 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 	defer os.Chdir(currentDir)
 	os.Chdir(t.tempDir)
 
+	t.statCond = &sync.Cond{L: &sync.Mutex{}}
+	t.commandLock = &sync.Mutex{}
+
 	if t.Conf.Disk1.Sectors != "" {
 		err = exec.Command("disk161", "create", t.Conf.Disk1.File, t.Conf.Disk1.Bytes).Run()
 		if err != nil {
@@ -278,22 +314,113 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 		}
 	}
 
-	t.sys161, err = expect.Spawn("sys161", "kernel")
+	t.sys161, err = expect.Spawn("sys161", "-X", "kernel")
+	t.startTime = time.Now().UnixNano()
 	if err != nil {
 		return err
 	}
 	defer t.sys161.Close()
-	t.sys161.SetLogger(expect.FileLogger("/tmp/test161.log"))
 
+	t.command = &Command{
+		Input: InputLine{Delta: TimeDelta(t.getDelta()), Line: "boot"},
+	}
+	t.sys161.SetLogger(t)
 	t.sys161.SetTimeout(time.Duration(t.Timeout) * time.Second)
+
+	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
+	if err != nil {
+		return err
+	}
+
+	go t.getStats(statConn)
+
 	_, err = t.sys161.Expect(regexp.QuoteMeta(KERNEL_PROMPT))
 	if err != nil {
 		return err
 	}
-	for _, command := range strings.Split(t.Content, "\n") {
-		t.sys161.SendLn(command)
+	t.currentEnv = "kernel"
+
+	commands := strings.Split(t.Content, "\n")
+	i := 0
+
+	for {
+		var command string
+		if i < len(commands) {
+			command = strings.TrimSpace(commands[i])
+		} else {
+			if t.currentEnv == "kernel" {
+				command = "q"
+			}
+		}
+		i += 1
+		if t.currentEnv != "" {
+			t.statCond.L.Lock()
+			t.statCond.Wait()
+			t.statCond.L.Unlock()
+		}
+		t.commandLock.Lock()
+		if t.currentOutput.Delta != 0.0 {
+			t.currentOutput.Line = t.currentOutput.Buffer.String()
+			t.command.Output = append(t.command.Output, t.currentOutput)
+		}
+		t.currentOutput = OutputLine{}
+		t.Commands = append(t.Commands, *t.command)
+		if command != "" {
+			t.command = &Command{
+				Input: InputLine{Delta: TimeDelta(t.getDelta()), Line: command},
+			}
+		}
+		t.commandLock.Unlock()
+
+		if command == "" {
+			break
+		}
+		err = t.sys161.SendLn(command)
+		if err != nil {
+			return err
+		}
+		if command == "q" {
+			t.currentEnv = ""
+			t.sys161.ExpectEOF()
+			continue
+		}
+		_, err = t.sys161.Expect(regexp.QuoteMeta(KERNEL_PROMPT))
+		if err != nil {
+			return err
+		}
 	}
-	t.sys161.ExpectEOF()
+
+	output, err := json.Marshal(t.Commands)
+	if err != nil {
+		return err
+	}
+	fmt.Print(string(output[:]))
 
 	return nil
 }
+
+func (t *Test) Recv(time time.Time, received []byte) {
+	t.commandLock.Lock()
+	defer t.commandLock.Unlock()
+	for _, b := range received {
+		if t.currentOutput.Delta == 0.0 {
+			t.currentOutput.Delta = TimeDelta(t.getDelta())
+		}
+		t.currentOutput.Buffer.WriteByte(b)
+		if b == '\n' {
+			t.currentOutput.Line = t.currentOutput.Buffer.String()
+			t.command.Output = append(t.command.Output, t.currentOutput)
+			t.currentOutput = OutputLine{}
+			continue
+		}
+	}
+}
+
+// Unused parts of the expect.Logger interface
+func (t *Test) Send(time.Time, []byte)                      {}
+func (t *Test) SendMasked(time.Time, []byte)                {}
+func (t *Test) RecvNet(time.Time, []byte)                   {}
+func (t *Test) RecvEOF(time.Time)                           {}
+func (t *Test) ExpectCall(time.Time, *regexp.Regexp)        {}
+func (t *Test) ExpectReturn(time.Time, expect.Match, error) {}
+func (t *Test) Close(time.Time)                             {}

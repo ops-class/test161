@@ -1,0 +1,12 @@
+---
+name: boot
+description: >
+  Run the first thread test.
+tags: [basic,setup]
+depends: [boot]
+conf:
+  cpus: 4
+  ram: 2M
+---
+tt1
+q
