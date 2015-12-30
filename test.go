@@ -9,6 +9,7 @@ import (
 	"github.com/ericaro/frontmatter"
 	"github.com/jamesharr/expect"
 	"github.com/termie/go-shutil"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -26,7 +27,7 @@ import (
 	// "gopkg.in/yaml.v2"
 )
 
-const KERNEL_PROMPT = `OS/161 kernel [? for menu]:`
+const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
 
 type DiskConfig struct {
 	RPM     uint   `yaml:"rpm"`
@@ -259,7 +260,7 @@ func (t *Test) getStats(statConn net.Conn) {
 			line, err = statReader.ReadString('\n')
 		}
 		t.statCond.L.Lock()
-		if err != nil {
+		if err != nil && err != io.EOF {
 			t.statError = err
 		}
 		t.statCond.Signal()
