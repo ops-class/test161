@@ -122,7 +122,11 @@ func parseAndSetDefault(in string, backup string, unit int) (string, error) {
 		unit = 1
 	}
 	if unicode.IsDigit(rune(in[len(in)-1])) {
-		return in, nil
+		number, err := strconv.Atoi(in)
+		if err != nil {
+			return "", err
+		}
+		return strconv.Itoa(number / unit), nil
 	} else {
 		number, err := strconv.Atoi(in[0 : len(in)-1])
 		if err != nil {
@@ -159,16 +163,20 @@ func LoadTest(filename string) (*Test, error) {
 	if err != nil {
 		return nil, err
 	}
+	ramInt, _ := strconv.Atoi(test.Conf.RAM)
+	ramString := strconv.Itoa(ramInt * 2)
 
 	test.Conf.Disk1.RPM = test.OrigConf.Disk1.RPM
 	if test.Conf.Disk1.RPM == 0 {
 		test.Conf.Disk1.RPM = 7200
 	}
-	test.Conf.Disk1.Sectors, err = parseAndSetDefault(test.OrigConf.Disk1.Sectors, "5M", 512)
+	test.Conf.Disk1.Sectors, err =
+		parseAndSetDefault(test.OrigConf.Disk1.Sectors, ramString, 512)
 	if err != nil {
 		return nil, err
 	}
-	test.Conf.Disk1.Bytes, err = parseAndSetDefault(test.OrigConf.Disk1.Sectors, "5M", 1)
+	test.Conf.Disk1.Bytes, err =
+		parseAndSetDefault(test.OrigConf.Disk1.Sectors, ramString, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -232,8 +240,8 @@ func LoadTest(filename string) (*Test, error) {
 func (t *Test) PrintConf() (string, error) {
 	const base = `0	serial
 1	emufs{{if .Disk1.Sectors}}
-2	disk	rpm={{.Disk1.RPM}}	sectors={{.Disk1.Sectors}}	file={{.Disk1.File}} {{if eq .Disk1.NoDoom "true"}}nodoom{{end}}{{end}}{{if .Disk2.Sectors}}
-3	disk	rpm={{.Disk2.RPM}}	sectors={{.Disk2.Sectors}}	file={{.Disk2.File}} {{if eq .Disk2.NoDoom "true"}}nodoom{{end}}{{end}}
+2	disk	rpm={{.Disk1.RPM}}	file={{.Disk1.File}} {{if eq .Disk1.NoDoom "true"}}nodoom{{end}}{{end}}{{if .Disk2.Sectors}}
+3	disk	rpm={{.Disk2.RPM}}	file={{.Disk2.File}} {{if eq .Disk2.NoDoom "true"}}nodoom{{end}}{{end}}
 28	random {{.Random}}
 29	timer
 30	trace

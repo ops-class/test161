@@ -26,7 +26,7 @@ func TestLoad(t *testing.T) {
 	assert.Nil(test.Depends)
 	assert.Equal(test.Conf.CPUs, (uint)(4))
 	assert.Equal(test.Conf.RAM, "16777216")
-	assert.Equal(test.Conf.Disk1.Sectors, "10240")
+	assert.Equal(test.Conf.Disk1.Sectors, "65536")
 	assert.Equal(test.Conf.Disk1.RPM, (uint)(7200))
 
 	test, err = LoadTest("./fixtures/tests/shell.yml")
@@ -68,6 +68,6 @@ func TestRunBoot(t *testing.T) {
 
 	test, err := LoadTest("./fixtures/tests/tt1.yml")
 	assert.Nil(err)
-	err = test.Run("./fixtures/ASST0/kernel", "", "")
+	err = test.Run("./fixtures/sol0/kernel", "", "")
 	assert.Nil(err)
 }
