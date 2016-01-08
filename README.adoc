@@ -1,0 +1,79 @@
+= `test161`: A Testing Tool for OS/161
+
+`test161` is a command line tool for automated testing of
+http://os161.eecs.harvard.edu[OS/161] instructional operating system kernels
+that run inside the `sys161` (System/161)
+https://en.wikipedia.org/wiki/R3000[MIPS R3000] simulator. You are probably
+not interested in `test161` unless you are a student taking or an instructor
+teaching a course that uses OS/161.
+
+== Usage
+
+`test161` requires a set of arguments. The following can be provided either
+on the command line or in a YAML configuration file:
+
+* `root:` or `--root`: the location of a directory containing the kernel
+binary to test and any associated executables that are required, probably
+`~/root/` or `~/os161/root` depending on how you have configured your OS/161
+source tree
+* `tests:` or `--tests`: a list of directories containing testing scripts.
+
+== Requirements
+
+* `sys161` and `disk161` in the path.
+
+== TODOs
+
+=== Testfile syntactic sugar
+
+A line starting with `$` should be run in the shell (and start the shell as
+needed), ditto with lines not starting with `$` (should be run from the
+kernel prompt and get there if necessary), and `sys161` should be shut down
+cleanly without requiring the test manually exit the shell and kernel.
+
+So this test:
+....
+$ /bin/true
+....
+
+Should expand to:
+....
+s
+/bin/true
+exit
+q
+....
+
+=== Running multiple tests and dependencies
+
+Support for loading a bunch of tests from a directory and running multiple
+tests concurrently, probably identified by a tag. (You might want to look at
+this parallel walk library: github.com/MichaelTJones/walk)
+
+For test dependency traking my idea is to have all tests start in parallel in
+multiple goroutines but then wait on a channel until all of their
+dependencies are met (or one fails, in which case the test will abort). To
+control concurrency, they should next wait on a separate channel for a
+message from a concurrency manager that can limit the number of `sys161`
+instances executing in parallel.
+
+=== Multiple output strategies
+
+We want to support printing to the screen (not the JSON, but output that
+looks like what you'd see in the terminal) and saving JSON output to a
+MongoDB instance for later grading.
+
+=== Progress tracking by monitoring the `stat161` output.
+
+This will be tricky. We
+want to catch deadlocks, livelocks, and cases where user programs aren't
+making much progress, and we'll need some careful heuristics here to ensure
+that we limit false positives.
+
+=== Primitive success or failure tracking
+
+This isn't grading, which is more
+fine-grained, just a sense of whether the test(s) completely successfully and
+didn't panic. I'm working on standardizing the OS/161 test output to make
+this easier so that every test prints a SUCCESS or FAILURE message on exit,
+but we still need to grab panics.

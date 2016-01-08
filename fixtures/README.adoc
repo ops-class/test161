@@ -1,0 +1,5 @@
+= Testing Fixtures
+
+Testing requires solution kernels for the
+`ops-class.org`[https://www.ops-class.org] assignments. For access to these,
+please email `challen@buffalo.edu`[mailto:challen@buffalo.edu].
