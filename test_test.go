@@ -65,9 +65,15 @@ func TestPrintConf(t *testing.T) {
 
 func TestRunBoot(t *testing.T) {
 	assert := assert.New(t)
-
 	test, err := LoadTest("./fixtures/tests/tt1.yml")
 	assert.Nil(err)
-	err = test.Run("./fixtures/sol0/kernel", "", "")
+	err = test.Run("./fixtures/sol0/", "")
 	assert.Nil(err)
+	t.Log(test.OutputString())
+
+	test, err = LoadTest("./fixtures/tests/shell.yml")
+	assert.Nil(err)
+	err = test.Run("./fixtures/sol2/", "")
+	assert.Nil(err)
+	t.Log(test.OutputString())
 }

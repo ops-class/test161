@@ -28,6 +28,7 @@ import (
 )
 
 const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
+const SHELL_PROMPT = `OS/161$ `
 
 type DiskConfig struct {
 	RPM     uint   `yaml:"rpm"`
@@ -82,10 +83,15 @@ type OutputLine struct {
 }
 
 type Command struct {
+	Env          string       `json:"env"`
 	Input        InputLine    `json:"input"`
 	Output       []OutputLine `json:"output"`
 	SummaryStats Stat         `json:"-"`
 	AllStats     []Stat       `json:"stats"`
+}
+
+type CommandOutput struct {
+	JSON string
 }
 
 type Test struct {
@@ -98,8 +104,6 @@ type Test struct {
 
 	Conf     Config `yaml:"-"`
 	OrigConf Config `yaml:"conf"`
-
-	tempDir string
 
 	sys161     *expect.Expect
 	startTime  int64
@@ -302,33 +306,28 @@ func (t *Test) getDelta() float64 {
 	return float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000)
 }
 
-func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
+func (t *Test) Run(root string, tempRoot string) (err error) {
 
-	t.tempDir, err = ioutil.TempDir(tempRoot, "test161")
+	tempRoot, err = ioutil.TempDir(tempRoot, "test161")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(t.tempDir)
+	defer os.RemoveAll(tempRoot)
+	tempDir := path.Join(tempRoot, "root")
 
 	if root != "" {
-		err = shutil.CopyTree(root, t.tempDir, nil)
+		err = shutil.CopyTree(root, tempDir, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	kernelTarget := path.Join(t.tempDir, "kernel")
-	if kernel != "" {
-		_, err = shutil.Copy(kernel, kernelTarget, true)
-		if err != nil {
-			return err
-		}
-	}
+	kernelTarget := path.Join(tempDir, "kernel")
 	if _, err := os.Stat(kernelTarget); os.IsNotExist(err) {
 		return err
 	}
 
-	confTarget := path.Join(t.tempDir, "sys161.conf")
+	confTarget := path.Join(tempDir, "sys161.conf")
 	conf, err := t.PrintConf()
 	if err != nil {
 		return err
@@ -346,7 +345,7 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 		return err
 	}
 	defer os.Chdir(currentDir)
-	os.Chdir(t.tempDir)
+	os.Chdir(tempDir)
 
 	t.statCond = &sync.Cond{L: &sync.Mutex{}}
 	t.commandLock = &sync.Mutex{}
@@ -377,16 +376,22 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 	t.sys161.SetLogger(t)
 	t.sys161.SetTimeout(time.Duration(t.Timeout) * time.Second)
 
-	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
+	statConn, err := net.Dial("unix", path.Join(tempDir, ".sockets/meter"))
 	if err != nil {
 		return err
 	}
 
 	go t.getStats(statConn)
 
-	_, err = t.sys161.Expect(regexp.QuoteMeta(KERNEL_PROMPT))
+	prompts := regexp.MustCompile(fmt.Sprintf("(%s|%s)", regexp.QuoteMeta(KERNEL_PROMPT), regexp.QuoteMeta(SHELL_PROMPT)))
+
+	match, err := t.sys161.ExpectRegexp(prompts)
+	prompt := match.Groups[0]
 	if err != nil {
 		return err
+	}
+	if prompt != KERNEL_PROMPT {
+		return errors.New(fmt.Sprintf("Expected kernel prompt, but got %s", prompt))
 	}
 	t.currentEnv = "kernel"
 
@@ -422,6 +427,7 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 		t.Commands = append(t.Commands, *t.command)
 		if command != "" {
 			t.command = &Command{
+				Env:   t.currentEnv,
 				Input: InputLine{Delta: TimeDelta(t.getDelta()), Line: command},
 			}
 		}
@@ -439,18 +445,19 @@ func (t *Test) Run(kernel string, root string, tempRoot string) (err error) {
 			t.sys161.ExpectEOF()
 			continue
 		}
-		_, err = t.sys161.Expect(regexp.QuoteMeta(KERNEL_PROMPT))
+		match, err := t.sys161.ExpectRegexp(prompts)
 		if err != nil {
 			return err
 		}
+		prompt := match.Groups[0]
+		if prompt == KERNEL_PROMPT {
+			t.currentEnv = "kernel"
+		} else if prompt == SHELL_PROMPT {
+			t.currentEnv = "shell"
+		} else {
+			return errors.New(fmt.Sprintf("Invalid prompt: %s", prompt))
+		}
 	}
-
-	line, err := json.MarshalIndent(t.Commands, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(line))
-
 	return nil
 }
 
@@ -479,3 +486,25 @@ func (t *Test) RecvEOF(time.Time)                           {}
 func (t *Test) ExpectCall(time.Time, *regexp.Regexp)        {}
 func (t *Test) ExpectReturn(time.Time, expect.Match, error) {}
 func (t *Test) Close(time.Time)                             {}
+
+func (t *Test) OutputJSON() (string, error) {
+	outputBytes, err := json.MarshalIndent(t.Commands, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(outputBytes), nil
+}
+
+func (t *Test) OutputString() string {
+	var output string
+	for i, command := range t.Commands {
+		for j, outputLine := range command.Output {
+			if i == 0 || j != 0 {
+				output += fmt.Sprintf("%.6f\t%s", outputLine.Delta, outputLine.Line)
+			} else {
+				output += fmt.Sprintf("%s", outputLine.Line)
+			}
+		}
+	}
+	return output
+}

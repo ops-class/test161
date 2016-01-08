@@ -5,4 +5,7 @@ depends:
 conf:
   ram: "16M"
 ---
-$ /bin/true
+s
+/bin/true
+exit
+q
