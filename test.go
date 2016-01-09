@@ -107,17 +107,19 @@ type Test struct {
 
 	sys161    *expect.Expect
 	startTime int64
-	runTime   TimeDelta
 
 	statCond  *sync.Cond
 	statError error
 
 	commandLock   *sync.Mutex
 	command       *Command
-	Commands      []Command
 	currentOutput OutputLine
 
-	ended string
+	Output struct {
+		Status   string    `json:"status"`
+		RunTime  TimeDelta `json:"runtime"`
+		Commands []Command `json:"commands"`
+	}
 }
 
 func parseAndSetDefault(in string, backup string, unit int) (string, error) {
@@ -448,7 +450,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.command.Output = append(t.command.Output, t.currentOutput)
 		}
 		t.currentOutput = OutputLine{}
-		t.Commands = append(t.Commands, *t.command)
+		t.Output.Commands = append(t.Output.Commands, *t.command)
 		if command != "" {
 			t.command = &Command{
 				Env:   currentEnv,
@@ -467,16 +469,16 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		if command == "q" {
 			currentEnv = ""
 			t.sys161.ExpectEOF()
-			t.ended = "shutdown"
-			t.runTime = t.getDelta()
+			t.Output.Status = "shutdown"
+			t.Output.RunTime = t.getDelta()
 			continue
 		}
 		match, err := t.sys161.ExpectRegexp(prompts)
 		if err == expect.ErrTimeout {
 			currentEnv = ""
 			i = len(commands)
-			t.ended = "timeout"
-			t.runTime = t.getDelta()
+			t.Output.Status = "timeout"
+			t.Output.RunTime = t.getDelta()
 			continue
 		} else if err != nil {
 			return err
@@ -520,7 +522,7 @@ func (t *Test) ExpectReturn(time.Time, expect.Match, error) {}
 func (t *Test) Close(time.Time)                             {}
 
 func (t *Test) OutputJSON() (string, error) {
-	outputBytes, err := json.MarshalIndent(t.Commands, "", "  ")
+	outputBytes, err := json.MarshalIndent(t.Output, "", "  ")
 	if err != nil {
 		return "", err
 	}
@@ -529,7 +531,7 @@ func (t *Test) OutputJSON() (string, error) {
 
 func (t *Test) OutputString() string {
 	var output string
-	for i, command := range t.Commands {
+	for i, command := range t.Output.Commands {
 		for j, outputLine := range command.Output {
 			if i == 0 || j != 0 {
 				output += fmt.Sprintf("%.6f\t%s", outputLine.Delta, outputLine.Line)

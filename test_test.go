@@ -87,5 +87,5 @@ func TestKernelDeadlock(t *testing.T) {
 	assert.Nil(err)
 	err = test.Run("./fixtures/sol2/", "")
 	assert.Nil(err)
-	t.Log(test.OutputString())
+	t.Log(test.OutputJSON())
 }
