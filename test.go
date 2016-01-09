@@ -43,7 +43,6 @@ type Test struct {
 
 	MonitorConf MonitorConfig `yaml:"monitor"`
 
-	active    bool
 	sys161    *expect.Expect
 	startTime int64
 
@@ -418,8 +417,6 @@ func (t *Test) getStats(statConn net.Conn) {
 			t.commandLock.Lock()
 			if currentCommandID == t.command.ID {
 				t.Output.Status = "monitor"
-				t.active = false
-				fmt.Println("Here")
 				t.sys161.Killer()
 			}
 			t.commandLock.Unlock()
@@ -493,8 +490,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	if err != nil {
 		return err
 	}
-	t.active = true
-	defer t.CloseExpect()
+	defer t.sys161.Close()
 
 	t.command = &Command{
 		Input: InputLine{Delta: t.getDelta(), Line: "boot"},
@@ -625,12 +621,6 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 	}
 	return nil
-}
-
-func (t *Test) CloseExpect() {
-	if t.active {
-		t.sys161.Close()
-	}
 }
 
 func (t *Test) Recv(time time.Time, received []byte) {
