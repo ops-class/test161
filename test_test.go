@@ -36,7 +36,7 @@ func TestLoad(t *testing.T) {
 	assert.Nil(test.Tags)
 	assert.Equal(reflect.DeepEqual(test.Depends, []string{"boot"}), true)
 	assert.Equal(test.Conf.CPUs, (uint)(1))
-	assert.Equal(test.Conf.RAM, "16777216")
+	assert.Equal(test.Conf.RAM, "1048576")
 
 	test, err = LoadTest("./fixtures/tests/parallelvm.yml")
 	assert.Nil(err)

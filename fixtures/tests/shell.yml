@@ -3,7 +3,7 @@ name: shell
 depends:
 - boot
 conf:
-  ram: "16M"
+  ram: "1M"
 ---
 s
 /bin/true
