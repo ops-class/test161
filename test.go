@@ -30,12 +30,35 @@ import (
 const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
 const SHELL_PROMPT = `OS/161$ `
 
-type DiskConfig struct {
-	RPM     uint   `yaml:"rpm"`
-	Sectors string `yaml:"sectors"`
-	Bytes   string
-	NoDoom  string `yaml:"nodoom"`
-	File    string
+type Test struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	Tags        []string `yaml:"tags"`
+	Depends     []string `yaml:"depends"`
+	Timeout     uint     `yaml:"timeout"`
+	Content     string   `fm:"content" yaml:"-"`
+
+	Conf     Config `yaml:"-"`
+	OrigConf Config `yaml:"conf"`
+
+	MonitorConf MonitorConfig `yaml:"monitor"`
+
+	sys161    *expect.Expect
+	startTime int64
+
+	statCond  *sync.Cond
+	statError error
+
+	commandLock   *sync.Mutex
+	command       *Command
+	currentOutput OutputLine
+
+	Output struct {
+		Conf     string    `json:"conf"`
+		Status   string    `json:"status"`
+		RunTime  TimeDelta `json:"runtime"`
+		Commands []Command `json:"commands"`
+	}
 }
 
 var validRandom = regexp.MustCompile(`(autoseed|seed=\d+)`)
@@ -48,27 +71,25 @@ type Config struct {
 	Disk2  DiskConfig `yaml:"disk2"`
 }
 
-type TimeDelta float64
-
-func (t TimeDelta) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%.6f", t)), nil
+type DiskConfig struct {
+	RPM     uint   `yaml:"rpm"`
+	Sectors string `yaml:"sectors"`
+	Bytes   string
+	NoDoom  string `yaml:"nodoom"`
+	File    string
 }
 
-var validStat = regexp.MustCompile(`^DATA\s+(?P<Kern>\d+)\s+(?P<User>\d+)\s+(?P<Idle>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
+type MonitorConfig struct {
+	Enabled   string `yaml:"enabled"`
+	Intervals uint   `yaml:"intervals"`
+}
 
-type Stat struct {
-	Delta  TimeDelta `json:"delta"`
-	Kern   uint32    `json:"kern"`
-	User   uint32    `json:"user"`
-	Idle   uint32    `json:"idle"`
-	Kinsns uint32    `json:"kinsns"`
-	Uinsns uint32    `json:"uinsns"`
-	IRQs   uint32    `json:"irqs"`
-	Exns   uint32    `json:"exns"`
-	Disk   uint32    `json:"disk"`
-	Con    uint32    `json:"con"`
-	Emu    uint32    `json:"emu"`
-	Net    uint32    `json:"net"`
+type Command struct {
+	Env          string       `json:"env"`
+	Input        InputLine    `json:"input"`
+	Output       []OutputLine `json:"output"`
+	SummaryStats Stat         `json:"summarystats"`
+	AllStats     []Stat       `json:"stats"`
 }
 
 type InputLine struct {
@@ -82,44 +103,66 @@ type OutputLine struct {
 	Line   string       `json:"line"`
 }
 
-type Command struct {
-	Env          string       `json:"env"`
-	Input        InputLine    `json:"input"`
-	Output       []OutputLine `json:"output"`
-	SummaryStats Stat         `json:"-"`
-	AllStats     []Stat       `json:"stats"`
+var validStat = regexp.MustCompile(`^DATA\s+(?P<Kern>\d+)\s+(?P<User>\d+)\s+(?P<Idle>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
+
+type Stat struct {
+	initialized bool
+	Start       TimeDelta `json:"start"`
+	End         TimeDelta `json:"end"`
+	Length      TimeDelta `json:"length"`
+	Kern        uint32    `json:"kern"`
+	User        uint32    `json:"user"`
+	Idle        uint32    `json:"idle"`
+	Kinsns      uint32    `json:"kinsns"`
+	Uinsns      uint32    `json:"uinsns"`
+	IRQs        uint32    `json:"irqs"`
+	Exns        uint32    `json:"exns"`
+	Disk        uint32    `json:"disk"`
+	Con         uint32    `json:"con"`
+	Emu         uint32    `json:"emu"`
+	Net         uint32    `json:"net"`
 }
 
-type CommandOutput struct {
-	JSON string
+func (i *Stat) Add(j Stat) {
+	i.Kern += j.Kern
+	i.User += j.User
+	i.Idle += j.Idle
+	i.Kinsns += j.Kinsns
+	i.Uinsns += j.Uinsns
+	i.IRQs += j.IRQs
+	i.Exns += j.Exns
+	i.Disk += j.Disk
+	i.Con += j.Con
+	i.Emu += j.Emu
+	i.Net += j.Net
 }
-
-type Test struct {
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description"`
-	Tags        []string `yaml:"tags"`
-	Depends     []string `yaml:"depends"`
-	Timeout     uint     `yaml:"timeout"`
-	Content     string   `fm:"content" yaml:"-"`
-
-	Conf     Config `yaml:"-"`
-	OrigConf Config `yaml:"conf"`
-
-	sys161    *expect.Expect
-	startTime int64
-
-	statCond  *sync.Cond
-	statError error
-
-	commandLock   *sync.Mutex
-	command       *Command
-	currentOutput OutputLine
-
-	Output struct {
-		Status   string    `json:"status"`
-		RunTime  TimeDelta `json:"runtime"`
-		Commands []Command `json:"commands"`
+func (i *Stat) Sub(j Stat) {
+	i.Kern -= j.Kern
+	i.User -= j.User
+	i.Idle -= j.Idle
+	i.Kinsns -= j.Kinsns
+	i.Uinsns -= j.Uinsns
+	i.IRQs -= j.IRQs
+	i.Exns -= j.Exns
+	i.Disk -= j.Disk
+	i.Con -= j.Con
+	i.Emu -= j.Emu
+	i.Net -= j.Net
+}
+func (i *Stat) Merge(j Stat) {
+	if i.initialized == false {
+		i.Start = j.Start
+		i.initialized = true
 	}
+	i.End = j.End
+	i.Length = TimeDelta(float64(i.End) - float64(i.Start))
+	i.Add(j)
+}
+
+type TimeDelta float64
+
+func (t TimeDelta) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("%.6f", t)), nil
 }
 
 func parseAndSetDefault(in string, backup string, unit int) (string, error) {
@@ -245,9 +288,15 @@ func LoadTest(filename string) (*Test, error) {
 		return nil, errors.New("test161: random must be 'autoseed' or 'seed=N' if set.")
 	}
 
-	test.Timeout = test.Timeout
 	if test.Timeout == 0 {
 		test.Timeout = 10
+	}
+
+	if test.MonitorConf.Enabled == "" {
+		test.MonitorConf.Enabled = "true"
+	}
+	if test.MonitorConf.Intervals == 0 {
+		test.MonitorConf.Intervals = 10
 	}
 	return test, err
 }
@@ -277,28 +326,44 @@ func (t *Test) PrintConf() (string, error) {
 
 func (t *Test) getStats(statConn net.Conn) {
 	statReader := bufio.NewReader(statConn)
+
 	var err error
 	var line string
+
+	start := t.getDelta()
+	lastStat := Stat{}
+
+	statCache := make([]Stat, 0, t.MonitorConf.Intervals)
+
 	for {
 		if err == nil {
 			line, err = statReader.ReadString('\n')
 		}
+		end := t.getDelta()
+
 		t.statCond.L.Lock()
 		if err != nil && err != io.EOF {
 			t.statError = err
 		}
 		t.statCond.Signal()
 		t.statCond.L.Unlock()
+
 		if err != nil {
 			return
 		}
+
 		statMatch := validStat.FindStringSubmatch(line)
 		if statMatch == nil {
 			continue
 		}
+
 		newStats := Stat{
-			Delta: t.getDelta(),
+			Start:  start,
+			End:    end,
+			Length: TimeDelta(float64(end) - float64(start)),
 		}
+
+		start = end
 		s := reflect.ValueOf(&newStats).Elem()
 		for i, name := range validStat.SubexpNames() {
 			f := s.FieldByName(name)
@@ -308,9 +373,34 @@ func (t *Test) getStats(statConn net.Conn) {
 			}
 			f.SetUint(x)
 		}
+
+		tempStat := newStats
+		newStats.Sub(lastStat)
+		lastStat = tempStat
+
 		t.commandLock.Lock()
+		if len(t.command.AllStats) == 0 {
+			statCache = make([]Stat, 0, t.MonitorConf.Intervals)
+		}
 		t.command.AllStats = append(t.command.AllStats, newStats)
+		t.command.SummaryStats.Merge(newStats)
 		t.commandLock.Unlock()
+
+		if t.MonitorConf.Enabled != "true" {
+			continue
+		}
+		if uint(len(statCache)) == t.MonitorConf.Intervals {
+			statCache = statCache[1:]
+		}
+		statCache = append(statCache, newStats)
+		if uint(len(statCache)) < t.MonitorConf.Intervals {
+			continue
+		}
+		intervalStat := &Stat{}
+		for _, stat := range statCache {
+			intervalStat.Merge(stat)
+		}
+		fmt.Println(newStats)
 	}
 }
 
@@ -340,11 +430,11 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	}
 
 	confTarget := path.Join(tempDir, "sys161.conf")
-	conf, err := t.PrintConf()
+	t.Output.Conf, err = t.PrintConf()
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(confTarget, []byte(conf), 0440)
+	err = ioutil.WriteFile(confTarget, []byte(t.Output.Conf), 0440)
 	if err != nil {
 		return err
 	}

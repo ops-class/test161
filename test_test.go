@@ -78,6 +78,7 @@ func TestRunShell(t *testing.T) {
 	assert.Nil(err)
 	err = test.Run("./fixtures/sol2/", "")
 	assert.Nil(err)
+	assert.Equal(test.Output.Status, "shutdown")
 	t.Log(test.OutputString())
 }
 
@@ -87,6 +88,7 @@ func TestKernelDeadlock(t *testing.T) {
 	assert.Nil(err)
 	err = test.Run("./fixtures/sol2/", "")
 	assert.Nil(err)
+	assert.Equal(test.Output.Status, "timeout")
 	t.Log(test.OutputJSON())
 }
 
@@ -96,5 +98,6 @@ func TestKernelPanic(t *testing.T) {
 	assert.Nil(err)
 	err = test.Run("./fixtures/sol0/", "")
 	assert.Nil(err)
+	assert.Equal(test.Output.Status, "crash")
 	t.Log(test.OutputJSON())
 }
