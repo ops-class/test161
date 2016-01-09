@@ -89,3 +89,12 @@ func TestKernelDeadlock(t *testing.T) {
 	assert.Nil(err)
 	t.Log(test.OutputJSON())
 }
+
+func TestKernelPanic(t *testing.T) {
+	assert := assert.New(t)
+	test, err := LoadTest("./fixtures/tests/panic.yml")
+	assert.Nil(err)
+	err = test.Run("./fixtures/sol0/", "")
+	assert.Nil(err)
+	t.Log(test.OutputJSON())
+}

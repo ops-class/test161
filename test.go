@@ -480,6 +480,12 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.Output.Status = "timeout"
 			t.Output.RunTime = t.getDelta()
 			continue
+		} else if err == io.EOF {
+			currentEnv = ""
+			i = len(commands)
+			t.Output.Status = "crash"
+			t.Output.RunTime = t.getDelta()
+			continue
 		} else if err != nil {
 			return err
 		}
