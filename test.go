@@ -83,6 +83,7 @@ type MonitorConfig struct {
 	Enabled   string  `yaml:"enabled"`
 	Intervals uint    `yaml:"intervals"`
 	MinKernel float64 `yaml:"minkernel"`
+	MinUser   float64 `yaml:"minuser"`
 }
 
 type Command struct {
@@ -303,6 +304,9 @@ func LoadTest(filename string) (*Test, error) {
 	if test.MonitorConf.MinKernel == 0.0 {
 		test.MonitorConf.MinKernel = 0.001
 	}
+	if test.MonitorConf.MinUser == 0.0 {
+		test.MonitorConf.MinUser = 0.0001
+	}
 	return test, err
 }
 
@@ -390,6 +394,7 @@ func (t *Test) getStats(statConn net.Conn) {
 		t.command.AllStats = append(t.command.AllStats, newStats)
 		t.command.SummaryStats.Merge(newStats)
 		currentCommandID := t.command.ID
+		currentEnv := t.command.Env
 		t.commandLock.Unlock()
 
 		if t.MonitorConf.Enabled != "true" {
@@ -408,9 +413,19 @@ func (t *Test) getStats(statConn net.Conn) {
 		}
 
 		monitorError := ""
+
+		if currentEnv == "kernel" && intervalStat.User > 0 {
+			monitorError = "non-zero user cycles during kernel operation"
+		}
+
 		if (float64(intervalStat.Kern))/
 			(float64(intervalStat.Kern+intervalStat.User+intervalStat.Idle)) < t.MonitorConf.MinKernel {
-			monitorError = "insufficient kernel cycles"
+			monitorError = "insufficient kernel cycle (potential deadlock)"
+		}
+
+		if currentEnv == "shell" && ((float64(intervalStat.User))/
+			(float64(intervalStat.Kern+intervalStat.User+intervalStat.Idle)) < t.MonitorConf.MinUser) {
+			monitorError = "insufficient user cycles"
 		}
 
 		if monitorError != "" {
