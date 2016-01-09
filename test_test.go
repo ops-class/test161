@@ -70,8 +70,11 @@ func TestRunBoot(t *testing.T) {
 	err = test.Run("./fixtures/sol0/", "")
 	assert.Nil(err)
 	t.Log(test.OutputString())
+}
 
-	test, err = LoadTest("./fixtures/tests/shell.yml")
+func TestRunShell(t *testing.T) {
+	assert := assert.New(t)
+	test, err := LoadTest("./fixtures/tests/shell.yml")
 	assert.Nil(err)
 	err = test.Run("./fixtures/sol2/", "")
 	assert.Nil(err)

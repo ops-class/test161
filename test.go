@@ -105,9 +105,8 @@ type Test struct {
 	Conf     Config `yaml:"-"`
 	OrigConf Config `yaml:"conf"`
 
-	sys161     *expect.Expect
-	startTime  int64
-	currentEnv string
+	sys161    *expect.Expect
+	startTime int64
 
 	statCond  *sync.Cond
 	statError error
@@ -200,7 +199,7 @@ func LoadTest(filename string) (*Test, error) {
 	case "true", "false":
 		break
 	default:
-		return nil, errors.New("test161: NoDoom must be 'true' or 'false' if set.")
+		return nil, errors.New("test161: nodoom must be 'true' or 'false' if set.")
 	}
 	test.Conf.Disk1.File = "LDH0.img"
 
@@ -399,11 +398,11 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		return err
 	}
 	if prompt != KERNEL_PROMPT {
-		return errors.New(fmt.Sprintf("Expected kernel prompt, but got %s", prompt))
+		return errors.New(fmt.Sprintf("test161: expected kernel prompt, got %s", prompt))
 	}
-	t.currentEnv = "kernel"
+	currentEnv := "kernel"
 
-	commands := strings.Split(t.Content, "\n")
+	commands := strings.Split(strings.TrimSpace(t.Content), "\n")
 	i := 0
 
 	var statError error
@@ -411,13 +410,27 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		var command string
 		if i < len(commands) {
 			command = strings.TrimSpace(commands[i])
+			if command == "" {
+				return errors.New("test161: found empty command")
+			}
+			if string(command[0]) == "$" && currentEnv == "kernel" {
+				command = "s"
+			} else if string(command[0]) != "$" && currentEnv == "shell" {
+				command = "exit"
+			} else {
+				if string(command[0]) == "$" {
+					command = command[1:]
+				}
+				i += 1
+			}
 		} else {
-			if t.currentEnv == "kernel" {
+			if currentEnv == "kernel" {
 				command = "q"
+			} else if currentEnv == "shell" {
+				command = "exit"
 			}
 		}
-		i += 1
-		if t.currentEnv != "" {
+		if currentEnv != "" {
 			t.statCond.L.Lock()
 			t.statCond.Wait()
 			statError = t.statError
@@ -435,7 +448,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		t.Commands = append(t.Commands, *t.command)
 		if command != "" {
 			t.command = &Command{
-				Env:   t.currentEnv,
+				Env:   currentEnv,
 				Input: InputLine{Delta: TimeDelta(t.getDelta()), Line: command},
 			}
 		}
@@ -449,7 +462,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			return err
 		}
 		if command == "q" {
-			t.currentEnv = ""
+			currentEnv = ""
 			t.sys161.ExpectEOF()
 			continue
 		}
@@ -459,11 +472,11 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 		prompt := match.Groups[0]
 		if prompt == KERNEL_PROMPT {
-			t.currentEnv = "kernel"
+			currentEnv = "kernel"
 		} else if prompt == SHELL_PROMPT {
-			t.currentEnv = "shell"
+			currentEnv = "shell"
 		} else {
-			return errors.New(fmt.Sprintf("Invalid prompt: %s", prompt))
+			return errors.New(fmt.Sprintf("test161: found invalid prompt: %s", prompt))
 		}
 	}
 	return nil

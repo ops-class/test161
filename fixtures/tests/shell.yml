@@ -5,7 +5,4 @@ depends:
 conf:
   ram: "1M"
 ---
-s
-/bin/true
-exit
-q
+$ /bin/true
