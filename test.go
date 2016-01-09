@@ -168,7 +168,15 @@ func LoadTest(filename string) (*Test, error) {
 		return nil, err
 	}
 	ramInt, _ := strconv.Atoi(test.Conf.RAM)
-	ramString := strconv.Itoa(ramInt * 2)
+	ramInt *= 2
+
+	// 09 Jan 2015 : GWA : sys161 currently won't boot with a disk smaller than
+	// 8000 sectors. Not sure why.
+
+	if ramInt < 8000*512 {
+		ramInt = 8000 * 512
+	}
+	ramString := strconv.Itoa(ramInt)
 
 	test.Conf.Disk1.RPM = test.OrigConf.Disk1.RPM
 	if test.Conf.Disk1.RPM == 0 {
