@@ -54,10 +54,11 @@ type Test struct {
 	currentOutput OutputLine
 
 	Output struct {
-		Conf     string    `json:"conf"`
-		Status   string    `json:"status"`
-		RunTime  TimeDelta `json:"runtime"`
-		Commands []Command `json:"commands"`
+		Conf           string    `json:"conf"`
+		Status         string    `json:"status"`
+		MonitorMessage string    `json:"message"`
+		RunTime        TimeDelta `json:"runtime"`
+		Commands       []Command `json:"commands"`
 	}
 }
 
@@ -83,6 +84,7 @@ type MonitorConfig struct {
 	Enabled   string  `yaml:"enabled"`
 	Intervals uint    `yaml:"intervals"`
 	MinKernel float64 `yaml:"minkernel"`
+	MaxKernel float64 `yaml:"maxkernel"`
 	MinUser   float64 `yaml:"minuser"`
 }
 
@@ -304,6 +306,9 @@ func LoadTest(filename string) (*Test, error) {
 	if test.MonitorConf.MinKernel == 0.0 {
 		test.MonitorConf.MinKernel = 0.001
 	}
+	if test.MonitorConf.MaxKernel == 0.0 {
+		test.MonitorConf.MaxKernel = 0.99
+	}
 	if test.MonitorConf.MinUser == 0.0 {
 		test.MonitorConf.MinUser = 0.0001
 	}
@@ -418,20 +423,26 @@ func (t *Test) getStats(statConn net.Conn) {
 			monitorError = "non-zero user cycles during kernel operation"
 		}
 
-		if (float64(intervalStat.Kern))/
-			(float64(intervalStat.Kern+intervalStat.User+intervalStat.Idle)) < t.MonitorConf.MinKernel {
+		if float64(intervalStat.Kern)/
+			float64(intervalStat.Kern+intervalStat.User+intervalStat.Idle) < t.MonitorConf.MinKernel {
 			monitorError = "insufficient kernel cycle (potential deadlock)"
 		}
 
-		if currentEnv == "shell" && ((float64(intervalStat.User))/
-			(float64(intervalStat.Kern+intervalStat.User+intervalStat.Idle)) < t.MonitorConf.MinUser) {
+		if currentEnv == "shell" && (float64(intervalStat.User)/
+			float64(intervalStat.Kern+intervalStat.User+intervalStat.Idle) < t.MonitorConf.MinUser) {
 			monitorError = "insufficient user cycles"
+		}
+
+		if float64(intervalStat.Kern)/
+			float64(intervalStat.Kern+intervalStat.User+intervalStat.Idle) > t.MonitorConf.MaxKernel {
+			monitorError = "too many kernel cycle (potential livelock)"
 		}
 
 		if monitorError != "" {
 			t.commandLock.Lock()
 			if currentCommandID == t.command.ID {
 				t.Output.Status = "monitor"
+				t.Output.MonitorMessage = monitorError
 				t.sys161.Killer()
 			}
 			t.commandLock.Unlock()

@@ -87,7 +87,22 @@ func TestRunShell(t *testing.T) {
 	t.Log(test.OutputString())
 }
 
-func TestKernelDeadlock(t *testing.T) {
+func TestShutdownKernelPanic(t *testing.T) {
+	assert := assert.New(t)
+
+	test, err := LoadTest("./fixtures/tests/panic.yml")
+	assert.Nil(err)
+
+	err = test.Run("./fixtures/sol0/", "")
+	assert.Nil(err)
+
+	assert.Equal(test.Output.Status, "crash")
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}
+
+func TestMonitorKernelDeadlock(t *testing.T) {
 	assert := assert.New(t)
 
 	test, err := LoadTest("./fixtures/tests/dl.yml")
@@ -118,16 +133,32 @@ func TestKernelDeadlock(t *testing.T) {
 	t.Log(test.OutputString())
 }
 
-func TestKernelPanic(t *testing.T) {
+func TestMonitorKernelLivelock(t *testing.T) {
 	assert := assert.New(t)
 
-	test, err := LoadTest("./fixtures/tests/panic.yml")
+	test, err := LoadTest("./fixtures/tests/ll16.yml")
 	assert.Nil(err)
 
-	err = test.Run("./fixtures/sol0/", "")
+	test.MonitorConf.MinKernel = 0.0
+	test.Timeout = 4
+
+	err = test.Run("./fixtures/sol2/", "")
 	assert.Nil(err)
 
-	assert.Equal(test.Output.Status, "crash")
+	assert.Equal(test.Output.Status, "timeout")
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+
+	test, err = LoadTest("./fixtures/tests/ll16.yml")
+	assert.Nil(err)
+	test.Timeout = 8
+
+	err = test.Run("./fixtures/sol2/", "")
+	assert.Nil(err)
+
+	assert.Equal(test.Output.Status, "monitor")
+	assert.True(test.Output.RunTime < 8.0)
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())

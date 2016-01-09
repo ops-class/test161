@@ -1,0 +1,8 @@
+---
+name: Livelock test
+description: >
+  Intentionally livelock the kernel.
+tags: [test161]
+depends: [boot]
+---
+ll16
