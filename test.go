@@ -400,7 +400,6 @@ func (t *Test) getStats(statConn net.Conn) {
 		for _, stat := range statCache {
 			intervalStat.Merge(stat)
 		}
-		fmt.Println(newStats)
 	}
 }
 
