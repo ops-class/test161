@@ -22,27 +22,51 @@ source tree
 
 * `sys161` and `disk161` in the path.
 
-== TODOs
+== Features
 
 === Testfile syntactic sugar
 
-A line starting with `$` should be run in the shell (and start the shell as
-needed), ditto with lines not starting with `$` (should be run from the
-kernel prompt and get there if necessary), and `sys161` should be shut down
-cleanly without requiring the test manually exit the shell and kernel.
+A line starting with `$` will be run in the shell and start the shell as
+needed. Lines not starting with `$` are run from the kernel prompt and get
+there if necessary by exiting the shell. `sys161` shuts down cleanly without
+requiring the test manually exit the shell and kernel, as needed.
 
 So this test:
 ....
 $ /bin/true
 ....
 
-Should expand to:
+Expands to:
 ....
 s
 /bin/true
 exit
 q
 ....
+
+*Note that commands run in the shell _must_ be prefixed with `$`.* Otherwise
+`test161` will consider them a kernel command and exit the shell before
+running them. For example:
+
+This test is probably not what you want:
+....
+s
+/bin/true
+....
+
+Because it will expand to:
+....
+s
+exit
+/bin/true # not a kernel command
+....
+
+But this is so much simpler, right?
+....
+$ /bin/true
+....
+
+== TODOs
 
 === Running multiple tests and dependencies
 
