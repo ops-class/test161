@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ericaro/frontmatter"
-	"github.com/jamesharr/expect"
+	"github.com/gchallen/expect"
 	"github.com/termie/go-shutil"
 	"io"
 	"io/ioutil"
@@ -43,6 +43,7 @@ type Test struct {
 
 	MonitorConf MonitorConfig `yaml:"monitor"`
 
+	active    bool
 	sys161    *expect.Expect
 	startTime int64
 
@@ -80,11 +81,13 @@ type DiskConfig struct {
 }
 
 type MonitorConfig struct {
-	Enabled   string `yaml:"enabled"`
-	Intervals uint   `yaml:"intervals"`
+	Enabled   string  `yaml:"enabled"`
+	Intervals uint    `yaml:"intervals"`
+	MinKernel float64 `yaml:"minkernel"`
 }
 
 type Command struct {
+	ID           uint         `json:"-"`
 	Env          string       `json:"env"`
 	Input        InputLine    `json:"input"`
 	Output       []OutputLine `json:"output"`
@@ -298,6 +301,9 @@ func LoadTest(filename string) (*Test, error) {
 	if test.MonitorConf.Intervals == 0 {
 		test.MonitorConf.Intervals = 10
 	}
+	if test.MonitorConf.MinKernel == 0.0 {
+		test.MonitorConf.MinKernel = 0.001
+	}
 	return test, err
 }
 
@@ -384,6 +390,7 @@ func (t *Test) getStats(statConn net.Conn) {
 		}
 		t.command.AllStats = append(t.command.AllStats, newStats)
 		t.command.SummaryStats.Merge(newStats)
+		currentCommandID := t.command.ID
 		t.commandLock.Unlock()
 
 		if t.MonitorConf.Enabled != "true" {
@@ -399,6 +406,23 @@ func (t *Test) getStats(statConn net.Conn) {
 		intervalStat := &Stat{}
 		for _, stat := range statCache {
 			intervalStat.Merge(stat)
+		}
+
+		monitorError := ""
+		if (float64(intervalStat.Kern))/
+			(float64(intervalStat.Kern+intervalStat.User+intervalStat.Idle)) < t.MonitorConf.MinKernel {
+			monitorError = "insufficient kernel cycles"
+		}
+
+		if monitorError != "" {
+			t.commandLock.Lock()
+			if currentCommandID == t.command.ID {
+				t.Output.Status = "monitor"
+				t.active = false
+				fmt.Println("Here")
+				t.sys161.Killer()
+			}
+			t.commandLock.Unlock()
 		}
 	}
 }
@@ -469,7 +493,8 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer t.sys161.Close()
+	t.active = true
+	defer t.CloseExpect()
 
 	t.command = &Command{
 		Input: InputLine{Delta: t.getDelta(), Line: "boot"},
@@ -497,7 +522,9 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	currentEnv := "kernel"
 
 	commands := strings.Split(strings.TrimSpace(t.Content), "\n")
+
 	i := 0
+	j := uint(0)
 
 	var statError error
 	for {
@@ -542,9 +569,11 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		t.Output.Commands = append(t.Output.Commands, *t.command)
 		if command != "" {
 			t.command = &Command{
+				ID:    j,
 				Env:   currentEnv,
 				Input: InputLine{Delta: t.getDelta(), Line: command},
 			}
+			j += 1
 		}
 		t.commandLock.Unlock()
 
@@ -557,23 +586,31 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 		if command == "q" {
 			currentEnv = ""
+			t.commandLock.Lock()
 			t.sys161.ExpectEOF()
 			t.Output.Status = "shutdown"
 			t.Output.RunTime = t.getDelta()
+			t.commandLock.Unlock()
 			continue
 		}
 		match, err := t.sys161.ExpectRegexp(prompts)
 		if err == expect.ErrTimeout {
 			currentEnv = ""
 			i = len(commands)
+			t.commandLock.Lock()
 			t.Output.Status = "timeout"
 			t.Output.RunTime = t.getDelta()
+			t.commandLock.Unlock()
 			continue
 		} else if err == io.EOF {
 			currentEnv = ""
 			i = len(commands)
-			t.Output.Status = "crash"
+			t.commandLock.Lock()
+			if t.Output.Status == "" {
+				t.Output.Status = "crash"
+			}
 			t.Output.RunTime = t.getDelta()
+			t.commandLock.Unlock()
 			continue
 		} else if err != nil {
 			return err
@@ -588,6 +625,12 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 	}
 	return nil
+}
+
+func (t *Test) CloseExpect() {
+	if t.active {
+		t.sys161.Close()
+	}
 }
 
 func (t *Test) Recv(time time.Time, received []byte) {
