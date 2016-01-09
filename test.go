@@ -107,6 +107,7 @@ type Test struct {
 
 	sys161    *expect.Expect
 	startTime int64
+	runTime   TimeDelta
 
 	statCond  *sync.Cond
 	statError error
@@ -115,6 +116,8 @@ type Test struct {
 	command       *Command
 	Commands      []Command
 	currentOutput OutputLine
+
+	ended string
 }
 
 func parseAndSetDefault(in string, backup string, unit int) (string, error) {
@@ -160,7 +163,7 @@ func LoadTest(filename string) (*Test, error) {
 
 	test.Conf.CPUs = test.OrigConf.CPUs
 	if test.Conf.CPUs == 0 {
-		test.Conf.CPUs = 1
+		test.Conf.CPUs = 4
 	}
 	test.Conf.RAM, err = parseAndSetDefault(test.OrigConf.RAM, "1M", 1)
 	if err != nil {
@@ -292,7 +295,7 @@ func (t *Test) getStats(statConn net.Conn) {
 			continue
 		}
 		newStats := Stat{
-			Delta: TimeDelta(t.getDelta()),
+			Delta: t.getDelta(),
 		}
 		s := reflect.ValueOf(&newStats).Elem()
 		for i, name := range validStat.SubexpNames() {
@@ -309,8 +312,8 @@ func (t *Test) getStats(statConn net.Conn) {
 	}
 }
 
-func (t *Test) getDelta() float64 {
-	return float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000)
+func (t *Test) getDelta() TimeDelta {
+	return TimeDelta(float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000))
 }
 
 func (t *Test) Run(root string, tempRoot string) (err error) {
@@ -378,7 +381,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	defer t.sys161.Close()
 
 	t.command = &Command{
-		Input: InputLine{Delta: TimeDelta(t.getDelta()), Line: "boot"},
+		Input: InputLine{Delta: t.getDelta(), Line: "boot"},
 	}
 	t.sys161.SetLogger(t)
 	t.sys161.SetTimeout(time.Duration(t.Timeout) * time.Second)
@@ -449,7 +452,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		if command != "" {
 			t.command = &Command{
 				Env:   currentEnv,
-				Input: InputLine{Delta: TimeDelta(t.getDelta()), Line: command},
+				Input: InputLine{Delta: t.getDelta(), Line: command},
 			}
 		}
 		t.commandLock.Unlock()
@@ -464,10 +467,18 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		if command == "q" {
 			currentEnv = ""
 			t.sys161.ExpectEOF()
+			t.ended = "shutdown"
+			t.runTime = t.getDelta()
 			continue
 		}
 		match, err := t.sys161.ExpectRegexp(prompts)
-		if err != nil {
+		if err == expect.ErrTimeout {
+			currentEnv = ""
+			i = len(commands)
+			t.ended = "timeout"
+			t.runTime = t.getDelta()
+			continue
+		} else if err != nil {
 			return err
 		}
 		prompt := match.Groups[0]
@@ -487,7 +498,7 @@ func (t *Test) Recv(time time.Time, received []byte) {
 	defer t.commandLock.Unlock()
 	for _, b := range received {
 		if t.currentOutput.Delta == 0.0 {
-			t.currentOutput.Delta = TimeDelta(t.getDelta())
+			t.currentOutput.Delta = t.getDelta()
 		}
 		t.currentOutput.Buffer.WriteByte(b)
 		if b == '\n' {

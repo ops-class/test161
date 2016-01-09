@@ -24,7 +24,7 @@ func TestLoad(t *testing.T) {
 	assert.NotNil(test.Description)
 	assert.Equal(reflect.DeepEqual(test.Tags, []string{"basic", "setup"}), true)
 	assert.Nil(test.Depends)
-	assert.Equal(test.Conf.CPUs, (uint)(4))
+	assert.Equal(test.Conf.CPUs, (uint)(1))
 	assert.Equal(test.Conf.RAM, "16777216")
 	assert.Equal(test.Conf.Disk1.Sectors, "65536")
 	assert.Equal(test.Conf.Disk1.RPM, (uint)(7200))
@@ -35,7 +35,7 @@ func TestLoad(t *testing.T) {
 	assert.Equal(test.Description, "")
 	assert.Nil(test.Tags)
 	assert.Equal(reflect.DeepEqual(test.Depends, []string{"boot"}), true)
-	assert.Equal(test.Conf.CPUs, (uint)(1))
+	assert.Equal(test.Conf.CPUs, (uint)(4))
 	assert.Equal(test.Conf.RAM, "1048576")
 
 	test, err = LoadTest("./fixtures/tests/parallelvm.yml")
@@ -44,7 +44,7 @@ func TestLoad(t *testing.T) {
 	assert.Equal(test.Description, "")
 	assert.Nil(test.Tags)
 	assert.Equal(reflect.DeepEqual(test.Depends, []string{"shell"}), true)
-	assert.Equal(test.Conf.CPUs, (uint)(1))
+	assert.Equal(test.Conf.CPUs, (uint)(4))
 	assert.Equal(test.Conf.RAM, "2097152")
 	assert.Equal(test.Conf.Disk2.Sectors, "10240")
 	assert.Equal(test.Conf.Disk2.RPM, (uint)(14400))
@@ -75,6 +75,15 @@ func TestRunBoot(t *testing.T) {
 func TestRunShell(t *testing.T) {
 	assert := assert.New(t)
 	test, err := LoadTest("./fixtures/tests/shell.yml")
+	assert.Nil(err)
+	err = test.Run("./fixtures/sol2/", "")
+	assert.Nil(err)
+	t.Log(test.OutputString())
+}
+
+func TestKernelDeadlock(t *testing.T) {
+	assert := assert.New(t)
+	test, err := LoadTest("./fixtures/tests/dl.yml")
 	assert.Nil(err)
 	err = test.Run("./fixtures/sol2/", "")
 	assert.Nil(err)

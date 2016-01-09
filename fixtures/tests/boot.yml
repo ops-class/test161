@@ -4,7 +4,7 @@ description: >
   Ensure that the kernel can boot.
 tags: [basic,setup]
 conf:
-  cpus: 4
+  cpus: 1
   ram: 16777216
 ---
 q
