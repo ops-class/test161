@@ -109,7 +109,7 @@ monitor:
 	assert.Equal(test.MonitorConf.User.Max, 0.9)
 }
 
-func TestPrintConf(t *testing.T) {
+func TestConfPrintConf(t *testing.T) {
 	assert := assert.New(t)
 
 	test, err := TestFromString("")
