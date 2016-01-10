@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 	"unicode"
 )
 
@@ -30,18 +31,21 @@ type Test struct {
 	sys161    *expect.Expect
 	startTime int64
 
-	statCond  *sync.Cond
-	statError error
+	statCond   *sync.Cond
+	statError  error
+	statActive bool
+
+	progressTimer *time.Timer
 
 	commandLock   *sync.Mutex
 	command       *Command
 	currentOutput OutputLine
 
-	ConfString     string    `json:"confstring"`
-	Status         string    `json:"status"`
-	MonitorMessage string    `json:"message"`
-	RunTime        TimeDelta `json:"runtime"`
-	Commands       []Command `json:"commands"`
+	ConfString      string    `json:"confstring"`
+	Status          string    `json:"status"`
+	ShutdownMessage string    `json:"shutdownmessage"`
+	RunTime         TimeDelta `json:"runtime"`
+	Commands        []Command `json:"commands"`
 }
 
 var validRandom = regexp.MustCompile(`(autoseed|seed=\d+)`)

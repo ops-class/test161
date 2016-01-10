@@ -107,7 +107,16 @@ func (t TimeDelta) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("%.6f", t)), nil
 }
 
+func (t *Test) stopStats() {
+	t.statCond.L.Lock()
+	t.statActive = false
+	t.statCond.Signal()
+	t.statCond.L.Unlock()
+}
+
 func (t *Test) getStats(statConn net.Conn) {
+	defer t.stopStats()
+
 	statReader := bufio.NewReader(statConn)
 
 	var err error
@@ -125,6 +134,7 @@ func (t *Test) getStats(statConn net.Conn) {
 		end := t.getDelta()
 
 		t.statCond.L.Lock()
+		t.statActive = true
 		if err != nil && err != io.EOF {
 			t.statError = err
 		}
@@ -214,7 +224,7 @@ func (t *Test) getStats(statConn net.Conn) {
 			t.commandLock.Lock()
 			if currentCommandID == t.command.ID {
 				t.Status = "monitor"
-				t.MonitorMessage = monitorError
+				t.ShutdownMessage = monitorError
 				t.sys161.Killer()
 			}
 			t.commandLock.Unlock()
@@ -224,6 +234,16 @@ func (t *Test) getStats(statConn net.Conn) {
 
 func (t *Test) getDelta() TimeDelta {
 	return TimeDelta(float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000))
+}
+
+func (t *Test) TimerKill() {
+	t.commandLock.Lock()
+	if t.Status == "" {
+		t.Status = "timeout"
+		t.ShutdownMessage = fmt.Sprintf("no progress for %d s", t.MonitorConf.Timeouts.Progress)
+		t.sys161.Killer()
+	}
+	t.commandLock.Unlock()
 }
 
 func (t *Test) Run(root string, tempRoot string) (err error) {
@@ -283,6 +303,8 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 	}
 
+	t.progressTimer =
+		time.AfterFunc(time.Duration(t.MonitorConf.Timeouts.Progress)*time.Second, t.TimerKill)
 	t.sys161, err = expect.Spawn("sys161", "-X", "kernel")
 	t.startTime = time.Now().UnixNano()
 	if err != nil {
@@ -345,12 +367,12 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 				command = "exit"
 			}
 		}
-		if currentEnv != "" {
-			t.statCond.L.Lock()
+		t.statCond.L.Lock()
+		if t.statActive {
 			t.statCond.Wait()
-			statError = t.statError
-			t.statCond.L.Unlock()
 		}
+		statError = t.statError
+		t.statCond.L.Unlock()
 		if statError != nil {
 			return statError
 		}
@@ -388,11 +410,28 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			continue
 		}
 		match, err := t.sys161.ExpectRegexp(prompts)
+
+		// 10 Jan 2016 : GWA : Wait again for the stat signal so that we have
+		// aligned stats at finish. This slows down testing somewhat, and it's not
+		// perfectly accurate, but stats come along fairly rapidly and there
+		// shouldn't be too many cycles added by waiting at the menu.
+
+		t.statCond.L.Lock()
+		if t.statActive {
+			t.statCond.Wait()
+		}
+		statError = t.statError
+		t.statCond.L.Unlock()
+		if statError != nil {
+			return statError
+		}
+
 		if err == expect.ErrTimeout {
 			currentEnv = ""
 			i = len(commands)
 			t.commandLock.Lock()
 			t.Status = "timeout"
+			t.ShutdownMessage = fmt.Sprintf("no prompt for %d s", t.MonitorConf.Timeouts.Prompt)
 			t.RunTime = t.getDelta()
 			t.commandLock.Unlock()
 			continue
@@ -421,7 +460,9 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	return nil
 }
 
-func (t *Test) Recv(time time.Time, received []byte) {
+func (t *Test) Recv(receivedTime time.Time, received []byte) {
+	t.progressTimer.Reset(time.Duration(t.MonitorConf.Timeouts.Progress) * time.Second)
+
 	t.commandLock.Lock()
 	defer t.commandLock.Unlock()
 	for _, b := range received {
@@ -457,6 +498,10 @@ func (t *Test) OutputJSON() (string, error) {
 
 func (t *Test) OutputString() string {
 	var output string
+	for _, conf := range strings.Split(t.ConfString, "\n") {
+		conf = strings.TrimSpace(conf)
+		output += fmt.Sprintf("conf: %s\n", conf)
+	}
 	for i, command := range t.Commands {
 		for j, outputLine := range command.Output {
 			if i == 0 || j != 0 {
@@ -466,5 +511,10 @@ func (t *Test) OutputString() string {
 			}
 		}
 	}
+	output += t.Status
+	if t.ShutdownMessage != "" {
+		output += fmt.Sprintf(": %s", t.ShutdownMessage)
+	}
+	output += "\n"
 	return output
 }
