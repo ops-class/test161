@@ -95,7 +95,7 @@ But this is so much simpler, right?
 $ /bin/true
 ....
 
-== Progress Tracking Using `stat161` Output
+=== Progress Tracking Using `stat161` Output
 
 `test161` uses the collected `stat161` output produced by the running kernel to
 detect deadlocks, livelocks, and other forms of stalls. We do this using
