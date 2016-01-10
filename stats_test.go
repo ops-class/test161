@@ -6,6 +6,7 @@ import (
 )
 
 func TestStatsKernelDeadlock(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("dl")
@@ -37,6 +38,7 @@ func TestStatsKernelDeadlock(t *testing.T) {
 }
 
 func TestStatsKernelLivelock(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("ll16")
@@ -69,6 +71,7 @@ func TestStatsKernelLivelock(t *testing.T) {
 }
 
 func TestStatsUserDeadlock(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("$ /testbin/waiter")
@@ -98,6 +101,48 @@ func TestStatsUserDeadlock(t *testing.T) {
 
 	assert.Equal(test.Status, "monitor")
 	assert.True(test.RunTime < 4.0)
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}
+
+func TestStatsKernelProgress(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("ll16")
+	assert.Nil(err)
+
+	test.MonitorConf.Kernel.Min = 0.0
+	test.MonitorConf.Kernel.Max = 1.0
+	test.MonitorConf.Timeouts.Progress = 4
+
+	err = test.Run("./fixtures/", "")
+	assert.Nil(err)
+
+	assert.Equal(test.Status, "timeout")
+	assert.True(test.RunTime < 5.0)
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}
+
+func TestStatsUserProgress(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("$ /testbin/waiter")
+	assert.Nil(err)
+
+	test.MonitorConf.Kernel.Min = 0.0
+	test.MonitorConf.User.Min = 0.0
+	test.MonitorConf.Timeouts.Progress = 4
+
+	err = test.Run("./fixtures/", "")
+	assert.Nil(err)
+
+	assert.Equal(test.Status, "timeout")
+	assert.True(test.RunTime < 5.0)
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())

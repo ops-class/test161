@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gchallen/expect"
+	"github.com/kr/pty"
 	"github.com/termie/go-shutil"
 	"io"
 	"io/ioutil"
@@ -21,6 +22,8 @@ import (
 
 const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
 const SHELL_PROMPT = `OS/161$ `
+
+var copyLock = &sync.Mutex{}
 
 type Command struct {
 	ID           uint         `json:"-"`
@@ -69,7 +72,9 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	}
 
 	kernelTarget := path.Join(tempDir, "kernel")
-	if _, err := os.Stat(kernelTarget); os.IsNotExist(err) {
+	_, err = os.Stat(kernelTarget)
+
+	if err != nil {
 		return err
 	}
 
@@ -86,24 +91,30 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		return err
 	}
 
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	defer os.Chdir(currentDir)
-	os.Chdir(tempDir)
+	/*
+		currentDir, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		defer os.Chdir(currentDir)
+		os.Chdir(tempDir)
+	*/
 
 	t.statCond = &sync.Cond{L: &sync.Mutex{}}
 	t.commandLock = &sync.Mutex{}
 
 	if t.Conf.Disk1.Sectors != "" {
-		err = exec.Command("disk161", "create", t.Conf.Disk1.File, t.Conf.Disk1.Bytes).Run()
+		create := exec.Command("disk161", "create", t.Conf.Disk1.File, t.Conf.Disk1.Bytes)
+		create.Dir = tempDir
+		err = create.Run()
 		if err != nil {
 			return err
 		}
 	}
 	if t.Conf.Disk2.Sectors != "" {
-		err = exec.Command("disk161", "create", t.Conf.Disk2.File, t.Conf.Disk2.Bytes).Run()
+		create := exec.Command("disk161", "create", t.Conf.Disk2.File, t.Conf.Disk2.Bytes)
+		create.Dir = tempDir
+		err = create.Run()
 		if err != nil {
 			return err
 		}
@@ -111,7 +122,17 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 
 	t.progressTimer =
 		time.AfterFunc(time.Duration(t.MonitorConf.Timeouts.Progress)*time.Second, t.TimerKill)
-	t.sys161, err = expect.Spawn("sys161", "-X", "kernel")
+	run := exec.Command("sys161", "-X", "kernel")
+	run.Dir = tempDir
+	pty, err := pty.Start(run)
+	if err != nil {
+		return err
+	}
+	killer := func() {
+		run.Process.Kill()
+	}
+	t.sys161 = expect.Create(pty, killer)
+
 	t.startTime = time.Now().UnixNano()
 	if err != nil {
 		return err

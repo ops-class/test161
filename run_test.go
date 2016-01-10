@@ -32,7 +32,7 @@ func TestRunBoot(t *testing.T) {
 func TestRunShell(t *testing.T) {
 	assert := assert.New(t)
 
-	test, err := TestFromString("s\n$ /bin/true\n$ exit\nq")
+	test, err := TestFromString("$ /bin/true")
 	assert.Nil(err)
 
 	err = test.Run("./fixtures/", "")

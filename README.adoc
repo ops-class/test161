@@ -119,10 +119,6 @@ running in kernel mode, which could be caused by a hung progress.
 
 == TODOs
 
-=== Progress tracking
-
-Should be simple with timers and the existing kill mechanism.
-
 === Running multiple tests and dependencies
 
 Support for loading a bunch of tests from a directory and running multiple
