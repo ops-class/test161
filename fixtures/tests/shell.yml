@@ -1,8 +1,0 @@
----
-name: shell
-depends:
-- boot
-conf:
-  ram: "1M"
----
-$ /bin/true

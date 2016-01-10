@@ -1,8 +1,0 @@
----
-name: Deadlock test
-description: >
-  Intentionally deadlock the kernel.
-tags: [test161]
-depends: [boot]
----
-dl

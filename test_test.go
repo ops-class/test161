@@ -82,7 +82,7 @@ func TestMonitorKernelDeadlock(t *testing.T) {
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
 
-	test, err = TestFromFile("./fixtures/tests/dl.yml")
+	test, err = TestFromString("dl\nq")
 	assert.Nil(err)
 	test.MonitorConf.Timeouts.Prompt = 4
 
@@ -99,7 +99,7 @@ func TestMonitorKernelDeadlock(t *testing.T) {
 func TestMonitorKernelLivelock(t *testing.T) {
 	assert := assert.New(t)
 
-	test, err := TestFromFile("./fixtures/tests/ll16.yml")
+	test, err := TestFromString("ll16\nq")
 	assert.Nil(err)
 
 	test.MonitorConf.Kernel.Max = 1.0
@@ -113,7 +113,7 @@ func TestMonitorKernelLivelock(t *testing.T) {
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
 
-	test, err = TestFromFile("./fixtures/tests/ll16.yml")
+	test, err = TestFromString("ll16\nq")
 	assert.Nil(err)
 	test.MonitorConf.Timeouts.Prompt = 4
 	test.MonitorConf.Intervals = 5
