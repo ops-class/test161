@@ -22,9 +22,38 @@ source tree
 
 * `sys161` and `disk161` in the path.
 
+== Default Settings
+
+....
+conf:
+  cpus: 4
+  ram: 1M
+  disk1:
+    sectors: min(2 * ram, 8000) # 8000 is a minimum due to a current sys161 bug
+    rpm: 7200
+    nodoom: true
+  disk2: # disabled by default, but uses these defaults if configured
+    sectors: min(2 * ram, 8000)
+    rpm: 7200
+    nodoom: false
+  random: seed=random # random number generated at configuration time
+monitor:
+  enabled: true
+  intervals: 10
+  kernel:
+    min: 0.001
+    max: 0.99
+  user:
+    min: 0.0001
+    max: 1.0
+  timeouts:
+    prompt: 300
+    progress: 60
+....
+
 == Features
 
-=== Testfile syntactic sugar
+=== Testfile Syntactic Sugar
 
 A line starting with `$` will be run in the shell and start the shell as
 needed. Lines not starting with `$` are run from the kernel prompt and get
@@ -66,7 +95,33 @@ But this is so much simpler, right?
 $ /bin/true
 ....
 
+== Progress Tracking Using `stat161` Output
+
+`test161` uses the collected `stat161` output produced by the running kernel to
+detect deadlocks, livelocks, and other forms of stalls. We do this using
+several different strategies:
+
+. *Progress and prompt timeouts.* Testfiles can configure both progress
+(`monitorconf.timeouts.progress`) and prompt (`monitorconf.timeouts.prompt`)
+timeouts. The former is used to kill the test if no output has appeared, while
+the latter is passed to `expect` and used to kill the test of the prompt is
+delayed. Ideally OS/161 tests should produce some output while they run to
+help keep the progress timeout from firing, but the other progress tracking
+strategies described below should also help.
+. *User and kernel maximum and minimum cycles.* `test161` maintains a buffer
+of statistics over a configurable number of `stat161` intervals. Limits on the
+minimum and maximum number of kernel and user cycles (expressed as fractions)
+over this buffer can help detect deadlocks (minimum) and livelocks (maximum).
+User limits are only applied when running in userspace.
+.  Note that `test161`
+also checks to ensure that there are no user cycles generated when we are
+running in kernel mode, which could be caused by a hung progress.
+
 == TODOs
+
+=== Progress tracking
+
+Should be simple with timers and the existing kill mechanism.
 
 === Running multiple tests and dependencies
 
@@ -86,13 +141,6 @@ instances executing in parallel.
 We want to support printing to the screen (not the JSON, but output that
 looks like what you'd see in the terminal) and saving JSON output to a
 MongoDB instance for later grading.
-
-=== Progress tracking by monitoring the `stat161` output.
-
-This will be tricky. We
-want to catch deadlocks, livelocks, and cases where user programs aren't
-making much progress, and we'll need some careful heuristics here to ensure
-that we limit false positives.
 
 === Primitive success or failure tracking
 

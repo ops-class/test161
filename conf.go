@@ -179,11 +179,11 @@ func TestFromString(data string) (*Test, error) {
 		if test.Conf.Disk2.RPM == 0 {
 			test.Conf.Disk2.RPM = 7200
 		}
-		test.Conf.Disk2.Sectors, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, "5M", 1)
+		test.Conf.Disk2.Sectors, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, ramString, 1)
 		if err != nil {
 			return nil, err
 		}
-		test.Conf.Disk2.Bytes, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, "5M", 512)
+		test.Conf.Disk2.Bytes, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, ramString, 512)
 		if err != nil {
 			return nil, err
 		}
@@ -215,7 +215,7 @@ func TestFromString(data string) (*Test, error) {
 		test.MonitorConf.Timeouts.Prompt = 5 * 60
 	}
 	if test.MonitorConf.Timeouts.Progress == 0 {
-		test.MonitorConf.Timeouts.Progress = 10
+		test.MonitorConf.Timeouts.Progress = 60
 	}
 	if test.MonitorConf.Timeouts.Progress > test.MonitorConf.Timeouts.Prompt {
 		return nil, errors.New("test161: progress timeout must be less than (or equal to) the prompt timeout")

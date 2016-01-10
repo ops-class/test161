@@ -48,7 +48,7 @@ func TestConfDefaults(t *testing.T) {
 	assert.Equal(test.MonitorConf.Enabled, "true")
 	assert.Equal(test.MonitorConf.Intervals, uint(10))
 	assert.Equal(test.MonitorConf.Timeouts.Prompt, uint(5*60))
-	assert.Equal(test.MonitorConf.Timeouts.Progress, uint(10))
+	assert.Equal(test.MonitorConf.Timeouts.Progress, uint(60))
 	assert.Equal(test.MonitorConf.Kernel.Min, 0.001)
 	assert.Equal(test.MonitorConf.Kernel.Max, 0.99)
 	assert.Equal(test.MonitorConf.User.Min, 0.0001)
@@ -60,7 +60,6 @@ func TestConfOverrides(t *testing.T) {
 
 	test, err := TestFromString(`---
 name: override
-timeout: 30
 conf:
   cpus: 1
   ram: 2M
