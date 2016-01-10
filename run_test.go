@@ -19,7 +19,7 @@ func TestRunBoot(t *testing.T) {
 	test, err := TestFromString("q")
 	assert.Nil(err)
 
-	err = test.Run("./fixtures/sol0/", "")
+	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
 	assert.Equal(test.Commands[1].Env, "kernel")
@@ -35,7 +35,7 @@ func TestRunShell(t *testing.T) {
 	test, err := TestFromString("s\n$ /bin/true\n$ exit\nq")
 	assert.Nil(err)
 
-	err = test.Run("./fixtures/sol2/", "")
+	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
 	assert.Equal(test.Commands[1].Env, "kernel")
@@ -54,7 +54,7 @@ func TestRunPanic(t *testing.T) {
 	test, err := TestFromString("panic")
 	assert.Nil(err)
 
-	err = test.Run("./fixtures/sol0/", "")
+	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
 	assert.Equal(test.Commands[1].Env, "kernel")
@@ -74,7 +74,7 @@ func TestMonitorKernelDeadlock(t *testing.T) {
 	test.MonitorConf.Kernel.Min = 0.0
 	test.MonitorConf.Timeouts.Prompt = 4
 
-	err = test.Run("./fixtures/sol2/", "")
+	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "timeout")
@@ -86,7 +86,7 @@ func TestMonitorKernelDeadlock(t *testing.T) {
 	assert.Nil(err)
 	test.MonitorConf.Timeouts.Prompt = 4
 
-	err = test.Run("./fixtures/sol2/", "")
+	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "monitor")
@@ -105,7 +105,7 @@ func TestMonitorKernelLivelock(t *testing.T) {
 	test.MonitorConf.Kernel.Max = 1.0
 	test.MonitorConf.Timeouts.Prompt = 4
 
-	err = test.Run("./fixtures/sol2/", "")
+	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "timeout")
@@ -118,7 +118,7 @@ func TestMonitorKernelLivelock(t *testing.T) {
 	test.MonitorConf.Timeouts.Prompt = 4
 	test.MonitorConf.Intervals = 5
 
-	err = test.Run("./fixtures/sol2/", "")
+	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "monitor")

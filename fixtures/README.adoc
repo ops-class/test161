@@ -1,5 +1,5 @@
 = Testing Fixtures
 
-Testing requires solution kernels for the
-`ops-class.org`[https://www.ops-class.org] assignments. For access to these,
+Testing requires a solution kernel for
+`ops-class.org`[https://www.ops-class.org] ASST3 and ass
 please email `challen@buffalo.edu`[mailto:challen@buffalo.edu].
