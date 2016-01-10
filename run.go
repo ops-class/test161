@@ -2,6 +2,7 @@ package test161
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gchallen/expect"
@@ -263,6 +264,14 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 	}
 	return nil
+}
+
+func (t *Test) OutputJSON() (string, error) {
+	outputBytes, err := json.MarshalIndent(t, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(outputBytes), nil
 }
 
 func (t *Test) OutputString() string {
