@@ -10,7 +10,6 @@ import (
 	"github.com/termie/go-shutil"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -62,23 +61,23 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		return err
 	}
 	defer os.RemoveAll(tempRoot)
-	tempDir := path.Join(tempRoot, "root")
+	t.tempDir = path.Join(tempRoot, "root")
 
 	if root != "" {
-		err = shutil.CopyTree(root, tempDir, nil)
+		err = shutil.CopyTree(root, t.tempDir, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	kernelTarget := path.Join(tempDir, "kernel")
+	kernelTarget := path.Join(t.tempDir, "kernel")
 	_, err = os.Stat(kernelTarget)
 
 	if err != nil {
 		return err
 	}
 
-	confTarget := path.Join(tempDir, "sys161.conf")
+	confTarget := path.Join(t.tempDir, "sys161.conf")
 	t.ConfString, err = t.PrintConf()
 	if err != nil {
 		return err
@@ -91,21 +90,12 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		return err
 	}
 
-	/*
-		currentDir, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		defer os.Chdir(currentDir)
-		os.Chdir(tempDir)
-	*/
-
 	t.statCond = &sync.Cond{L: &sync.Mutex{}}
 	t.commandLock = &sync.Mutex{}
 
 	if t.Conf.Disk1.Sectors != "" {
 		create := exec.Command("disk161", "create", t.Conf.Disk1.File, t.Conf.Disk1.Bytes)
-		create.Dir = tempDir
+		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
 			return err
@@ -113,7 +103,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	}
 	if t.Conf.Disk2.Sectors != "" {
 		create := exec.Command("disk161", "create", t.Conf.Disk2.File, t.Conf.Disk2.Bytes)
-		create.Dir = tempDir
+		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
 			return err
@@ -123,7 +113,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	t.progressTimer =
 		time.AfterFunc(time.Duration(t.MonitorConf.Timeouts.Progress)*time.Second, t.TimerKill)
 	run := exec.Command("sys161", "-X", "kernel")
-	run.Dir = tempDir
+	run.Dir = t.tempDir
 	pty, err := pty.Start(run)
 	if err != nil {
 		return err
@@ -144,13 +134,6 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	}
 	t.sys161.SetLogger(t)
 	t.sys161.SetTimeout(time.Duration(t.MonitorConf.Timeouts.Prompt) * time.Second)
-
-	statConn, err := net.Dial("unix", path.Join(tempDir, ".sockets/meter"))
-	if err != nil {
-		return err
-	}
-
-	go t.getStats(statConn)
 
 	prompts := regexp.MustCompile(fmt.Sprintf("(%s|%s)", regexp.QuoteMeta(KERNEL_PROMPT), regexp.QuoteMeta(SHELL_PROMPT)))
 

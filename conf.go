@@ -29,11 +29,13 @@ type Test struct {
 	MonitorConf MonitorConf `yaml:"monitor" json:"monitor"`
 
 	sys161    *expect.Expect
+	tempDir   string
 	startTime int64
 
-	statCond   *sync.Cond
-	statError  error
-	statActive bool
+	statCond    *sync.Cond
+	statError   error
+	statStarted bool
+	statActive  bool
 
 	progressTimer *time.Timer
 

@@ -11,6 +11,11 @@ import (
 func (t *Test) Recv(receivedTime time.Time, received []byte) {
 	t.progressTimer.Reset(time.Duration(t.MonitorConf.Timeouts.Progress) * time.Second)
 
+	if !t.statStarted {
+		go t.getStats()
+		t.statStarted = true
+	}
+
 	t.commandLock.Lock()
 	defer t.commandLock.Unlock()
 	for _, b := range received {

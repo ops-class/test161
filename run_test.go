@@ -22,6 +22,11 @@ func TestRunBoot(t *testing.T) {
 
 	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
+	if err != nil {
+		t.Log(test.Status)
+		t.Log(test.ShutdownMessage)
+		return
+	}
 
 	assert.Equal(test.Commands[1].Env, "kernel")
 

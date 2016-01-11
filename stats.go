@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 	"net"
+	"path"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -72,12 +73,22 @@ func (t *Test) stopStats() {
 	t.statCond.L.Unlock()
 }
 
-func (t *Test) getStats(statConn net.Conn) {
+func (t *Test) getStats() {
+	var err error
+
+	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
+	if err != nil {
+		t.commandLock.Lock()
+		t.Status = "monitor"
+		t.ShutdownMessage = "couldn't connect"
+		t.sys161.Killer()
+		t.commandLock.Unlock()
+		return
+	}
 	defer t.stopStats()
 
 	statReader := bufio.NewReader(statConn)
 
-	var err error
 	var line string
 
 	start := t.getDelta()
