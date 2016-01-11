@@ -155,10 +155,10 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	prompts := regexp.MustCompile(fmt.Sprintf("(%s|%s)", regexp.QuoteMeta(KERNEL_PROMPT), regexp.QuoteMeta(SHELL_PROMPT)))
 
 	match, err := t.sys161.ExpectRegexp(prompts)
-	prompt := match.Groups[0]
 	if err != nil {
 		return err
 	}
+	prompt := match.Groups[0]
 	if prompt != KERNEL_PROMPT {
 		return errors.New(fmt.Sprintf("test161: expected kernel prompt, got %s", prompt))
 	}

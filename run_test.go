@@ -14,6 +14,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestRunBoot(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("q")
@@ -30,6 +31,7 @@ func TestRunBoot(t *testing.T) {
 }
 
 func TestRunShell(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("$ /bin/true")
@@ -49,6 +51,7 @@ func TestRunShell(t *testing.T) {
 }
 
 func TestRunPanic(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("panic")

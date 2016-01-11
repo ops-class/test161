@@ -7,6 +7,7 @@ import (
 )
 
 func TestLoggerTimerKill(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("$ /testbin/spinner 16")

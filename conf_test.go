@@ -9,6 +9,7 @@ import (
 )
 
 func TestConfMetadata(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString(`---
@@ -31,6 +32,7 @@ depends:
 }
 
 func TestConfDefaults(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("")
@@ -56,6 +58,7 @@ func TestConfDefaults(t *testing.T) {
 }
 
 func TestConfOverrides(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString(`---
@@ -110,6 +113,7 @@ monitor:
 }
 
 func TestConfPrintConf(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	test, err := TestFromString("")
