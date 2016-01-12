@@ -117,6 +117,8 @@ func (t *Test) getStats() {
 
 		t.statCond.L.Lock()
 		t.statActive = true
+		recordStats := t.recordStats
+		monitorStats := t.monitorStats
 		if err != nil && err != io.EOF {
 			t.statError = err
 		}
@@ -167,17 +169,18 @@ func (t *Test) getStats() {
 		t.commandLock.Lock()
 		t.SimTime = start
 		progressTime := float64(t.SimTime) - t.progressTime
-		if len(t.command.AllStats) == 0 {
-			statCache = make([]Stat, 0, intervals)
+		if recordStats {
+			if len(t.command.AllStats) == 0 {
+				statCache = make([]Stat, 0, intervals)
+			}
+			t.command.AllStats = append(t.command.AllStats, newStats)
+			t.command.SummaryStats.Merge(newStats)
 		}
-		t.command.AllStats = append(t.command.AllStats, newStats)
-		t.command.SummaryStats.Merge(newStats)
 		currentCommandID := t.command.ID
-		commandActive := t.commandActive
 		currentEnv := t.command.Env
 		t.commandLock.Unlock()
 
-		if t.MonitorConf.Enabled != "true" || !commandActive {
+		if t.MonitorConf.Enabled != "true" || !monitorStats || !recordStats {
 			continue
 		}
 		if uint(len(statCache)) == intervals {
@@ -220,9 +223,14 @@ func (t *Test) getStats() {
 			monitorError = "too many user cycles"
 		}
 
+		t.statCond.L.Lock()
+		recordStats = t.recordStats
+		monitorStats = t.monitorStats
+		t.statCond.L.Unlock()
+
 		if monitorError != "" {
 			t.commandLock.Lock()
-			if currentCommandID == t.command.ID && t.commandActive {
+			if currentCommandID == t.command.ID && recordStats && monitorStats {
 				t.Status = "monitor"
 				t.ShutdownMessage = monitorError
 				t.sys161.Killer()

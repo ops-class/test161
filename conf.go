@@ -31,17 +31,18 @@ type Test struct {
 	tempDir   string
 	startTime int64
 
-	statChan    chan Stat
-	statCond    *sync.Cond
-	statError   error
-	statStarted bool
-	statActive  bool
+	statChan     chan Stat
+	statCond     *sync.Cond
+	statError    error
+	statStarted  bool
+	statActive   bool
+	recordStats  bool
+	monitorStats bool
 
 	progressTime float64
 
 	commandLock   *sync.Mutex
 	command       *Command
-	commandActive bool
 	currentOutput OutputLine
 
 	ConfString      string    `json:"confstring"`

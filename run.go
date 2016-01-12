@@ -113,6 +113,8 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 
 	t.statChan = make(chan Stat)
 
+	t.recordStats = true
+
 	run := exec.Command("sys161", "-X", "-S", strconv.Itoa(int(t.MonitorConf.Resolution)), "kernel")
 	run.Dir = t.tempDir
 	pty, err := pty.Start(run)
@@ -139,6 +141,13 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	prompts := regexp.MustCompile(fmt.Sprintf("(%s|%s)", regexp.QuoteMeta(KERNEL_PROMPT), regexp.QuoteMeta(SHELL_PROMPT)))
 
 	match, err := t.sys161.ExpectRegexp(prompts)
+	t.statCond.L.Lock()
+	t.recordStats = false
+	statError := t.statError
+	t.statCond.L.Unlock()
+	if statError != nil {
+		return statError
+	}
 	if err != nil {
 		return err
 	}
@@ -153,7 +162,6 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	i := 0
 	j := uint(0)
 
-	var statError error
 	for {
 		var command string
 		if i < len(commands) {
@@ -178,15 +186,6 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 				command = "exit"
 			}
 		}
-		t.statCond.L.Lock()
-		if t.statActive {
-			t.statCond.Wait()
-		}
-		statError = t.statError
-		t.statCond.L.Unlock()
-		if statError != nil {
-			return statError
-		}
 		t.commandLock.Lock()
 		if t.currentOutput.Delta != 0.0 {
 			t.currentOutput.Line = t.currentOutput.Buffer.String()
@@ -207,16 +206,29 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		if command == "" {
 			break
 		}
-		err = t.sys161.SendLn(command)
-		if command != "q" && command != "exit" {
-			t.commandLock.Lock()
-			t.commandActive = true
-			t.commandLock.Unlock()
-		}
 
+		err = t.sys161.Send(command)
 		if err != nil {
 			return err
 		}
+
+		t.statCond.L.Lock()
+		if command != "q" && command != "exit" {
+			t.monitorStats = true
+		} else {
+			t.monitorStats = false
+		}
+		t.recordStats = true
+		if t.statActive {
+			t.statCond.Wait()
+		}
+		statError = t.statError
+		t.statCond.L.Unlock()
+		if statError != nil {
+			return statError
+		}
+		t.sys161.Send("\n")
+
 		if command == "q" {
 			currentEnv = ""
 			t.sys161.ExpectEOF()
@@ -227,19 +239,9 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			continue
 		}
 		match, err := t.sys161.ExpectRegexp(prompts)
-		t.commandLock.Lock()
-		t.commandActive = false
-		t.commandLock.Unlock()
-
-		// 10 Jan 2016 : GWA : Wait again for the stat signal so that we have
-		// aligned stats at finish. This slows down testing somewhat, and it's not
-		// perfectly accurate, but stats come along fairly rapidly and there
-		// shouldn't be too many cycles added by waiting at the menu.
 
 		t.statCond.L.Lock()
-		if t.statActive {
-			t.statCond.Wait()
-		}
+		t.recordStats = false
 		statError = t.statError
 		t.statCond.L.Unlock()
 		if statError != nil {
