@@ -46,12 +46,12 @@ type Test struct {
 	command       *Command
 	currentOutput OutputLine
 
-	ConfString      string    `json:"confstring"`
-	Status          string    `json:"status"`
-	ShutdownMessage string    `json:"shutdownmessage"`
-	WallTime        TimeDelta `json:"walltime"`
-	SimTime         TimeDelta `json:"simtime"`
-	Commands        []Command `json:"commands"`
+	ConfString      string         `json:"confstring"`
+	Status          string         `json:"status"`
+	ShutdownMessage string         `json:"shutdownmessage"`
+	WallTime        TimeFixedPoint `json:"walltime"`
+	SimTime         TimeFixedPoint `json:"simtime"`
+	Commands        []Command      `json:"commands"`
 }
 
 var validRandom = regexp.MustCompile(`(autoseed|seed=\d+)`)

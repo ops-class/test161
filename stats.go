@@ -15,24 +15,24 @@ var validStat = regexp.MustCompile(`^DATA\s+(?P<Kern>\d+)\s+(?P<User>\d+)\s+(?P<
 
 type Stat struct {
 	initialized bool
-	Start       TimeDelta `json:"start"`
-	End         TimeDelta `json:"end"`
-	Length      TimeDelta `json:"length"`
-	WallStart   TimeDelta `json:"wallstart"`
-	WallEnd     TimeDelta `json:"wallend"`
-	WallLength  TimeDelta `json:"walllength"`
-	Kern        uint32    `json:"kern"`
-	User        uint32    `json:"user"`
-	Idle        uint32    `json:"idle"`
-	Kinsns      uint32    `json:"kinsns"`
-	Uinsns      uint32    `json:"uinsns"`
-	IRQs        uint32    `json:"irqs"`
-	Exns        uint32    `json:"exns"`
-	Disk        uint32    `json:"disk"`
-	Con         uint32    `json:"con"`
-	Emu         uint32    `json:"emu"`
-	Net         uint32    `json:"net"`
-	Nanos       uint64    `json:"-"`
+	Start       TimeFixedPoint `json:"start"`
+	End         TimeFixedPoint `json:"end"`
+	Length      TimeFixedPoint `json:"length"`
+	WallStart   TimeFixedPoint `json:"wallstart"`
+	WallEnd     TimeFixedPoint `json:"wallend"`
+	WallLength  TimeFixedPoint `json:"walllength"`
+	Kern        uint32         `json:"kern"`
+	User        uint32         `json:"user"`
+	Idle        uint32         `json:"idle"`
+	Kinsns      uint32         `json:"kinsns"`
+	Uinsns      uint32         `json:"uinsns"`
+	IRQs        uint32         `json:"irqs"`
+	Exns        uint32         `json:"exns"`
+	Disk        uint32         `json:"disk"`
+	Con         uint32         `json:"con"`
+	Emu         uint32         `json:"emu"`
+	Net         uint32         `json:"net"`
+	Nanos       uint64         `json:"-"`
 }
 
 func (i *Stat) Add(j Stat) {
@@ -70,8 +70,8 @@ func (i *Stat) Merge(j Stat) {
 	}
 	i.End = j.End
 	i.WallEnd = j.WallEnd
-	i.Length = TimeDelta(float64(i.End) - float64(i.Start))
-	i.WallLength = TimeDelta(float64(i.WallEnd) - float64(i.WallStart))
+	i.Length = TimeFixedPoint(float64(i.End) - float64(i.Start))
+	i.WallLength = TimeFixedPoint(float64(i.WallEnd) - float64(i.WallStart))
 	i.Add(j)
 }
 
@@ -102,8 +102,8 @@ func (t *Test) getStats() {
 
 	var line string
 
-	wallStart := t.getDelta()
-	start := TimeDelta(float64(0.0))
+	wallStart := t.getTimeFixedPoint()
+	start := TimeFixedPoint(float64(0.0))
 	lastStat := Stat{}
 
 	intervals := uint(t.MonitorConf.Window*1000.0*1000.0/float32(t.MonitorConf.Resolution)) + 1
@@ -114,7 +114,7 @@ func (t *Test) getStats() {
 		if err == nil {
 			line, err = statReader.ReadString('\n')
 		}
-		wallEnd := t.getDelta()
+		wallEnd := t.getTimeFixedPoint()
 
 		t.statCond.L.Lock()
 		t.statActive = true
@@ -138,7 +138,7 @@ func (t *Test) getStats() {
 		newStats := Stat{
 			WallStart:  wallStart,
 			WallEnd:    wallEnd,
-			WallLength: TimeDelta(float64(wallEnd) - float64(wallStart)),
+			WallLength: TimeFixedPoint(float64(wallEnd) - float64(wallStart)),
 		}
 
 		wallStart = wallEnd
@@ -154,8 +154,8 @@ func (t *Test) getStats() {
 		newStats.Nanos, _ = strconv.ParseUint(statMatch[len(statMatch)-1], 10, 64)
 
 		newStats.Start = start
-		newStats.End = TimeDelta(float64(newStats.Nanos) / 1000000000.0)
-		newStats.Length = TimeDelta(float64(newStats.End) - float64(newStats.Start))
+		newStats.End = TimeFixedPoint(float64(newStats.Nanos) / 1000000000.0)
+		newStats.Length = TimeFixedPoint(float64(newStats.End) - float64(newStats.Start))
 		start = newStats.End
 
 		select {

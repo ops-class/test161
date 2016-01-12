@@ -17,7 +17,7 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 	t.progressTime = float64(t.SimTime)
 	for _, b := range received {
 		if t.currentOutput.WallTime == 0.0 {
-			t.currentOutput.WallTime = t.getDelta()
+			t.currentOutput.WallTime = t.getTimeFixedPoint()
 			t.currentOutput.SimTime = t.SimTime
 		}
 		t.currentOutput.Buffer.WriteByte(b)

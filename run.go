@@ -35,26 +35,26 @@ type Command struct {
 }
 
 type InputLine struct {
-	WallTime TimeDelta `json:"walltime"`
-	SimTime  TimeDelta `json:"simtime"`
-	Line     string    `json:"line"`
+	WallTime TimeFixedPoint `json:"walltime"`
+	SimTime  TimeFixedPoint `json:"simtime"`
+	Line     string         `json:"line"`
 }
 
 type OutputLine struct {
-	WallTime TimeDelta    `json:"walltime"`
-	SimTime  TimeDelta    `json:"simtime"`
-	Buffer   bytes.Buffer `json:"-"`
-	Line     string       `json:"line"`
+	WallTime TimeFixedPoint `json:"walltime"`
+	SimTime  TimeFixedPoint `json:"simtime"`
+	Buffer   bytes.Buffer   `json:"-"`
+	Line     string         `json:"line"`
 }
 
-type TimeDelta float64
+type TimeFixedPoint float64
 
-func (t TimeDelta) MarshalJSON() ([]byte, error) {
+func (t TimeFixedPoint) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("%.6f", t)), nil
 }
 
-func (t *Test) getDelta() TimeDelta {
-	return TimeDelta(float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000))
+func (t *Test) getTimeFixedPoint() TimeFixedPoint {
+	return TimeFixedPoint(float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000))
 }
 
 func (t *Test) Run(root string, tempRoot string) (err error) {
@@ -215,7 +215,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.command = &Command{
 				ID:    uint(j),
 				Env:   currentEnv,
-				Input: InputLine{WallTime: t.getDelta(), SimTime: t.SimTime, Line: command},
+				Input: InputLine{WallTime: t.getTimeFixedPoint(), SimTime: t.SimTime, Line: command},
 			}
 		}
 		t.commandLock.Unlock()
@@ -279,7 +279,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.commandLock.Lock()
 			t.Status = "timeout"
 			t.ShutdownMessage = fmt.Sprintf("no prompt for %d s", t.MonitorConf.Timeouts.Prompt)
-			t.WallTime = t.getDelta()
+			t.WallTime = t.getTimeFixedPoint()
 			t.commandLock.Unlock()
 			finished = true
 			continue
@@ -293,7 +293,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 					t.Status = "crash"
 				}
 			}
-			t.WallTime = t.getDelta()
+			t.WallTime = t.getTimeFixedPoint()
 			t.commandLock.Unlock()
 			finished = true
 			continue
