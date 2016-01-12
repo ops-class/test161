@@ -198,6 +198,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.currentOutput = OutputLine{}
 
 			// Need to do output testing here before the append.
+			fmt.Println(strings.TrimSpace(t.command.Input.Line), strings.TrimSpace(t.command.Output[0].Line))
 			t.Commands = append(t.Commands, *t.command)
 		}
 
