@@ -28,7 +28,7 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 	for _, b := range received {
 		// Add timestamps to the beginning of each line.
 		if t.currentOutput.WallTime == 0.0 {
-			t.currentOutput.WallTime = t.getTimeFixedPoint()
+			t.currentOutput.WallTime = t.getWallTime()
 			t.currentOutput.SimTime = t.SimTime
 		}
 		t.currentOutput.Buffer.WriteByte(b)

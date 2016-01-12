@@ -1,3 +1,8 @@
+/*
+Package test161 implements a library for testing OS/161 kernels. We use expect
+to drive the sys161 system simulator and collect useful output using the stat
+socket.
+*/
 package test161
 
 import (
@@ -48,14 +53,17 @@ type OutputLine struct {
 
 type TimeFixedPoint float64
 
+// MarshalJSON prints our TimeFixedPoint type as a fixed point float for JSON.
 func (t TimeFixedPoint) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("%.6f", t)), nil
 }
 
-func (t *Test) getTimeFixedPoint() TimeFixedPoint {
+// getTimeFixedPoint returns the current wall clock time as a TimeFixedPoint
+func (t *Test) getWallTime() TimeFixedPoint {
 	return TimeFixedPoint(float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000))
 }
 
+// Run a test161 test.
 func (t *Test) Run(root string, tempRoot string) (err error) {
 
 	// Exit status for configuration and initialization failures.
@@ -216,7 +224,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.command = &Command{
 				ID:    uint(j),
 				Env:   currentEnv,
-				Input: InputLine{WallTime: t.getTimeFixedPoint(), SimTime: t.SimTime, Line: command},
+				Input: InputLine{WallTime: t.getWallTime(), SimTime: t.SimTime, Line: command},
 			}
 		}
 		t.commandLock.Unlock()
@@ -280,7 +288,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.commandLock.Lock()
 			t.Status = "timeout"
 			t.ShutdownMessage = fmt.Sprintf("no prompt for %d s", t.MonitorConf.Timeouts.Prompt)
-			t.WallTime = t.getTimeFixedPoint()
+			t.WallTime = t.getWallTime()
 			t.commandLock.Unlock()
 			finished = true
 			continue
@@ -294,7 +302,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 					t.Status = "crash"
 				}
 			}
-			t.WallTime = t.getTimeFixedPoint()
+			t.WallTime = t.getWallTime()
 			t.commandLock.Unlock()
 			finished = true
 			continue
@@ -309,7 +317,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		prompt := match.Groups[0]
 
 		if currentEnv == "" && prompt != KERNEL_PROMPT {
-			// Handle expected boot prompt. We shouldn't boot into the shell!
+			// Handle incorrect boot prompt. We shouldn't boot into the shell!
 			return errors.New("test161: incorrect prompt at boot")
 		} else if prompt == KERNEL_PROMPT {
 			currentEnv = "kernel"

@@ -102,7 +102,7 @@ func (t *Test) getStats() {
 
 	var line string
 
-	wallStart := t.getTimeFixedPoint()
+	wallStart := t.getWallTime()
 	start := TimeFixedPoint(float64(0.0))
 	lastStat := Stat{}
 
@@ -114,7 +114,7 @@ func (t *Test) getStats() {
 		if err == nil {
 			line, err = statReader.ReadString('\n')
 		}
-		wallEnd := t.getTimeFixedPoint()
+		wallEnd := t.getWallTime()
 
 		t.statCond.L.Lock()
 		t.statActive = true
