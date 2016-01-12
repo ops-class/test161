@@ -56,53 +56,45 @@ type Test struct {
 var validRandom = regexp.MustCompile(`(autoseed|seed=\d+)`)
 
 type Conf struct {
-	CPUs   uint     `yaml:"cpus"`
-	RAM    string   `yaml:"ram"`
-	Random string   `yaml:"random"`
-	Disk1  DiskConf `yaml:"disk1"`
-	Disk2  DiskConf `yaml:"disk2"`
+	CPUs   uint     `yaml:"cpus" json:"cpus"`
+	RAM    string   `yaml:"ram" json:"ram"`
+	Random string   `yaml:"random" json:"random"`
+	Disk1  DiskConf `yaml:"disk1" json:"disk1"`
+	Disk2  DiskConf `yaml:"disk2" json:"disk2"`
 }
 
 type DiskConf struct {
-	RPM     uint   `yaml:"rpm"`
-	Sectors string `yaml:"sectors"`
-	Bytes   string
-	NoDoom  string `yaml:"nodoom"`
+	RPM     uint   `yaml:"rpm" json:"rpm"`
+	Sectors string `yaml:"sectors" json:"sectors"`
+	NoDoom  string `yaml:"nodoom" json:"nodoom"`
 	File    string
 }
 
 type MonitorConf struct {
-	Enabled    string   `yaml:"enabled"`
-	Resolution uint     `yaml:"resolution"`
-	Window     float32  `yaml:"window"`
-	Kernel     Limits   `yaml:"kernel"`
-	User       Limits   `yaml:"user"`
-	Timeouts   Timeouts `yaml:"timeouts"`
+	Enabled    string   `yaml:"enabled" json:"enabled"`
+	Resolution uint     `yaml:"resolution" json:"resolution"`
+	Window     float32  `yaml:"window" json:"window"`
+	Kernel     Limits   `yaml:"kernel" json:"kernel"`
+	User       Limits   `yaml:"user" json:"user"`
+	Timeouts   Timeouts `yaml:"timeouts" json:"timeouts"`
 }
 
 type Limits struct {
-	Min float64 `yaml:"min"`
-	Max float64 `yaml:"max"`
+	Min float64 `yaml:"min" json:"min"`
+	Max float64 `yaml:"max" json:"max"`
 }
 
 type Timeouts struct {
-	Prompt   uint `yaml:"prompt"`
-	Progress uint `yaml:"progress"`
+	Prompt   uint `yaml:"prompt" json:"prompt"`
+	Progress uint `yaml:"progress" json:"progress"`
 }
 
-func parseAndSetDefault(in string, backup string, unit int) (string, error) {
+func parseAndSetDefault(in string, backup string) (string, error) {
 	if in == "" {
 		in = backup
 	}
-	if unit == 0 {
-		unit = 1
-	}
 	if unicode.IsDigit(rune(in[len(in)-1])) {
-		number, err := strconv.Atoi(in)
-		if err != nil {
-			return "", err
-		}
-		return strconv.Itoa(number * unit), nil
+		return in, nil
 	} else {
 		number, err := strconv.Atoi(in[0 : len(in)-1])
 		if err != nil {
@@ -110,9 +102,9 @@ func parseAndSetDefault(in string, backup string, unit int) (string, error) {
 		}
 		multiplier := strings.ToUpper(string(in[len(in)-1]))
 		if multiplier == "K" {
-			return strconv.Itoa(1024 * number * unit), nil
+			return strconv.Itoa(1024 * number), nil
 		} else if multiplier == "M" {
-			return strconv.Itoa(1024 * 1024 * number * unit), nil
+			return strconv.Itoa(1024 * 1024 * number), nil
 		} else {
 			return "", errors.New("test161: could not convert formatted string to integer")
 		}
@@ -140,7 +132,7 @@ func TestFromString(data string) (*Test, error) {
 	if test.Conf.CPUs == 0 {
 		test.Conf.CPUs = 8
 	}
-	test.Conf.RAM, err = parseAndSetDefault(test.OrigConf.RAM, "1M", 1)
+	test.Conf.RAM, err = parseAndSetDefault(test.OrigConf.RAM, "1M")
 	if err != nil {
 		return nil, err
 	}
@@ -160,12 +152,7 @@ func TestFromString(data string) (*Test, error) {
 		test.Conf.Disk1.RPM = 7200
 	}
 	test.Conf.Disk1.Sectors, err =
-		parseAndSetDefault(test.OrigConf.Disk1.Sectors, ramString, 1)
-	if err != nil {
-		return nil, err
-	}
-	test.Conf.Disk1.Bytes, err =
-		parseAndSetDefault(test.OrigConf.Disk1.Sectors, ramString, 512)
+		parseAndSetDefault(test.OrigConf.Disk1.Sectors, ramString)
 	if err != nil {
 		return nil, err
 	}
@@ -189,11 +176,7 @@ func TestFromString(data string) (*Test, error) {
 		if test.Conf.Disk2.RPM == 0 {
 			test.Conf.Disk2.RPM = 7200
 		}
-		test.Conf.Disk2.Sectors, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, ramString, 1)
-		if err != nil {
-			return nil, err
-		}
-		test.Conf.Disk2.Bytes, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, ramString, 512)
+		test.Conf.Disk2.Sectors, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, ramString)
 		if err != nil {
 			return nil, err
 		}
@@ -273,8 +256,8 @@ func TestFromString(data string) (*Test, error) {
 func (t *Test) PrintConf() (string, error) {
 	const base = `0	serial
 1	emufs{{if .Disk1.Sectors}}
-2	disk	rpm={{.Disk1.RPM}}	file={{.Disk1.File}} {{if eq .Disk1.NoDoom "true"}}nodoom{{end}}{{end}}{{if .Disk2.Sectors}}
-3	disk	rpm={{.Disk2.RPM}}	file={{.Disk2.File}} {{if eq .Disk2.NoDoom "true"}}nodoom{{end}}{{end}}
+2	disk	rpm={{.Disk1.RPM}}	file={{.Disk1.File}} {{if eq .Disk1.NoDoom "true"}}nodoom{{end}} # sectors={{.Disk1.Sectors}}{{end}}{{if .Disk2.Sectors}}
+3	disk	rpm={{.Disk2.RPM}}	file={{.Disk2.File}} {{if eq .Disk2.NoDoom "true"}}nodoom{{end}} # sectors={{.Disk2.Sectors}}{{end}}
 28	random {{.Random}}
 29	timer
 30	trace

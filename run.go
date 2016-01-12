@@ -95,7 +95,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	t.commandLock = &sync.Mutex{}
 
 	if t.Conf.Disk1.Sectors != "" {
-		create := exec.Command("disk161", "create", t.Conf.Disk1.File, t.Conf.Disk1.Bytes)
+		create := exec.Command("disk161", "create", t.Conf.Disk1.File, fmt.Sprintf("%ss", t.Conf.Disk1.Sectors))
 		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
@@ -103,7 +103,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 	}
 	if t.Conf.Disk2.Sectors != "" {
-		create := exec.Command("disk161", "create", t.Conf.Disk2.File, t.Conf.Disk2.Bytes)
+		create := exec.Command("disk161", "create", t.Conf.Disk2.File, fmt.Sprintf("%ss", t.Conf.Disk2.Sectors))
 		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
