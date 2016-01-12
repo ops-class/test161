@@ -8,14 +8,25 @@ import (
 
 // Recv processes new sys161 output and restarts the progress timer
 func (t *Test) Recv(receivedTime time.Time, received []byte) {
+
+	// This is a slightly hacky way to ensure that getStats isn't started until
+	// sys161 has began to run. (Starting it too early causes the unix socket
+	// connect to fail.) statStarted is only used once and doesn't need to be
+	// protected.
 	if !t.statStarted {
 		go t.getStats()
 		t.statStarted = true
 	}
 
+	// Parse some new incoming data. Frequently just a single byte but sometimes
+	// more.
 	t.commandLock.Lock()
+
+	// Mark progress for the progress timeout.
 	t.progressTime = float64(t.SimTime)
+
 	for _, b := range received {
+		// Add timestamps to the beginning of each line.
 		if t.currentOutput.WallTime == 0.0 {
 			t.currentOutput.WallTime = t.getTimeFixedPoint()
 			t.currentOutput.SimTime = t.SimTime
@@ -25,7 +36,6 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 			t.currentOutput.Line = t.currentOutput.Buffer.String()
 			t.command.Output = append(t.command.Output, t.currentOutput)
 			t.currentOutput = OutputLine{}
-			continue
 		}
 	}
 	t.commandLock.Unlock()

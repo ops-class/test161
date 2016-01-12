@@ -2,7 +2,6 @@ package test161
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gchallen/expect"
@@ -161,11 +160,13 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	finished := false
 
 	// Main command loop. Note that sys161 is not started until the first time
-	// through.
+	// through, and the loop completes in the middle to mop up output from
+	// previous commands.
 	for {
-		// Grab the next command, bumping the counter if necessary.
 		var command string
 		var monitorStats bool
+
+		// Grab the next command, bumping the counter if necessary.
 
 		if finished {
 		} else if i == -1 {
@@ -226,7 +227,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 
 		if t.Status == "aborted" {
-			// Start sys161 if needed, with deferred close.
+			// Start sys161 if needed and defer Close.
 			err = t.start161()
 			if err != nil {
 				return err
@@ -321,9 +322,9 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	return nil
 }
 
+// start161 is a private helper function to start the sys161 expect process.
+// This makes the main loop a bit cleaner.
 func (t *Test) start161() error {
-	// Fire up sys161. Note that the getStats goroutine starts now (started by
-	// Rcev) as do Recv events, so we start synchronizing shared state now.
 	run := exec.Command("sys161", "-X", "-c", "test161.conf", "-S", strconv.Itoa(int(t.MonitorConf.Resolution)), "kernel")
 	run.Dir = t.tempDir
 	pty, err := pty.Start(run)
@@ -345,40 +346,8 @@ func (t *Test) start161() error {
 	return nil
 }
 
+// start161 is a private helper function to stop the sys161 expect process.
+// Defered to the end of Run.
 func (t *Test) stop161() {
 	t.sys161.Close()
-}
-
-func (t *Test) OutputJSON() (string, error) {
-	outputBytes, err := json.MarshalIndent(t, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return string(outputBytes), nil
-}
-
-func (t *Test) OutputString() string {
-	var output string
-	for _, conf := range strings.Split(t.ConfString, "\n") {
-		conf = strings.TrimSpace(conf)
-		output += fmt.Sprintf("conf: %s\n", conf)
-	}
-	for i, command := range t.Commands {
-		for j, outputLine := range command.Output {
-			if i == 0 || j != 0 {
-				output += fmt.Sprintf("%.6f\t%s", outputLine.SimTime, outputLine.Line)
-			} else {
-				output += fmt.Sprintf("%s", outputLine.Line)
-			}
-		}
-	}
-	if string(output[len(output)-1]) != "\n" {
-		output += "\n"
-	}
-	output += fmt.Sprintf("%.6f\t%s", t.SimTime, t.Status)
-	if t.ShutdownMessage != "" {
-		output += fmt.Sprintf(": %s", t.ShutdownMessage)
-	}
-	output += "\n"
-	return output
 }
