@@ -14,7 +14,6 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 	}
 
 	t.commandLock.Lock()
-	defer t.commandLock.Unlock()
 	t.progressTime = float64(t.SimTime)
 	for _, b := range received {
 		if t.currentOutput.Delta == 0.0 {
@@ -28,6 +27,7 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 			continue
 		}
 	}
+	t.commandLock.Unlock()
 }
 
 // Unused parts of the expect.Logger interface

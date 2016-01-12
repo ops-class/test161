@@ -41,6 +41,7 @@ type Test struct {
 
 	commandLock   *sync.Mutex
 	command       *Command
+	commandActive bool
 	currentOutput OutputLine
 
 	ConfString      string    `json:"confstring"`
@@ -70,11 +71,12 @@ type DiskConf struct {
 }
 
 type MonitorConf struct {
-	Enabled   string   `yaml:"enabled"`
-	Intervals uint     `yaml:"intervals"`
-	Kernel    Limits   `yaml:"kernel"`
-	User      Limits   `yaml:"user"`
-	Timeouts  Timeouts `yaml:"timeouts"`
+	Enabled    string   `yaml:"enabled"`
+	Resolution uint     `yaml:"resolution"`
+	Window     float32  `yaml:"window"`
+	Kernel     Limits   `yaml:"kernel"`
+	User       Limits   `yaml:"user"`
+	Timeouts   Timeouts `yaml:"timeouts"`
 }
 
 type Limits struct {
@@ -135,7 +137,7 @@ func TestFromString(data string) (*Test, error) {
 
 	test.Conf.CPUs = test.OrigConf.CPUs
 	if test.Conf.CPUs == 0 {
-		test.Conf.CPUs = 4
+		test.Conf.CPUs = 8
 	}
 	test.Conf.RAM, err = parseAndSetDefault(test.OrigConf.RAM, "1M", 1)
 	if err != nil {
@@ -227,8 +229,11 @@ func TestFromString(data string) (*Test, error) {
 	if test.MonitorConf.Timeouts.Progress > test.MonitorConf.Timeouts.Prompt {
 		return nil, errors.New("test161: progress timeout must be less than (or equal to) the prompt timeout")
 	}
-	if test.MonitorConf.Intervals == 0 {
-		test.MonitorConf.Intervals = 10
+	if test.MonitorConf.Resolution == 0 {
+		test.MonitorConf.Resolution = 1000
+	}
+	if test.MonitorConf.Window == 0 {
+		test.MonitorConf.Window = 2.0
 	}
 	if test.MonitorConf.Kernel.Min == 0.0 {
 		test.MonitorConf.Kernel.Min = 0.001

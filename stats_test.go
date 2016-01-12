@@ -12,7 +12,6 @@ func TestStatsKernelDeadlock(t *testing.T) {
 	test, err := TestFromString("dl")
 	assert.Nil(err)
 	test.MonitorConf.Timeouts.Progress = 8
-	test.MonitorConf.Intervals = 5
 
 	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
@@ -31,7 +30,6 @@ func TestStatsKernelLivelock(t *testing.T) {
 	test, err := TestFromString("ll16")
 	assert.Nil(err)
 	test.MonitorConf.Timeouts.Progress = 8
-	test.MonitorConf.Intervals = 5
 
 	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
@@ -52,7 +50,6 @@ func TestStatsUserDeadlock(t *testing.T) {
 
 	test.MonitorConf.Kernel.Min = 0.0
 	test.MonitorConf.Timeouts.Prompt = 8
-	test.MonitorConf.Intervals = 5
 
 	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
@@ -74,7 +71,7 @@ func TestStatsKernelProgress(t *testing.T) {
 	test.MonitorConf.Kernel.Min = 0.0
 	test.MonitorConf.Kernel.Max = 1.0
 	test.MonitorConf.Timeouts.Progress = 2
-	test.MonitorConf.Timeouts.Prompt = 10
+	test.MonitorConf.Timeouts.Prompt = 60
 
 	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
@@ -96,7 +93,7 @@ func TestStatsUserProgress(t *testing.T) {
 	test.MonitorConf.Kernel.Min = 0.0
 	test.MonitorConf.User.Min = 0.0
 	test.MonitorConf.Timeouts.Progress = 2
-	test.MonitorConf.Timeouts.Prompt = 10
+	test.MonitorConf.Timeouts.Prompt = 60
 
 	err = test.Run("./fixtures/", "")
 	assert.Nil(err)

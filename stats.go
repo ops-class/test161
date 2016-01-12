@@ -106,7 +106,8 @@ func (t *Test) getStats() {
 	start := TimeDelta(float64(0.0))
 	lastStat := Stat{}
 
-	statCache := make([]Stat, 0, t.MonitorConf.Intervals)
+	intervals := uint(t.MonitorConf.Window*1000.0*1000.0/float32(t.MonitorConf.Resolution)) + 1
+	statCache := make([]Stat, 0, intervals)
 
 	for {
 		if err == nil {
@@ -167,22 +168,23 @@ func (t *Test) getStats() {
 		t.SimTime = start
 		progressTime := float64(t.SimTime) - t.progressTime
 		if len(t.command.AllStats) == 0 {
-			statCache = make([]Stat, 0, t.MonitorConf.Intervals)
+			statCache = make([]Stat, 0, intervals)
 		}
 		t.command.AllStats = append(t.command.AllStats, newStats)
 		t.command.SummaryStats.Merge(newStats)
 		currentCommandID := t.command.ID
+		commandActive := t.commandActive
 		currentEnv := t.command.Env
 		t.commandLock.Unlock()
 
-		if t.MonitorConf.Enabled != "true" {
+		if t.MonitorConf.Enabled != "true" || !commandActive {
 			continue
 		}
-		if uint(len(statCache)) == t.MonitorConf.Intervals {
+		if uint(len(statCache)) == intervals {
 			statCache = statCache[1:]
 		}
 		statCache = append(statCache, newStats)
-		if uint(len(statCache)) < t.MonitorConf.Intervals {
+		if uint(len(statCache)) < intervals {
 			continue
 		}
 		intervalStat := &Stat{}
@@ -220,7 +222,7 @@ func (t *Test) getStats() {
 
 		if monitorError != "" {
 			t.commandLock.Lock()
-			if currentCommandID == t.command.ID {
+			if currentCommandID == t.command.ID && t.commandActive {
 				t.Status = "monitor"
 				t.ShutdownMessage = monitorError
 				t.sys161.Killer()

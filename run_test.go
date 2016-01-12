@@ -45,10 +45,13 @@ func TestRunShell(t *testing.T) {
 	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
-	assert.Equal(test.Commands[1].Env, "kernel")
-	assert.Equal(test.Commands[2].Env, "shell")
-	assert.Equal(test.Commands[3].Env, "shell")
-	assert.Equal(test.Commands[4].Env, "kernel")
+	assert.Equal(len(test.Commands), 5)
+	if len(test.Commands) == 5 {
+		assert.Equal(test.Commands[1].Env, "kernel")
+		assert.Equal(test.Commands[2].Env, "shell")
+		assert.Equal(test.Commands[3].Env, "shell")
+		assert.Equal(test.Commands[4].Env, "kernel")
+	}
 
 	assert.Equal(test.Status, "shutdown")
 	t.Log(test.OutputJSON())

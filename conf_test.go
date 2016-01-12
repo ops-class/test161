@@ -39,7 +39,7 @@ func TestConfDefaults(t *testing.T) {
 
 	assert.Nil(err)
 
-	assert.Equal(test.Conf.CPUs, uint(4))
+	assert.Equal(test.Conf.CPUs, uint(8))
 	assert.Equal(test.Conf.RAM, strconv.Itoa(1024*1024))
 	assert.Equal(test.Conf.Disk1.Sectors, strconv.Itoa(8000))
 	assert.Equal(test.Conf.Disk1.RPM, uint(7200))
@@ -48,7 +48,8 @@ func TestConfDefaults(t *testing.T) {
 	assert.True(strings.HasPrefix(test.Conf.Random, "seed="))
 
 	assert.Equal(test.MonitorConf.Enabled, "true")
-	assert.Equal(test.MonitorConf.Intervals, uint(10))
+	assert.Equal(test.MonitorConf.Window, float32(2.0))
+	assert.Equal(test.MonitorConf.Resolution, uint(1000))
 	assert.Equal(test.MonitorConf.Timeouts.Prompt, uint(5*60))
 	assert.Equal(test.MonitorConf.Timeouts.Progress, uint(60))
 	assert.Equal(test.MonitorConf.Kernel.Min, 0.001)
@@ -75,7 +76,8 @@ conf:
   random: seed=1024
 monitor:
   enabled: false
-  intervals: 5
+  window: 2.5
+  resolution: 2000
   kernel:
     min: 0.1
     max: 0.8
@@ -103,7 +105,8 @@ monitor:
 	assert.Equal(test.Conf.Random, "seed=1024")
 
 	assert.Equal(test.MonitorConf.Enabled, "false")
-	assert.Equal(test.MonitorConf.Intervals, uint(5))
+	assert.Equal(test.MonitorConf.Window, float32(2.5))
+	assert.Equal(test.MonitorConf.Resolution, uint(2000))
 	assert.Equal(test.MonitorConf.Timeouts.Prompt, uint(60))
 	assert.Equal(test.MonitorConf.Timeouts.Progress, uint(30))
 	assert.Equal(test.MonitorConf.Kernel.Min, 0.1)

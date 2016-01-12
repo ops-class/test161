@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +31,7 @@ type Command struct {
 	Input        InputLine    `json:"input"`
 	Output       []OutputLine `json:"output"`
 	SummaryStats Stat         `json:"summarystats"`
-	AllStats     []Stat       `json:"stats"`
+	AllStats     []Stat       `json:"-"`
 }
 
 type InputLine struct {
@@ -112,7 +113,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 
 	t.statChan = make(chan Stat)
 
-	run := exec.Command("sys161", "-X", "kernel")
+	run := exec.Command("sys161", "-X", "-S", strconv.Itoa(int(t.MonitorConf.Resolution)), "kernel")
 	run.Dir = t.tempDir
 	pty, err := pty.Start(run)
 	if err != nil {
@@ -207,19 +208,28 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			break
 		}
 		err = t.sys161.SendLn(command)
+		if command != "q" && command != "exit" {
+			t.commandLock.Lock()
+			t.commandActive = true
+			t.commandLock.Unlock()
+		}
+
 		if err != nil {
 			return err
 		}
 		if command == "q" {
 			currentEnv = ""
-			t.commandLock.Lock()
 			t.sys161.ExpectEOF()
+			t.commandLock.Lock()
 			t.Status = "shutdown"
 			t.WallTime = t.getDelta()
 			t.commandLock.Unlock()
 			continue
 		}
 		match, err := t.sys161.ExpectRegexp(prompts)
+		t.commandLock.Lock()
+		t.commandActive = false
+		t.commandLock.Unlock()
 
 		// 10 Jan 2016 : GWA : Wait again for the stat signal so that we have
 		// aligned stats at finish. This slows down testing somewhat, and it's not
