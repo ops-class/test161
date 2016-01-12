@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"text/template"
-	"time"
 	"unicode"
 )
 
@@ -32,12 +31,13 @@ type Test struct {
 	tempDir   string
 	startTime int64
 
+	statChan    chan Stat
 	statCond    *sync.Cond
 	statError   error
 	statStarted bool
 	statActive  bool
 
-	progressTimer *time.Timer
+	progressTime float64
 
 	commandLock   *sync.Mutex
 	command       *Command
@@ -46,7 +46,8 @@ type Test struct {
 	ConfString      string    `json:"confstring"`
 	Status          string    `json:"status"`
 	ShutdownMessage string    `json:"shutdownmessage"`
-	RunTime         TimeDelta `json:"runtime"`
+	WallTime        TimeDelta `json:"walltime"`
+	SimTime         TimeDelta `json:"simtime"`
 	Commands        []Command `json:"commands"`
 }
 

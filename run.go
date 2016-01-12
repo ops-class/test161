@@ -110,8 +110,8 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		}
 	}
 
-	t.progressTimer =
-		time.AfterFunc(time.Duration(t.MonitorConf.Timeouts.Progress)*time.Second, t.TimerKill)
+	t.statChan = make(chan Stat)
+
 	run := exec.Command("sys161", "-X", "kernel")
 	run.Dir = t.tempDir
 	pty, err := pty.Start(run)
@@ -215,7 +215,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.commandLock.Lock()
 			t.sys161.ExpectEOF()
 			t.Status = "shutdown"
-			t.RunTime = t.getDelta()
+			t.WallTime = t.getDelta()
 			t.commandLock.Unlock()
 			continue
 		}
@@ -242,7 +242,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.commandLock.Lock()
 			t.Status = "timeout"
 			t.ShutdownMessage = fmt.Sprintf("no prompt for %d s", t.MonitorConf.Timeouts.Prompt)
-			t.RunTime = t.getDelta()
+			t.WallTime = t.getDelta()
 			t.commandLock.Unlock()
 			continue
 		} else if err == io.EOF {
@@ -252,7 +252,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			if t.Status == "" {
 				t.Status = "crash"
 			}
-			t.RunTime = t.getDelta()
+			t.WallTime = t.getDelta()
 			t.commandLock.Unlock()
 			continue
 		} else if err != nil {

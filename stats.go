@@ -2,6 +2,7 @@ package test161
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net"
 	"path"
@@ -84,6 +85,8 @@ func (t *Test) stopStats() {
 func (t *Test) getStats() {
 	var err error
 
+	defer close(t.statChan)
+
 	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
 	if err != nil {
 		t.commandLock.Lock()
@@ -144,17 +147,25 @@ func (t *Test) getStats() {
 			}
 			f.SetUint(x)
 		}
+		newStats.Nanos, _ = strconv.ParseUint(statMatch[len(statMatch)-1], 10, 64)
 
 		newStats.Start = start
 		newStats.End = TimeDelta(float64(newStats.Nanos) / 1000000000.0)
 		newStats.Length = TimeDelta(float64(newStats.End) - float64(newStats.Start))
 		start = newStats.End
 
+		select {
+		case t.statChan <- newStats:
+		default:
+		}
+
 		tempStat := newStats
 		newStats.Sub(lastStat)
 		lastStat = tempStat
 
 		t.commandLock.Lock()
+		t.SimTime = start
+		progressTime := float64(t.SimTime) - t.progressTime
 		if len(t.command.AllStats) == 0 {
 			statCache = make([]Stat, 0, t.MonitorConf.Intervals)
 		}
@@ -180,6 +191,10 @@ func (t *Test) getStats() {
 		}
 
 		monitorError := ""
+
+		if progressTime > float64(t.MonitorConf.Timeouts.Progress) {
+			monitorError = fmt.Sprintf("no progress for %d s", t.MonitorConf.Timeouts.Progress)
+		}
 
 		if currentEnv == "kernel" && intervalStat.User > 0 {
 			monitorError = "non-zero user cycles during kernel operation"

@@ -1,7 +1,6 @@
 package test161
 
 import (
-	"fmt"
 	"github.com/gchallen/expect"
 	"regexp"
 	"time"
@@ -9,8 +8,6 @@ import (
 
 // Recv processes new sys161 output and restarts the progress timer
 func (t *Test) Recv(receivedTime time.Time, received []byte) {
-	t.progressTimer.Reset(time.Duration(t.MonitorConf.Timeouts.Progress) * time.Second)
-
 	if !t.statStarted {
 		go t.getStats()
 		t.statStarted = true
@@ -18,6 +15,7 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 
 	t.commandLock.Lock()
 	defer t.commandLock.Unlock()
+	t.progressTime = float64(t.SimTime)
 	for _, b := range received {
 		if t.currentOutput.Delta == 0.0 {
 			t.currentOutput.Delta = t.getDelta()
@@ -30,17 +28,6 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 			continue
 		}
 	}
-}
-
-// TimerKill is used to shut down sys161 if the progress timer fires
-func (t *Test) TimerKill() {
-	t.commandLock.Lock()
-	if t.Status == "" {
-		t.Status = "timeout"
-		t.ShutdownMessage = fmt.Sprintf("no progress for %d s", t.MonitorConf.Timeouts.Progress)
-		t.sys161.Killer()
-	}
-	t.commandLock.Unlock()
 }
 
 // Unused parts of the expect.Logger interface
