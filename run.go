@@ -26,6 +26,7 @@ import (
 
 const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
 const SHELL_PROMPT = `OS/161$ `
+const PROMPT_PATTERN = `(OS/161 kernel \[\? for menu\]\:|OS/161\$)\s$`
 const BOOT = -1
 
 var copyLock = &sync.Mutex{}
@@ -38,6 +39,7 @@ type Command struct {
 	Output       []OutputLine `json:"output"`
 	SummaryStats Stat         `json:"summarystats"`
 	AllStats     []Stat       `json:"-"`
+	Retries      uint         `json:"retries"`
 }
 
 type InputLine struct {
@@ -143,7 +145,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	t.statMonitor = false
 
 	// Wait for either kernel or user prompts.
-	prompts := regexp.MustCompile(fmt.Sprintf("(%s|%s)", regexp.QuoteMeta(KERNEL_PROMPT), regexp.QuoteMeta(SHELL_PROMPT)))
+	prompts := regexp.MustCompile(PROMPT_PATTERN)
 
 	// Parse commands and counters:
 	//
@@ -165,6 +167,11 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	commandIndex := BOOT
 	commandCounter := BOOT
 	commandID := BOOT
+
+	// We increased the index during the last time through
+	bumpedIndex := false
+	// Retry count for failed commands
+	retryCount := uint(0)
 
 	// Check for empty commands before starting sys161.
 	for _, command := range commands {
@@ -195,11 +202,43 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 				t.currentOutput.Line = t.currentOutput.Buffer.String()
 				t.command.Output = append(t.command.Output, t.currentOutput)
 			}
-			t.currentOutput = OutputLine{}
 
-			// Need to do output testing here before the append.
-			fmt.Println(strings.TrimSpace(t.command.Input.Line), strings.TrimSpace(t.command.Output[0].Line))
-			t.Commands = append(t.Commands, *t.command)
+			// We work hard to make sure that the previous command actually got
+			// executed by comparing the expect output with what we send it. Sadly,
+			// this does happen, particularly during parallel testing. No idea why.
+			previousCommand := strings.TrimSpace(t.command.Input.Line)
+			var expectedCommand string
+
+			rollback := false
+			if previousCommand != "boot" && !finished {
+				// Did we get any output?
+				if len(t.command.Output) > 0 {
+					expectedCommand = strings.TrimSpace(t.command.Output[0].Line)
+				}
+				if previousCommand != expectedCommand {
+					rollback = true
+				}
+			}
+
+			if !rollback {
+				t.Commands = append(t.Commands, *t.command)
+				retryCount = 0
+			} else {
+				retryCount += 1
+				if retryCount >= t.MonitorConf.CommandRetries {
+					t.Status = "expect"
+					t.ShutdownMessage = fmt.Sprintf("couldn't echo command after %d retries", t.MonitorConf.CommandRetries)
+					t.WallTime = t.getWallTime()
+					t.commandLock.Unlock()
+					return
+				}
+
+				if bumpedIndex {
+					commandIndex -= 1
+				}
+				commandCounter -= 1
+			}
+			t.currentOutput = OutputLine{}
 		}
 
 		// Grab the next command, bumping counters as appropriate.
@@ -210,23 +249,29 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		} else if commandIndex == BOOT {
 			commandLine = "boot"
 			commandIndex += 1
+			// Don't set bumpedIndex here since we're in boot
 		} else if commandIndex < len(commands) {
 			commandLine = strings.TrimSpace(commands[commandIndex])
 
 			// Handle testfile syntatic sugar by getting back and forth to the menu
-			// or shell. Added commands don't bump the commandIndex.
+			// or shell. Added commands don't bump the commandIndex. If the command
+			// fails the environment should stay the same and we'll retry
+			// automatically.
 			if string(commandLine[0]) == "$" && currentEnv == "kernel" {
 				commandLine = "s"
 				statMonitor = true
+				bumpedIndex = false
 			} else if string(commandLine[0]) != "$" && currentEnv == "shell" {
 				commandLine = "exit"
 				statMonitor = false
+				bumpedIndex = false
 			} else {
 				if string(commandLine[0]) == "$" {
 					commandLine = commandLine[1:]
 				}
 				statMonitor = true
 				commandIndex += 1
+				bumpedIndex = true
 			}
 		} else {
 			statMonitor = false
@@ -242,9 +287,11 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 
 		if !finished {
 			t.command = &Command{
-				ID:    uint(commandID),
-				Env:   currentEnv,
-				Input: InputLine{WallTime: t.getWallTime(), SimTime: t.SimTime, Line: commandLine},
+				Counter: uint(commandCounter),
+				ID:      uint(commandID),
+				Env:     currentEnv,
+				Input:   InputLine{WallTime: t.getWallTime(), SimTime: t.SimTime, Line: commandLine},
+				Retries: retryCount,
 			}
 		}
 		t.commandLock.Unlock()
@@ -333,7 +380,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 
 		if currentEnv == "" && prompt != KERNEL_PROMPT {
 			// Handle incorrect boot prompt. We shouldn't boot into the shell!
-			return errors.New("test161: incorrect prompt at boot")
+			return errors.New(fmt.Sprintf("test161: incorrect prompt at boot: %s", prompt))
 		} else if prompt == KERNEL_PROMPT {
 			currentEnv = "kernel"
 		} else if prompt == SHELL_PROMPT {
@@ -357,9 +404,8 @@ func (t *Test) start161() error {
 	killer := func() {
 		run.Process.Kill()
 	}
-	t.sys161 = expect.Create(pty, killer)
+	t.sys161 = expect.Create(pty, killer, t)
 	t.startTime = time.Now().UnixNano()
-	t.sys161.SetLogger(t)
 	t.sys161.SetTimeout(time.Duration(t.MonitorConf.Timeouts.Prompt) * time.Second)
 	t.commandLock.Lock()
 	if t.Status == "aborted" {

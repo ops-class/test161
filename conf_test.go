@@ -55,6 +55,7 @@ func TestConfDefaults(t *testing.T) {
 	assert.Equal(test.MonitorConf.Kernel.Max, 0.99)
 	assert.Equal(test.MonitorConf.User.Min, 0.0001)
 	assert.Equal(test.MonitorConf.User.Max, 1.0)
+	assert.Equal(test.MonitorConf.CommandRetries, uint(5))
 
 	test, err = TestFromString(`---
 monitor:
@@ -96,6 +97,7 @@ monitor:
   timeouts:
     prompt: 60
     progress: 30
+  commandretries: 10
 ---
 `)
 
@@ -123,6 +125,7 @@ monitor:
 	assert.Equal(test.MonitorConf.Kernel.Max, 0.8)
 	assert.Equal(test.MonitorConf.User.Min, 0.2)
 	assert.Equal(test.MonitorConf.User.Max, 0.9)
+	assert.Equal(test.MonitorConf.CommandRetries, uint(10))
 }
 
 func TestConfPrintConf(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 )
 
 // Recv processes new sys161 output and restarts the progress timer
-func (t *Test) RecvNet(receivedTime time.Time, received []byte) {
+func (t *Test) Recv(receivedTime time.Time, received []byte) {
 
 	// This is a slightly hacky way to ensure that getStats isn't started until
 	// sys161 has began to run. (Starting it too early causes the unix socket
@@ -44,7 +44,7 @@ func (t *Test) RecvNet(receivedTime time.Time, received []byte) {
 // Unused parts of the expect.Logger interface
 func (t *Test) Send(time.Time, []byte)                      {}
 func (t *Test) SendMasked(time.Time, []byte)                {}
-func (t *Test) Recv(time.Time, []byte)                      {}
+func (t *Test) RecvNet(time.Time, []byte)                   {}
 func (t *Test) RecvEOF(time.Time)                           {}
 func (t *Test) ExpectCall(time.Time, *regexp.Regexp)        {}
 func (t *Test) ExpectReturn(time.Time, expect.Match, error) {}

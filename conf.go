@@ -72,13 +72,14 @@ type DiskConf struct {
 }
 
 type MonitorConf struct {
-	AllStats   string   `yaml:"allstats" json:"allstats"`
-	Enabled    string   `yaml:"enabled" json:"enabled"`
-	Resolution uint     `yaml:"resolution" json:"resolution"`
-	Window     float32  `yaml:"window" json:"window"`
-	Kernel     Limits   `yaml:"kernel" json:"kernel"`
-	User       Limits   `yaml:"user" json:"user"`
-	Timeouts   Timeouts `yaml:"timeouts" json:"timeouts"`
+	AllStats       string   `yaml:"allstats" json:"allstats"`
+	Enabled        string   `yaml:"enabled" json:"enabled"`
+	Resolution     uint     `yaml:"resolution" json:"resolution"`
+	Window         float32  `yaml:"window" json:"window"`
+	Kernel         Limits   `yaml:"kernel" json:"kernel"`
+	User           Limits   `yaml:"user" json:"user"`
+	Timeouts       Timeouts `yaml:"timeouts" json:"timeouts"`
+	CommandRetries uint     `yaml:"commandretries" json:"commandretries"`
 }
 
 type Limits struct {
@@ -271,6 +272,9 @@ func TestFromString(data string) (*Test, error) {
 	}
 	if test.MonitorConf.User.Min > test.MonitorConf.User.Max {
 		return nil, errors.New("test161: cycle minimum must be less than the maximum")
+	}
+	if test.MonitorConf.CommandRetries == 0 {
+		test.MonitorConf.CommandRetries = 5
 	}
 	return test, err
 }
