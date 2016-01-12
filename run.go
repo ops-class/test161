@@ -26,10 +26,12 @@ import (
 
 const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
 const SHELL_PROMPT = `OS/161$ `
+const BOOT = -1
 
 var copyLock = &sync.Mutex{}
 
 type Command struct {
+	Counter      uint         `json:"counter"`
 	ID           uint         `json:"-"`
 	Env          string       `json:"env"`
 	Input        InputLine    `json:"input"`
@@ -143,15 +145,26 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	// Wait for either kernel or user prompts.
 	prompts := regexp.MustCompile(fmt.Sprintf("(%s|%s)", regexp.QuoteMeta(KERNEL_PROMPT), regexp.QuoteMeta(SHELL_PROMPT)))
 
-	// Parse commands and counters. i holds the current command index. -1 means
-	// boot and > len(commands) means shutdown sequence. j holds a
-	// monotonically-increasing command counter.
+	// Parse commands and counters:
+	//
+	// 		commandIndex: holds the index into the commands array and usually the
+	// 		current command. -1 means boot and len(commands) means we are in the
+	// 		shutdown sequence.
+	//
+	//    commandCounter: monotonically-increasing command counter. Not
+	//    increased when commands are repeated due to output mismatches. Used
+	//    for output indexing.
+	//
+	//		commandID: monotonically-increasing command counter that _does_ bump
+	//		when we repeat commands. Shared wiht getStats for command
+	//		identification.
 	//
 	// Note that a zero-length commands string is legitimate, causing boot and
 	// immediate shutdown.
 	commands := strings.Split(strings.TrimSpace(t.Content), "\n")
-	i := -1
-	j := -1
+	commandIndex := BOOT
+	commandCounter := BOOT
+	commandID := BOOT
 
 	// Check for empty commands before starting sys161.
 	for _, command := range commands {
@@ -171,68 +184,69 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	// through, and the loop completes in the middle to mop up output from
 	// previous commands.
 	for {
-		var command string
+		var commandLine string
 		var statMonitor bool
 
-		// Grab the next command, bumping the counter if necessary.
+		// Rotate running command to the next command, saving any previous
+		// output as needed.
+		t.commandLock.Lock()
+		if t.command != nil {
+			if t.currentOutput.WallTime != 0.0 {
+				t.currentOutput.Line = t.currentOutput.Buffer.String()
+				t.command.Output = append(t.command.Output, t.currentOutput)
+			}
+			t.currentOutput = OutputLine{}
 
+			// Need to do output testing here before the append.
+			t.Commands = append(t.Commands, *t.command)
+		}
+
+		// Grab the next command, bumping counters as appropriate.
 		if finished {
-		} else if i == -1 {
-			command = "boot"
-			i += 1
-		} else if i < len(commands) {
-			command = strings.TrimSpace(commands[i])
+			// Shutdowns exit here after we save the previous output.
+			t.commandLock.Unlock()
+			return nil
+		} else if commandIndex == BOOT {
+			commandLine = "boot"
+			commandIndex += 1
+		} else if commandIndex < len(commands) {
+			commandLine = strings.TrimSpace(commands[commandIndex])
 
-			// Handle testfile syntatic sugar by getting back and forth to the menu.
-			// Added commands don't bump the command counter.
-			if string(command[0]) == "$" && currentEnv == "kernel" {
-				command = "s"
+			// Handle testfile syntatic sugar by getting back and forth to the menu
+			// or shell. Added commands don't bump the commandIndex.
+			if string(commandLine[0]) == "$" && currentEnv == "kernel" {
+				commandLine = "s"
 				statMonitor = true
-			} else if string(command[0]) != "$" && currentEnv == "shell" {
-				command = "exit"
+			} else if string(commandLine[0]) != "$" && currentEnv == "shell" {
+				commandLine = "exit"
 				statMonitor = false
 			} else {
-				if string(command[0]) == "$" {
-					command = command[1:]
+				if string(commandLine[0]) == "$" {
+					commandLine = commandLine[1:]
 				}
 				statMonitor = true
-				i += 1
+				commandIndex += 1
 			}
 		} else {
 			statMonitor = false
 			// Shutdown cleanly if needed.
 			if currentEnv == "kernel" {
-				command = "q"
+				commandLine = "q"
 			} else if currentEnv == "shell" {
-				command = "exit"
+				commandLine = "exit"
 			}
 		}
-		j += 1
+		commandCounter += 1
+		commandID += 1
 
-		// Rotate running command to the next command, saving any previous
-		// output as needed.
-		t.commandLock.Lock()
-		if t.currentOutput.WallTime != 0.0 {
-			t.currentOutput.Line = t.currentOutput.Buffer.String()
-			t.command.Output = append(t.command.Output, t.currentOutput)
-		}
-		if t.command != nil {
-			t.Commands = append(t.Commands, *t.command)
-		}
-		t.currentOutput = OutputLine{}
 		if !finished {
 			t.command = &Command{
-				ID:    uint(j),
+				ID:    uint(commandID),
 				Env:   currentEnv,
-				Input: InputLine{WallTime: t.getWallTime(), SimTime: t.SimTime, Line: command},
+				Input: InputLine{WallTime: t.getWallTime(), SimTime: t.SimTime, Line: commandLine},
 			}
 		}
 		t.commandLock.Unlock()
-
-		// Clean or unclean shutdowns exit here after we save the previous output.
-		if finished {
-			return nil
-		}
 
 		if t.Status == "aborted" {
 			// Start sys161 if needed and defer Close.
@@ -246,7 +260,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			// everything but the newline, wait for a stat signal, and then run the
 			// command. With the exception of boot stat collection is disabled at this
 			// point due to code below.
-			err = t.sys161.Send(command)
+			err = t.sys161.Send(commandLine)
 			if err != nil {
 				return err
 			}
@@ -296,7 +310,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			t.commandLock.Lock()
 			// Triggered normally or not?
 			if t.Status == "started" {
-				if currentEnv == "kernel" && command == "q" {
+				if currentEnv == "kernel" && commandLine == "q" {
 					t.Status = "shutdown"
 				} else {
 					t.Status = "crash"
