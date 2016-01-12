@@ -31,7 +31,6 @@ type Test struct {
 	tempDir   string
 	startTime int64
 
-	AllStats     string `yaml:"allstats" json:"allstats"`
 	statChan     chan Stat
 	statCond     *sync.Cond
 	statError    error
@@ -72,6 +71,7 @@ type DiskConf struct {
 }
 
 type MonitorConf struct {
+	AllStats   string   `yaml:"allstats" json:"allstats"`
 	Enabled    string   `yaml:"enabled" json:"enabled"`
 	Resolution uint     `yaml:"resolution" json:"resolution"`
 	Window     float32  `yaml:"window" json:"window"`
@@ -90,6 +90,9 @@ type Timeouts struct {
 	Progress uint `yaml:"progress" json:"progress"`
 }
 
+// parseAndSetDefault converts prefixes appropriately and uses defaults when
+// no value is supplied. Prefixes should be available soon in sys161 so this
+// can get simpler.
 func parseAndSetDefault(in string, backup string) (string, error) {
 	if in == "" {
 		in = backup
@@ -129,17 +132,6 @@ func TestFromString(data string) (*Test, error) {
 		return nil, err
 	}
 
-	if test.AllStats == "" {
-		test.AllStats = "false"
-	}
-
-	switch test.AllStats {
-	case "true", "false":
-		break
-	default:
-		return nil, errors.New("test161: allstats must be 'true' or 'false' if set.")
-	}
-
 	test.Conf.CPUs = test.OrigConf.CPUs
 	if test.Conf.CPUs == 0 {
 		test.Conf.CPUs = 8
@@ -151,8 +143,8 @@ func TestFromString(data string) (*Test, error) {
 	ramInt, _ := strconv.Atoi(test.Conf.RAM)
 	ramInt = ramInt * 2 / 512
 
-	// 09 Jan 2015 : GWA : sys161 currently won't boot with a disk smaller than
-	// 8000 sectors. Not sure why.
+	// sys161 currently won't boot with a disk smaller than 8000 sectors. Not
+	// sure why.
 
 	if ramInt < 8000 {
 		ramInt = 8000
@@ -213,6 +205,17 @@ func TestFromString(data string) (*Test, error) {
 		return nil, errors.New("test161: random must be 'autoseed' or 'seed=N' if set.")
 	}
 
+	if test.MonitorConf.AllStats == "" {
+		test.MonitorConf.AllStats = "false"
+	}
+
+	switch test.MonitorConf.AllStats {
+	case "true", "false":
+		break
+	default:
+		return nil, errors.New("test161: allstats must be 'true' or 'false' if set.")
+	}
+
 	if test.MonitorConf.Enabled == "" {
 		test.MonitorConf.Enabled = "true"
 	}
@@ -226,7 +229,14 @@ func TestFromString(data string) (*Test, error) {
 		return nil, errors.New("test161: progress timeout must be less than (or equal to) the prompt timeout")
 	}
 	if test.MonitorConf.Resolution == 0 {
-		test.MonitorConf.Resolution = 1000
+		// Recording all statistics can lead to out of memory errors on long
+		// tests, so we set a slower statistic interval when all stats are being
+		// recorded. Otherwise use a smaller default for more precise timing.
+		if test.MonitorConf.AllStats == "true" {
+			test.MonitorConf.Resolution = 50000 // 50ms
+		} else {
+			test.MonitorConf.Resolution = 100 // 0.1ms
+		}
 	}
 	if test.MonitorConf.Window == 0 {
 		test.MonitorConf.Window = 2.0

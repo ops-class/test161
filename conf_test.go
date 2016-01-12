@@ -36,7 +36,6 @@ func TestConfDefaults(t *testing.T) {
 	assert := assert.New(t)
 
 	test, err := TestFromString("")
-
 	assert.Nil(err)
 
 	assert.Equal(test.Conf.CPUs, uint(8))
@@ -49,13 +48,22 @@ func TestConfDefaults(t *testing.T) {
 
 	assert.Equal(test.MonitorConf.Enabled, "true")
 	assert.Equal(test.MonitorConf.Window, float32(2.0))
-	assert.Equal(test.MonitorConf.Resolution, uint(1000))
+	assert.Equal(test.MonitorConf.Resolution, uint(100))
 	assert.Equal(test.MonitorConf.Timeouts.Prompt, uint(5*60))
 	assert.Equal(test.MonitorConf.Timeouts.Progress, uint(60))
 	assert.Equal(test.MonitorConf.Kernel.Min, 0.001)
 	assert.Equal(test.MonitorConf.Kernel.Max, 0.99)
 	assert.Equal(test.MonitorConf.User.Min, 0.0001)
 	assert.Equal(test.MonitorConf.User.Max, 1.0)
+
+	test, err = TestFromString(`---
+monitor:
+  allstats: true
+---
+`)
+	assert.Nil(err)
+
+	assert.Equal(test.MonitorConf.Resolution, uint(50000))
 }
 
 func TestConfOverrides(t *testing.T) {

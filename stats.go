@@ -175,7 +175,7 @@ func (t *Test) getStats() {
 				statCache = nil
 				lastCommandID = int(t.command.ID)
 			}
-			if t.AllStats == "true" {
+			if t.MonitorConf.AllStats == "true" {
 				t.command.AllStats = append(t.command.AllStats, newStats)
 			}
 			t.command.SummaryStats.Merge(newStats)
