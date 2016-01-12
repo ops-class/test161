@@ -10,13 +10,16 @@ import (
 	"strconv"
 )
 
-var validStat = regexp.MustCompile(`^DATA\s+(?P<Kern>\d+)\s+(?P<User>\d+)\s+(?P<Idle>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
+var validStat = regexp.MustCompile(`^DATA\s+(?P<Kern>\d+)\s+(?P<User>\d+)\s+(?P<Idle>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)\s+(?P<Nanos>\d+)`)
 
 type Stat struct {
 	initialized bool
 	Start       TimeDelta `json:"start"`
 	End         TimeDelta `json:"end"`
 	Length      TimeDelta `json:"length"`
+	WallStart   TimeDelta `json:"wallstart"`
+	WallEnd     TimeDelta `json:"wallend"`
+	WallLength  TimeDelta `json:"walllength"`
 	Kern        uint32    `json:"kern"`
 	User        uint32    `json:"user"`
 	Idle        uint32    `json:"idle"`
@@ -28,6 +31,7 @@ type Stat struct {
 	Con         uint32    `json:"con"`
 	Emu         uint32    `json:"emu"`
 	Net         uint32    `json:"net"`
+	Nanos       uint64    `json:"-"`
 }
 
 func (i *Stat) Add(j Stat) {
@@ -42,6 +46,7 @@ func (i *Stat) Add(j Stat) {
 	i.Con += j.Con
 	i.Emu += j.Emu
 	i.Net += j.Net
+	i.Nanos += j.Nanos
 }
 func (i *Stat) Sub(j Stat) {
 	i.Kern -= j.Kern
@@ -59,10 +64,13 @@ func (i *Stat) Sub(j Stat) {
 func (i *Stat) Merge(j Stat) {
 	if i.initialized == false {
 		i.Start = j.Start
+		i.WallStart = j.WallStart
 		i.initialized = true
 	}
 	i.End = j.End
+	i.WallEnd = j.WallEnd
 	i.Length = TimeDelta(float64(i.End) - float64(i.Start))
+	i.WallLength = TimeDelta(float64(i.WallEnd) - float64(i.WallStart))
 	i.Add(j)
 }
 
@@ -91,7 +99,8 @@ func (t *Test) getStats() {
 
 	var line string
 
-	start := t.getDelta()
+	wallStart := t.getDelta()
+	start := TimeDelta(float64(0.0))
 	lastStat := Stat{}
 
 	statCache := make([]Stat, 0, t.MonitorConf.Intervals)
@@ -100,7 +109,7 @@ func (t *Test) getStats() {
 		if err == nil {
 			line, err = statReader.ReadString('\n')
 		}
-		end := t.getDelta()
+		wallEnd := t.getDelta()
 
 		t.statCond.L.Lock()
 		t.statActive = true
@@ -120,12 +129,12 @@ func (t *Test) getStats() {
 		}
 
 		newStats := Stat{
-			Start:  start,
-			End:    end,
-			Length: TimeDelta(float64(end) - float64(start)),
+			WallStart:  wallStart,
+			WallEnd:    wallEnd,
+			WallLength: TimeDelta(float64(wallEnd) - float64(wallStart)),
 		}
 
-		start = end
+		wallStart = wallEnd
 		s := reflect.ValueOf(&newStats).Elem()
 		for i, name := range validStat.SubexpNames() {
 			f := s.FieldByName(name)
@@ -135,6 +144,11 @@ func (t *Test) getStats() {
 			}
 			f.SetUint(x)
 		}
+
+		newStats.Start = start
+		newStats.End = TimeDelta(float64(newStats.Nanos) / 1000000000.0)
+		newStats.Length = TimeDelta(float64(newStats.End) - float64(newStats.Start))
+		start = newStats.End
 
 		tempStat := newStats
 		newStats.Sub(lastStat)
