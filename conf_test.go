@@ -84,6 +84,7 @@ conf:
   random: seed=1024
 monitor:
   enabled: false
+  allstats: true
   window: 2.5
   resolution: 2000
   kernel:
@@ -113,6 +114,7 @@ monitor:
 	assert.Equal(test.Conf.Random, "seed=1024")
 
 	assert.Equal(test.MonitorConf.Enabled, "false")
+	assert.Equal(test.MonitorConf.AllStats, "true")
 	assert.Equal(test.MonitorConf.Window, float32(2.5))
 	assert.Equal(test.MonitorConf.Resolution, uint(2000))
 	assert.Equal(test.MonitorConf.Timeouts.Prompt, uint(60))

@@ -133,12 +133,12 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	// would work here.
 	t.statCond = &sync.Cond{L: &sync.Mutex{}}
 
-	// Initialize stat channel.
+	// Initialize stat channel. Closed by getStats
 	t.statChan = make(chan Stat)
 
 	// Record stats during boot, but don't active the monitor.
-	t.recordStats = true
-	t.monitorStats = false
+	t.statRecord = true
+	t.statMonitor = false
 
 	// Wait for either kernel or user prompts.
 	prompts := regexp.MustCompile(fmt.Sprintf("(%s|%s)", regexp.QuoteMeta(KERNEL_PROMPT), regexp.QuoteMeta(SHELL_PROMPT)))
@@ -172,7 +172,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	// previous commands.
 	for {
 		var command string
-		var monitorStats bool
+		var statMonitor bool
 
 		// Grab the next command, bumping the counter if necessary.
 
@@ -187,19 +187,19 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			// Added commands don't bump the command counter.
 			if string(command[0]) == "$" && currentEnv == "kernel" {
 				command = "s"
-				monitorStats = true
+				statMonitor = true
 			} else if string(command[0]) != "$" && currentEnv == "shell" {
 				command = "exit"
-				monitorStats = false
+				statMonitor = false
 			} else {
 				if string(command[0]) == "$" {
 					command = command[1:]
 				}
-				monitorStats = true
+				statMonitor = true
 				i += 1
 			}
 		} else {
-			monitorStats = false
+			statMonitor = false
 			// Shutdown cleanly if needed.
 			if currentEnv == "kernel" {
 				command = "q"
@@ -254,8 +254,8 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 			// Flip on stat monitoring (except during shutdown) and stat recording
 			// always.
 			t.statCond.L.Lock()
-			t.monitorStats = monitorStats
-			t.recordStats = true
+			t.statMonitor = statMonitor
+			t.statRecord = true
 
 			// Wait for stat signal (and check for stat errors)...
 			if t.statActive {
@@ -274,8 +274,8 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 
 		// Disable stat recording and monitoring (and check for stat errors).
 		t.statCond.L.Lock()
-		t.recordStats = false
-		t.monitorStats = false
+		t.statRecord = false
+		t.statMonitor = false
 		err = t.statError
 		t.statCond.L.Unlock()
 		if err != nil {

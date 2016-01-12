@@ -31,13 +31,14 @@ type Test struct {
 	tempDir   string
 	startTime int64
 
-	statChan     chan Stat
-	statCond     *sync.Cond
-	statError    error
-	statStarted  bool
-	statActive   bool
-	recordStats  bool
-	monitorStats bool
+	statChan chan Stat
+
+	statCond    *sync.Cond
+	statStarted bool  // unprotected; only used once
+	statError   error // protected by statCond.L
+	statActive  bool  // protected by statCond.L
+	statRecord  bool  // protected by statCond.L
+	statMonitor bool  // protected by statCond.L
 
 	progressTime float64
 
