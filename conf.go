@@ -31,6 +31,7 @@ type Test struct {
 	tempDir   string
 	startTime int64
 
+	AllStats     string `yaml:"allstats" json:"allstats"`
 	statChan     chan Stat
 	statCond     *sync.Cond
 	statError    error
@@ -126,6 +127,17 @@ func TestFromString(data string) (*Test, error) {
 	err := frontmatter.Unmarshal([]byte(data), test)
 	if err != nil {
 		return nil, err
+	}
+
+	if test.AllStats == "" {
+		test.AllStats = "false"
+	}
+
+	switch test.AllStats {
+	case "true", "false":
+		break
+	default:
+		return nil, errors.New("test161: allstats must be 'true' or 'false' if set.")
 	}
 
 	test.Conf.CPUs = test.OrigConf.CPUs

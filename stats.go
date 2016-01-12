@@ -108,6 +108,7 @@ func (t *Test) getStats() {
 
 	intervals := uint(t.MonitorConf.Window*1000.0*1000.0/float32(t.MonitorConf.Resolution)) + 1
 	statCache := make([]Stat, 0, intervals)
+	lastCommandID := -1
 
 	for {
 		if err == nil {
@@ -170,10 +171,13 @@ func (t *Test) getStats() {
 		t.SimTime = start
 		progressTime := float64(t.SimTime) - t.progressTime
 		if recordStats {
-			if len(t.command.AllStats) == 0 {
-				statCache = make([]Stat, 0, intervals)
+			if int(t.command.ID) != lastCommandID {
+				statCache = nil
+				lastCommandID = int(t.command.ID)
 			}
-			t.command.AllStats = append(t.command.AllStats, newStats)
+			if t.AllStats == "true" {
+				t.command.AllStats = append(t.command.AllStats, newStats)
+			}
 			t.command.SummaryStats.Merge(newStats)
 		}
 		currentCommandID := t.command.ID

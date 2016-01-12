@@ -28,7 +28,10 @@ func TestRunBoot(t *testing.T) {
 		return
 	}
 
-	assert.Equal(test.Commands[1].Env, "kernel")
+	assert.Equal(len(test.Commands), 2)
+	if len(test.Commands) == 2 {
+		assert.Equal(test.Commands[1].Env, "kernel")
+	}
 
 	assert.Equal(test.Status, "shutdown")
 	t.Log(test.OutputJSON())
@@ -68,7 +71,10 @@ func TestRunPanic(t *testing.T) {
 	err = test.Run("./fixtures/", "")
 	assert.Nil(err)
 
-	assert.Equal(test.Commands[1].Env, "kernel")
+	assert.Equal(len(test.Commands), 2)
+	if len(test.Commands) == 2 {
+		assert.Equal(test.Commands[1].Env, "kernel")
+	}
 
 	assert.Equal(test.Status, "crash")
 
