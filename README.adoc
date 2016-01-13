@@ -119,6 +119,12 @@ running in kernel mode, which could be caused by a hung progress.
 
 == TODOs
 
+* Test with sys161 2.0.5 changes, including better character dropping support.
+* Fix statistics interval support in 2.0.5.
+* Split out statistics configuration into separate area.
+* Separate collection and recording of stat output.
+* Test with shll for lossy shell support.
+
 === Running multiple tests and dependencies
 
 Support for loading a bunch of tests from a directory and running multiple
