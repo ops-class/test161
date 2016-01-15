@@ -189,14 +189,6 @@ func (t *Test) Run(root string) (err error) {
 		}
 	}
 
-	// Check for empty commands and expand syntatic sugar before getting
-	// started. Doing this first makes the main loop and retry logic simpler.
-	err = t.initCommands()
-	if err != nil {
-		t.addStatus("aborted", "")
-		return err
-	}
-
 	// Serialize the current command state.
 	t.L = &sync.Mutex{}
 

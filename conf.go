@@ -119,6 +119,14 @@ func TestFromString(data string) (*Test, error) {
 		return nil, err
 	}
 	test.Sys161.Random = rand.Uint32() >> 16
+
+	// Check for empty commands and expand syntatic sugar before getting
+	// started. Doing this first makes the main loop and retry logic simpler.
+	err = test.initCommands()
+	if err != nil {
+		return nil, err
+	}
+
 	return test, nil
 }
 
@@ -160,6 +168,9 @@ func (t *Test) PrintConf() (string, error) {
 	return confString, nil
 }
 
+func (t *Test) confEqual(t2 *Test) bool {
+	return t.Sys161 == t2.Sys161 && t.Stat == t2.Stat && t.Monitor == t2.Monitor && t.Misc == t2.Misc
+}
 func (t *Test) initCommands() error {
 	// Set the boot command
 	t.Commands = append(t.Commands, Command{
