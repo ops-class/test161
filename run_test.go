@@ -40,10 +40,11 @@ func TestRunBoot(t *testing.T) {
 		assert.Equal(test.Commands[1].Input.Line, "q")
 	}
 
-	/*
-		assert.Equal(test.Status, "shutdown")
-		assert.Equal(test.ShutdownMessage, "")
-	*/
+	assert.Equal(len(test.Status), 2)
+	if len(test.Status) == 2 {
+		assert.Equal(test.Status[0].Status, "started")
+		assert.Equal(test.Status[1].Status, "shutdown")
+	}
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
@@ -72,10 +73,12 @@ func TestRunShell(t *testing.T) {
 		assert.Equal(test.Commands[4].Input.Line, "q")
 	}
 
-	/*
-		assert.Equal(test.Status, "shutdown")
-		assert.Equal(test.ShutdownMessage, "")
-	*/
+	assert.Equal(len(test.Status), 2)
+	if len(test.Status) == 2 {
+		assert.Equal(test.Status[0].Status, "started")
+		assert.Equal(test.Status[1].Status, "shutdown")
+	}
+
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
 }
@@ -98,10 +101,11 @@ func TestRunPanic(t *testing.T) {
 		assert.Equal(test.Commands[1].Input.Line, "panic")
 	}
 
-	/*
-		assert.Equal(test.Status, "crash")
-		assert.Equal(test.ShutdownMessage, "")
-	*/
+	assert.Equal(len(test.Status), 2)
+	if len(test.Status) == 2 {
+		assert.Equal(test.Status[0].Status, "started")
+		assert.Equal(test.Status[1].Status, "crash")
+	}
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
@@ -111,7 +115,7 @@ func TestRunShll(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	test, err := TestFromString("$ /testbin/shll -p 10\n$ exit")
+	test, err := TestFromString("$ /testbin/shll -p 30\n$ exit")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.User.EnableMin = "false"
@@ -126,7 +130,7 @@ func TestRunShll(t *testing.T) {
 		assert.Equal(test.Commands[1].Type, "user")
 		assert.Equal(test.Commands[1].Input.Line, "s")
 		assert.Equal(test.Commands[2].Type, "user")
-		assert.Equal(test.Commands[2].Input.Line, "/testbin/shll -p 10")
+		assert.Equal(test.Commands[2].Input.Line, "/testbin/shll -p 30")
 		assert.Equal(test.Commands[3].Type, "user")
 		assert.Equal(test.Commands[3].Input.Line, "exit")
 		assert.Equal(test.Commands[4].Type, "user")
@@ -135,10 +139,11 @@ func TestRunShll(t *testing.T) {
 		assert.Equal(test.Commands[5].Input.Line, "q")
 	}
 
-	/*
-		assert.Equal(test.Status, "shutdown")
-		assert.Equal(test.ShutdownMessage, "")
-	*/
+	assert.Equal(len(test.Status), 2)
+	if len(test.Status) == 2 {
+		assert.Equal(test.Status[0].Status, "started")
+		assert.Equal(test.Status[1].Status, "shutdown")
+	}
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
