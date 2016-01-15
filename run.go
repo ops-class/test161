@@ -29,7 +29,57 @@ const SHELL_PROMPT = `OS/161$ `
 const PROMPT_PATTERN = `(OS/161 kernel \[\? for menu\]\:|OS/161\$)\s$`
 const BOOT = -1
 
-var copyLock = &sync.Mutex{}
+type Test struct {
+
+	// Input
+
+	// Metadata
+	Name        string   `yaml:"name" json:"name"`
+	Description string   `yaml:"description" json:"description"`
+	Tags        []string `yaml:"tags" json:"tags"`
+	Depends     []string `yaml:"depends" json:"depends"`
+
+	// Configuration chunks
+	Sys161  Sys161Conf  `yaml:"sys161" json:"sys161"`
+	Stat    StatConf    `yaml:"stat" json:"stat"`
+	Monitor MonitorConf `yaml:"monitor" json:"monitor"`
+	Misc    MiscConf    `yaml:"misc" json:"misc"`
+
+	// Actual test commands to run
+	Content string `fm:"content" yaml:"-"`
+
+	// Big lock that protects most fields shared between Run and getStats
+	L *sync.Mutex
+
+	// Output
+
+	ConfString      string         `json:"confstring"`      // Only set during once
+	Status          string         `json:"status"`          // Protected by L
+	ShutdownMessage string         `json:"shutdownmessage"` // Protected by L
+	WallTime        TimeFixedPoint `json:"walltime"`        // Protected by L
+	SimTime         TimeFixedPoint `json:"simtime"`         // Protected by L
+	Commands        []Command      `json:"commands"`        // Protected by L
+
+	// Unproctected Private fields
+	tempDir     string // Only set once
+	startTime   int64  // Only set once
+	statStarted bool   // Only changed once
+
+	sys161        *expect.Expect // Protected by L
+	progressTime  float64        // Protected by L
+	command       *Command       // Protected by L
+	currentOutput OutputLine     // Protected by L
+
+	// Fields used by etStats but shared with Run
+	statCond    *sync.Cond // Used by the main loop to wait for stat reception
+	statError   error      // Protected by statCond.L
+	statActive  bool       // Protected by statCond.L
+	statRecord  bool       // Protected by statCond.L
+	statMonitor bool       // Protected by statCond.L
+
+	// Output channels
+	statChan chan Stat // Nonblocking write
+}
 
 type Command struct {
 	Counter      uint         `json:"counter"`
@@ -113,16 +163,16 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	}
 
 	// Create disks.
-	if t.Conf.Disk1.Sectors != "" {
-		create := exec.Command("disk161", "create", t.Conf.Disk1.File, fmt.Sprintf("%ss", t.Conf.Disk1.Sectors))
+	if t.Sys161.Disk2.Enabled == "true" {
+		create := exec.Command("disk161", "create", "LHD0.img", t.Sys161.Disk1.Bytes)
 		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
 			return err
 		}
 	}
-	if t.Conf.Disk2.Sectors != "" {
-		create := exec.Command("disk161", "create", t.Conf.Disk2.File, fmt.Sprintf("%ss", t.Conf.Disk2.Sectors))
+	if t.Sys161.Disk2.Enabled == "true" {
+		create := exec.Command("disk161", "create", "LHD1.img", t.Sys161.Disk2.Bytes)
 		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
@@ -131,7 +181,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	}
 
 	// Serialize the current command state.
-	t.commandLock = &sync.Mutex{}
+	t.L = &sync.Mutex{}
 
 	// Coordinated with the getStat goroutine. I don't think that a channel
 	// would work here.
@@ -196,7 +246,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 
 		// Rotate running command to the next command, saving any previous
 		// output as needed.
-		t.commandLock.Lock()
+		t.L.Lock()
 		if t.command != nil {
 			if t.currentOutput.WallTime != 0.0 {
 				t.currentOutput.Line = t.currentOutput.Buffer.String()
@@ -225,11 +275,11 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 				retryCount = 0
 			} else {
 				retryCount += 1
-				if retryCount >= t.MonitorConf.CommandRetries {
+				if retryCount >= t.Misc.CommandRetries {
 					t.Status = "expect"
-					t.ShutdownMessage = fmt.Sprintf("couldn't echo command after %d retries", t.MonitorConf.CommandRetries)
+					t.ShutdownMessage = fmt.Sprintf("couldn't echo command after %d retries", t.Misc.CommandRetries)
 					t.WallTime = t.getWallTime()
-					t.commandLock.Unlock()
+					t.L.Unlock()
 					return
 				}
 
@@ -244,7 +294,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		// Grab the next command, bumping counters as appropriate.
 		if finished {
 			// Shutdowns exit here after we save the previous output.
-			t.commandLock.Unlock()
+			t.L.Unlock()
 			return nil
 		} else if commandIndex == BOOT {
 			commandLine = "boot"
@@ -294,7 +344,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 				Retries: retryCount,
 			}
 		}
-		t.commandLock.Unlock()
+		t.L.Unlock()
 
 		if t.Status == "aborted" {
 			// Start sys161 if needed and defer Close.
@@ -347,15 +397,15 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 		// Handle timeouts, unexpected shutdowns, and other errors
 		err = expectErr
 		if err == expect.ErrTimeout {
-			t.commandLock.Lock()
+			t.L.Lock()
 			t.Status = "timeout"
-			t.ShutdownMessage = fmt.Sprintf("no prompt for %d s", t.MonitorConf.Timeouts.Prompt)
+			t.ShutdownMessage = fmt.Sprintf("no prompt for %d s", t.Misc.PromptTimeout)
 			t.WallTime = t.getWallTime()
-			t.commandLock.Unlock()
+			t.L.Unlock()
 			finished = true
 			continue
 		} else if err == io.EOF {
-			t.commandLock.Lock()
+			t.L.Lock()
 			// Triggered normally or not?
 			if t.Status == "started" {
 				if currentEnv == "kernel" && commandLine == "q" {
@@ -365,7 +415,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 				}
 			}
 			t.WallTime = t.getWallTime()
-			t.commandLock.Unlock()
+			t.L.Unlock()
 			finished = true
 			continue
 		} else if err != nil {
@@ -395,7 +445,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 // start161 is a private helper function to start the sys161 expect process.
 // This makes the main loop a bit cleaner.
 func (t *Test) start161() error {
-	run := exec.Command("sys161", "-X", "-c", "test161.conf", "-S", strconv.Itoa(int(t.MonitorConf.Resolution)), "kernel")
+	run := exec.Command("sys161", "-X", "-c", "test161.conf", "kernel")
 	run.Dir = t.tempDir
 	pty, err := pty.Start(run)
 	if err != nil {
@@ -406,12 +456,12 @@ func (t *Test) start161() error {
 	}
 	t.sys161 = expect.Create(pty, killer, t)
 	t.startTime = time.Now().UnixNano()
-	t.sys161.SetTimeout(time.Duration(t.MonitorConf.Timeouts.Prompt) * time.Second)
-	t.commandLock.Lock()
+	t.sys161.SetTimeout(time.Duration(t.Misc.PromptTimeout) * time.Second)
+	t.L.Lock()
 	if t.Status == "aborted" {
 		t.Status = "started"
 	}
-	t.commandLock.Unlock()
+	t.L.Unlock()
 	return nil
 }
 

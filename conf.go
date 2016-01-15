@@ -2,84 +2,53 @@ package test161
 
 import (
 	"bytes"
-	"errors"
+	//"errors"
 	"github.com/ericaro/frontmatter"
-	"github.com/gchallen/expect"
+	//"github.com/gchallen/expect"
+	"github.com/imdario/mergo"
 	"io/ioutil"
 	"math/rand"
-	"regexp"
-	"strconv"
+	//"regexp"
+	//"strconv"
 	"strings"
-	"sync"
+	//"sync"
 	"text/template"
-	"unicode"
+	//"unicode"
 )
 
-type Test struct {
-	Name        string   `yaml:"name" json:"name"`
-	Description string   `yaml:"description" json:"description"`
-	Tags        []string `yaml:"tags" json:"tags"`
-	Depends     []string `yaml:"depends" json:"depends"`
-	Content     string   `fm:"content" yaml:"-"`
+// Many of the values below that come in from YAML are string types. This
+// allows us to work around Go not having a nil type for things like ints, and
+// also allows us to accept values like "10M" as numbers. Non-string types are
+// only used when the default doesn't make sense. Given that the ultimate
+// destination of these values is strings (sys161.conf configuration or JSON
+// output) it doesn't matter.
 
-	Conf     Conf `yaml:"-" json:"conf"`
-	OrigConf Conf `yaml:"conf" json:"origconf"`
-
-	MonitorConf MonitorConf `yaml:"monitor" json:"monitor"`
-
-	sys161    *expect.Expect
-	tempDir   string
-	startTime int64
-
-	statChan chan Stat
-
-	statCond    *sync.Cond
-	statStarted bool  // unprotected; only used once
-	statError   error // protected by statCond.L
-	statActive  bool  // protected by statCond.L
-	statRecord  bool  // protected by statCond.L
-	statMonitor bool  // protected by statCond.L
-
-	progressTime float64
-
-	commandLock   *sync.Mutex
-	command       *Command
-	currentOutput OutputLine
-
-	ConfString      string         `json:"confstring"`
-	Status          string         `json:"status"`
-	ShutdownMessage string         `json:"shutdownmessage"`
-	WallTime        TimeFixedPoint `json:"walltime"`
-	SimTime         TimeFixedPoint `json:"simtime"`
-	Commands        []Command      `json:"commands"`
-}
-
-var validRandom = regexp.MustCompile(`(autoseed|seed=\d+)`)
-
-type Conf struct {
+type Sys161Conf struct {
 	CPUs   uint     `yaml:"cpus" json:"cpus"`
 	RAM    string   `yaml:"ram" json:"ram"`
-	Random string   `yaml:"random" json:"random"`
 	Disk1  DiskConf `yaml:"disk1" json:"disk1"`
 	Disk2  DiskConf `yaml:"disk2" json:"disk2"`
+	Random uint32   `yaml:"-" json:"randomseed"`
 }
 
 type DiskConf struct {
+	Enabled string `yaml:"enabled" json:"enabled"`
 	RPM     uint   `yaml:"rpm" json:"rpm"`
-	Sectors string `yaml:"sectors" json:"sectors"`
+	Bytes   string `yaml:"bytes" json:"bytes"`
 	NoDoom  string `yaml:"nodoom" json:"nodoom"`
-	File    string
+}
+
+type StatConf struct {
+	Resolution float32 `yaml:"interval" json:"interval"`
+	Window     uint    `yaml:"window" json:"window"`
 }
 
 type MonitorConf struct {
-	AllStats       string   `yaml:"allstats" json:"allstats"`
-	Enabled        string   `yaml:"enabled" json:"enabled"`
-	Resolution     uint     `yaml:"resolution" json:"resolution"`
-	Window         float32  `yaml:"window" json:"window"`
-	Kernel         Limits   `yaml:"kernel" json:"kernel"`
-	User           Limits   `yaml:"user" json:"user"`
-	Timeouts       Timeouts `yaml:"timeouts" json:"timeouts"`
-	CommandRetries uint     `yaml:"commandretries" json:"commandretries"`
+	Enabled         string  `yaml:"enabled" json:"enabled"`
+	Window          uint    `yaml:"window" json:"window"`
+	Kernel          Limits  `yaml:"kernel" json:"kernel"`
+	User            Limits  `yaml:"user" json:"user"`
+	ProgressTimeout float32 `yaml:"progresstimeout" json:"progresstimeout"`
 }
 
 type Limits struct {
@@ -87,217 +56,115 @@ type Limits struct {
 	Max float64 `yaml:"max" json:"max"`
 }
 
-type Timeouts struct {
-	Prompt   uint `yaml:"prompt" json:"prompt"`
-	Progress uint `yaml:"progress" json:"progress"`
+type MiscConf struct {
+	CommandRetries uint    `yaml:"commandretries" json:"commandretries"`
+	PromptTimeout  float32 `yaml:"prompttimeout" json:"prompttimeout"`
 }
 
-// parseAndSetDefault converts prefixes appropriately and uses defaults when
-// no value is supplied. Prefixes should be available soon in sys161 so this
-// can get simpler.
-func parseAndSetDefault(in string, backup string) (string, error) {
-	if in == "" {
-		in = backup
-	}
-	if unicode.IsDigit(rune(in[len(in)-1])) {
-		return in, nil
-	} else {
-		number, err := strconv.Atoi(in[0 : len(in)-1])
-		if err != nil {
-			return "", err
-		}
-		multiplier := strings.ToUpper(string(in[len(in)-1]))
-		if multiplier == "K" {
-			return strconv.Itoa(1024 * number), nil
-		} else if multiplier == "M" {
-			return strconv.Itoa(1024 * 1024 * number), nil
-		} else {
-			return "", errors.New("test161: could not convert formatted string to integer")
-		}
-	}
+var CONF_DEFAULTS = Test{
+	Sys161: Sys161Conf{
+		CPUs: 8,
+		RAM:  "1M",
+		Disk1: DiskConf{
+			Enabled: "true",
+			RPM:     7200,
+			Bytes:   "2M",
+			NoDoom:  "true",
+		},
+		Disk2: DiskConf{
+			Enabled: "false",
+			RPM:     7200,
+			Bytes:   "2M",
+			NoDoom:  "false",
+		},
+	},
+	Stat: StatConf{
+		Resolution: 0.01,
+		Window:     1,
+	},
+	Monitor: MonitorConf{
+		Enabled: "true",
+		Window:  10,
+		Kernel: Limits{
+			Min: 0.001,
+			Max: 0.99,
+		},
+		User: Limits{
+			Min: 0.0001,
+			Max: 1.0,
+		},
+		ProgressTimeout: 10.0,
+	},
+	Misc: MiscConf{
+		CommandRetries: 5,
+	},
 }
 
 // TestFromFile parses the test file and sets configuration defaults.
-func TestFromFile(filename string) (*Test, error) {
+func TestFromFile(filename string, defaults *Test) (*Test, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
-	return TestFromString(string(data))
+	return TestFromString(string(data), defaults)
 }
 
 // TestFromFile parses the test string and sets configuration defaults.
-func TestFromString(data string) (*Test, error) {
+func TestFromString(data string, defaults *Test) (*Test, error) {
 	test := new(Test)
+
 	err := frontmatter.Unmarshal([]byte(data), test)
 	if err != nil {
 		return nil, err
 	}
 
-	test.Conf.CPUs = test.OrigConf.CPUs
-	if test.Conf.CPUs == 0 {
-		test.Conf.CPUs = 8
-	}
-	test.Conf.RAM, err = parseAndSetDefault(test.OrigConf.RAM, "1M")
-	if err != nil {
-		return nil, err
-	}
-	ramInt, _ := strconv.Atoi(test.Conf.RAM)
-	ramInt = ramInt * 2 / 512
-
-	// sys161 currently won't boot with a disk smaller than 8000 sectors. Not
-	// sure why.
-
-	if ramInt < 8000 {
-		ramInt = 8000
-	}
-	ramString := strconv.Itoa(ramInt)
-
-	test.Conf.Disk1.RPM = test.OrigConf.Disk1.RPM
-	if test.Conf.Disk1.RPM == 0 {
-		test.Conf.Disk1.RPM = 7200
-	}
-	test.Conf.Disk1.Sectors, err =
-		parseAndSetDefault(test.OrigConf.Disk1.Sectors, ramString)
-	if err != nil {
-		return nil, err
-	}
-	test.Conf.Disk1.NoDoom = test.OrigConf.Disk1.NoDoom
-	if test.Conf.Disk1.NoDoom == "" {
-		test.Conf.Disk1.NoDoom = "true"
-	}
-	switch test.Conf.Disk1.NoDoom {
-	case "true", "false":
-		break
-	default:
-		return nil, errors.New("test161: nodoom must be 'true' or 'false' if set.")
-	}
-	test.Conf.Disk1.File = "LHD0.img"
-
-	if test.OrigConf.Disk2.RPM != 0 ||
-		test.OrigConf.Disk2.Sectors != "" ||
-		test.OrigConf.Disk2.NoDoom != "" {
-
-		test.Conf.Disk2.RPM = test.OrigConf.Disk2.RPM
-		if test.Conf.Disk2.RPM == 0 {
-			test.Conf.Disk2.RPM = 7200
-		}
-		test.Conf.Disk2.Sectors, err = parseAndSetDefault(test.OrigConf.Disk2.Sectors, ramString)
+	if defaults != nil {
+		err := mergo.Map(&test, defaults)
 		if err != nil {
 			return nil, err
 		}
-		test.Conf.Disk2.NoDoom = test.OrigConf.Disk2.NoDoom
-		if test.Conf.Disk2.NoDoom == "" {
-			test.Conf.Disk2.NoDoom = "false"
-		}
-		switch test.Conf.Disk2.NoDoom {
-		case "true", "false":
-			break
-		default:
-			return nil, errors.New("test161: nodoom must be 'true' or 'false' if set.")
-		}
-		test.Conf.Disk2.File = "LHD1.img"
 	}
 
-	test.Conf.Random = test.OrigConf.Random
-	if test.Conf.Random == "" {
-		test.Conf.Random = "seed=" + strconv.Itoa(int(rand.Int31()>>16))
-	}
-	if !validRandom.MatchString(test.Conf.Random) {
-		return nil, errors.New("test161: random must be 'autoseed' or 'seed=N' if set.")
+	err = mergo.Map(&test, CONF_DEFAULTS)
+	if err != nil {
+		return nil, err
 	}
 
-	if test.MonitorConf.AllStats == "" {
-		test.MonitorConf.AllStats = "false"
-	}
+	test.Sys161.Random = rand.Uint32() >> 16
 
-	switch test.MonitorConf.AllStats {
-	case "true", "false":
-		break
-	default:
-		return nil, errors.New("test161: allstats must be 'true' or 'false' if set.")
-	}
-
-	if test.MonitorConf.Enabled == "" {
-		test.MonitorConf.Enabled = "true"
-	}
-	if test.MonitorConf.Timeouts.Prompt == 0 {
-		test.MonitorConf.Timeouts.Prompt = 5 * 60
-	}
-	if test.MonitorConf.Timeouts.Progress == 0 {
-		test.MonitorConf.Timeouts.Progress = 60
-	}
-	if test.MonitorConf.Timeouts.Progress > test.MonitorConf.Timeouts.Prompt {
-		return nil, errors.New("test161: progress timeout must be less than (or equal to) the prompt timeout")
-	}
-	if test.MonitorConf.Resolution == 0 {
-		// Recording all statistics can lead to out of memory errors on long
-		// tests, so we set a slower statistic interval when all stats are being
-		// recorded. Otherwise use a smaller default for more precise timing.
-		if test.MonitorConf.AllStats == "true" {
-			test.MonitorConf.Resolution = 50000 // 50ms
-		} else {
-			test.MonitorConf.Resolution = 100 // 0.1ms
-		}
-	}
-	if test.MonitorConf.Window == 0 {
-		test.MonitorConf.Window = 2.0
-	}
-	if test.MonitorConf.Kernel.Min == 0.0 {
-		test.MonitorConf.Kernel.Min = 0.001
-	}
-	if test.MonitorConf.Kernel.Min < 0.0 || test.MonitorConf.Kernel.Min > 1.0 {
-		return nil, errors.New("test161: cycle limits must be fractions between 0.0 and 1.0")
-	}
-	if test.MonitorConf.Kernel.Max == 0.0 {
-		test.MonitorConf.Kernel.Max = 0.99
-	}
-	if test.MonitorConf.Kernel.Max < 0.0 || test.MonitorConf.Kernel.Max > 1.0 {
-		return nil, errors.New("test161: cycle limits must be fractions between 0.0 and 1.0")
-	}
-	if test.MonitorConf.Kernel.Min > test.MonitorConf.Kernel.Max {
-		return nil, errors.New("test161: cycle minimum must be less than the maximum")
-	}
-	if test.MonitorConf.User.Min == 0.0 {
-		test.MonitorConf.User.Min = 0.0001
-	}
-	if test.MonitorConf.User.Min < 0.0 || test.MonitorConf.User.Min > 1.0 {
-		return nil, errors.New("test161: cycle limits must be fractions between 0.0 and 1.0")
-	}
-	if test.MonitorConf.User.Max == 0.0 {
-		test.MonitorConf.User.Max = 1.0
-	}
-	if test.MonitorConf.User.Max < 0.0 || test.MonitorConf.User.Max > 1.0 {
-		return nil, errors.New("test161: cycle limits must be fractions between 0.0 and 1.0")
-	}
-	if test.MonitorConf.User.Min > test.MonitorConf.User.Max {
-		return nil, errors.New("test161: cycle minimum must be less than the maximum")
-	}
-	if test.MonitorConf.CommandRetries == 0 {
-		test.MonitorConf.CommandRetries = 5
-	}
 	return test, err
 }
 
-// PrintConf formats the test configuration for use by sys161 via the sys161.conf file.
-func (t *Test) PrintConf() (string, error) {
-	const base = `0	serial
-1	emufs{{if .Disk1.Sectors}}
-2	disk	rpm={{.Disk1.RPM}}	file={{.Disk1.File}} {{if eq .Disk1.NoDoom "true"}}nodoom{{end}} # sectors={{.Disk1.Sectors}}{{end}}{{if .Disk2.Sectors}}
-3	disk	rpm={{.Disk2.RPM}}	file={{.Disk2.File}} {{if eq .Disk2.NoDoom "true"}}nodoom{{end}} # sectors={{.Disk2.Sectors}}{{end}}
-28	random {{.Random}}
+const SYS161_TEMPLATE = `0	serial
+1	emufs
+{{if eq .Disk1.Enabled "true"}}
+2	disk rpm={{.Disk1.RPM}} file=LHD0.img {{if eq .Disk1.NoDoom "true"}}nodoom{{end}} # bytes={{.Disk1.Bytes }}
+{{end}}
+{{if eq .Disk1.Enabled "true"}}
+3	disk rpm={{.Disk2.RPM}} file=LHD1.img {{if eq .Disk2.NoDoom "true"}}nodoom{{end}} # bytes={{.Disk2.Bytes }}
+{{end}}
+28	random seed={{.Random}}
 29	timer
 30	trace
 31	mainboard ramsize={{.RAM}} cpus={{.CPUs}}`
 
-	conf, err := template.New("conf").Parse(base)
+// PrintConf formats the test configuration for use by sys161 via the sys161.conf file.
+func (t *Test) PrintConf() (string, error) {
+
+	conf, err := template.New("conf").Parse(SYS161_TEMPLATE)
 	if err != nil {
 		return "", err
 	}
 	buffer := new(bytes.Buffer)
-	err = conf.Execute(buffer, t.Conf)
+	err = conf.Execute(buffer, t.Sys161)
 	if err != nil {
 		return "", err
 	}
-	return buffer.String(), nil
+	var confString string
+	for _, line := range strings.Split(strings.TrimSpace(buffer.String()), "\n") {
+		if strings.TrimSpace(line) != "" {
+			confString += line
+		}
+	}
+	return confString, nil
 }

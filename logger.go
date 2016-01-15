@@ -20,7 +20,7 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 
 	// Parse some new incoming data. Frequently just a single byte but sometimes
 	// more.
-	t.commandLock.Lock()
+	t.L.Lock()
 
 	// Mark progress for the progress timeout.
 	t.progressTime = float64(t.SimTime)
@@ -38,7 +38,7 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 			t.currentOutput = OutputLine{}
 		}
 	}
-	t.commandLock.Unlock()
+	t.L.Unlock()
 }
 
 // Unused parts of the expect.Logger interface
