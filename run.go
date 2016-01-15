@@ -120,6 +120,8 @@ func (t *Test) getWallTime() TimeFixedPoint {
 
 // Run a test161 test.
 func (t *Test) Run(root string) (err error) {
+	// Serialize the current command state.
+	t.L = &sync.Mutex{}
 
 	// Merge in test161 defaults for any missing configuration values
 	err = t.MergeConf(CONF_DEFAULTS)
@@ -188,9 +190,6 @@ func (t *Test) Run(root string) (err error) {
 			return err
 		}
 	}
-
-	// Serialize the current command state.
-	t.L = &sync.Mutex{}
 
 	// Coordinated with the getStat goroutine. I don't think that a channel
 	// would work here.
