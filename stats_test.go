@@ -18,9 +18,9 @@ func TestStatsKernelDeadlock(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "kernel")
+		assert.Equal(test.Commands[1].Type, "kernel")
 		assert.Equal(test.Commands[1].Input.Line, "dl")
 	}
 
@@ -44,9 +44,9 @@ func TestStatsKernelLivelock(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "kernel")
+		assert.Equal(test.Commands[1].Type, "kernel")
 		assert.Equal(test.Commands[1].Input.Line, "ll16")
 	}
 
@@ -71,11 +71,11 @@ func TestStatsUserDeadlock(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 3)
 	if len(test.Commands) == 3 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "user")
+		assert.Equal(test.Commands[1].Type, "user")
 		assert.Equal(test.Commands[1].Input.Line, "s")
-		assert.Equal(test.Commands[2].Env, "user")
+		assert.Equal(test.Commands[2].Type, "user")
 		assert.Equal(test.Commands[2].Input.Line, "/testbin/waiter")
 	}
 
@@ -102,9 +102,9 @@ func TestStatsKernelProgress(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "kernel")
+		assert.Equal(test.Commands[1].Type, "kernel")
 		assert.Equal(test.Commands[1].Input.Line, "ll1")
 	}
 
@@ -131,11 +131,11 @@ func TestStatsUserProgress(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 3)
 	if len(test.Commands) == 3 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "user")
+		assert.Equal(test.Commands[1].Type, "user")
 		assert.Equal(test.Commands[1].Input.Line, "s")
-		assert.Equal(test.Commands[2].Env, "user")
+		assert.Equal(test.Commands[2].Type, "user")
 		assert.Equal(test.Commands[2].Input.Line, "/testbin/waiter")
 	}
 

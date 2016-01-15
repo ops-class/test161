@@ -18,7 +18,6 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 )
@@ -67,6 +66,7 @@ type Test struct {
 	sys161         *expect.Expect // Protected by L
 	progressTime   float64        // Protected by L
 	currentCommand *Command       // Protected by L
+	commandCounter uint           // Protected by L
 	currentOutput  OutputLine     // Protected by L
 
 	// Fields used by getStats but shared with Run
@@ -203,18 +203,19 @@ func (t *Test) Run(root string) (err error) {
 	prompts := regexp.MustCompile(PROMPT_PATTERN)
 
 	// Set up the current command to point at boot
-	t.currentCommand = &t.Commands[0]
+	t.commandCounter = 0
+	t.currentCommand = &t.Commands[t.commandCounter]
 
 	// Start sys161 and defer close.
 	err = t.start161()
 	if err != nil {
 		return err
 	}
-	defer t.stop161()
+	defer t.sys161.Close()
 
-	for commandCounter, _ := range t.Commands {
-		if commandCounter != 0 {
-			err = t.sendCommand(t.currentCommand.InputLine.Line + "\n")
+	for int(t.commandCounter) < len(t.Commands) {
+		if t.commandCounter != 0 {
+			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
 			if err != nil {
 				t.finish("expect", "couldn't send a command")
 				return nil
@@ -226,17 +227,16 @@ func (t *Test) Run(root string) (err error) {
 			}
 		}
 
-		if commandCounter == len(t.Commands)-1 {
+		if int(t.commandCounter) == len(t.Commands)-1 {
 			t.sys161.ExpectEOF()
 			t.finish("shutdown", "")
 			return nil
-		} else {
-			prompt, expectErr := t.sys161.ExpectRegexp(prompts)
-			err = t.disableStats()
-			if err != nil {
-				t.finish("stats", "stats error")
-				return nil
-			}
+		}
+		match, expectErr := t.sys161.ExpectRegexp(prompts)
+		err = t.disableStats()
+		if err != nil {
+			t.finish("stats", "stats error")
+			return nil
 		}
 
 		// Handle timeouts, unexpected shutdowns, and other errors
@@ -259,7 +259,8 @@ func (t *Test) Run(root string) (err error) {
 			t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
 		}
 		t.currentOutput = OutputLine{}
-		t.currentCommand = &t.Commands[commandCounter+1]
+		t.commandCounter++
+		t.currentCommand = &t.Commands[t.commandCounter]
 		t.L.Unlock()
 
 		// Check the prompt against the expected environment
@@ -273,12 +274,12 @@ func (t *Test) Run(root string) (err error) {
 			if t.currentCommand.Type != "kernel" {
 				t.finish("expect", "prompt doesn't match kernel environment")
 			}
-		} else if prompt == USER_PROMPT {
+		} else if prompt == SHELL_PROMPT {
 			if t.currentCommand.Type != "user" {
 				t.finish("expect", "prompt doesn't match user environment")
 			}
 		} else {
-			t.finish("expect", "found invalid prompt: %s", prompt)
+			t.finish("expect", fmt.Sprintf("found invalid prompt: %s", prompt))
 			return nil
 		}
 	}
@@ -287,17 +288,20 @@ func (t *Test) Run(root string) (err error) {
 
 // sendCommand sends a command persistently. All the retry logic to deal with
 // dropped characters is now here.
-func (t *Test) sendCommand(commandLine string, retryLimit int) error {
-	t.sys161.SetTimeout(time.Second)
+func (t *Test) sendCommand(commandLine string) error {
+
+	// Temporarily lower the expect timeout.
+	t.sys161.SetTimeout(time.Duration(t.Misc.CharacterTimeout) * time.Second)
 	defer t.sys161.SetTimeout(time.Duration(t.Misc.PromptTimeout) * time.Second)
 
 	for _, character := range commandLine {
-		for retryCount := 0; retryCount < retryLimit; retryCount++ {
-			err := t.sys161.Send(character)
-			if err {
+		retryCount := uint(0)
+		for ; retryCount < t.Misc.CommandRetries; retryCount++ {
+			err := t.sys161.Send(string(character))
+			if err != nil {
 				return err
 			}
-			_, err := t.sys161.ExpectRegexp(regexp.QuoteMeta(character))
+			_, err = t.sys161.ExpectRegexp(regexp.MustCompile(regexp.QuoteMeta(string(character))))
 			if err == nil {
 				break
 			} else if err == expect.ErrTimeout {
@@ -306,7 +310,7 @@ func (t *Test) sendCommand(commandLine string, retryLimit int) error {
 				return err
 			}
 		}
-		if retryCount == retryLimit {
+		if retryCount == t.Misc.CommandRetries {
 			return errors.New("test161: timeout sending command")
 		}
 	}
@@ -314,47 +318,38 @@ func (t *Test) sendCommand(commandLine string, retryLimit int) error {
 	return nil
 }
 
-// Lifecycle functions
-
 // start161 is a private helper function to start the sys161 expect process.
-// This makes the main loop a bit cleaner.
 func (t *Test) start161() error {
+	// Disable debugger connections on panic and set our alternate
+	// configuration.
 	run := exec.Command("sys161", "-X", "-c", "test161.conf", "kernel")
 	run.Dir = t.tempDir
 	pty, err := pty.Start(run)
 	if err != nil {
 		return err
 	}
+
+	// Get serious about killing things.
 	killer := func() {
 		run.Process.Signal(os.Kill)
 	}
-	// Set timeout at create. Otherwise expect uses a ridiculous value and we
-	// can hang with early failures.
+
+	// Set timeout at create to avoid hanging with early failures.
 	t.sys161 = expect.Create(pty, killer, t, time.Duration(t.Misc.PromptTimeout)*time.Second)
 	t.startTime = time.Now().UnixNano()
-	t.sys161.SetTimeout(time.Duration(t.Misc.PromptTimeout) * time.Second)
-	t.L.Lock()
-	if t.Status == "aborted" {
-		t.Status = "started"
-	}
-	t.L.Unlock()
+	t.Status = "started"
+
 	return nil
 }
 
-// start161 is a private helper function to stop the sys161 expect process.
-// Defered to the end of Run.
+// finish sets error messages as needed.
 func (t *Test) finish(status string, shutdownMessage string) {
 	t.L.Lock()
+	// Make sure nobody beat us here. (Also set by getStats.)
 	if t.Status == "" {
 		t.Status = status
 		t.ShutdownMessage = shutdownMessage
 	}
 	t.WallTime = t.getWallTime()
 	t.L.Unlock()
-}
-
-// start161 is a private helper function to stop the sys161 expect process.
-// Defered to the end of Run.
-func (t *Test) stop161() {
-	t.sys161.Close()
 }

@@ -34,9 +34,9 @@ func TestRunBoot(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "kernel")
+		assert.Equal(test.Commands[1].Type, "kernel")
 		assert.Equal(test.Commands[1].Input.Line, "q")
 	}
 
@@ -58,15 +58,15 @@ func TestRunShell(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 5)
 	if len(test.Commands) == 5 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "user")
+		assert.Equal(test.Commands[1].Type, "user")
 		assert.Equal(test.Commands[1].Input.Line, "s")
-		assert.Equal(test.Commands[2].Env, "user")
+		assert.Equal(test.Commands[2].Type, "user")
 		assert.Equal(test.Commands[2].Input.Line, "/bin/true")
-		assert.Equal(test.Commands[3].Env, "user")
+		assert.Equal(test.Commands[3].Type, "user")
 		assert.Equal(test.Commands[3].Input.Line, "exit")
-		assert.Equal(test.Commands[4].Env, "kernel")
+		assert.Equal(test.Commands[4].Type, "kernel")
 		assert.Equal(test.Commands[4].Input.Line, "q")
 	}
 
@@ -89,9 +89,9 @@ func TestRunPanic(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "kernel")
+		assert.Equal(test.Commands[1].Type, "kernel")
 		assert.Equal(test.Commands[1].Input.Line, "panic")
 	}
 
@@ -116,17 +116,17 @@ func TestRunShll(t *testing.T) {
 
 	assert.Equal(len(test.Commands), 6)
 	if len(test.Commands) == 6 {
-		assert.Equal(test.Commands[0].Env, "kernel")
+		assert.Equal(test.Commands[0].Type, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
-		assert.Equal(test.Commands[1].Env, "user")
+		assert.Equal(test.Commands[1].Type, "user")
 		assert.Equal(test.Commands[1].Input.Line, "s")
-		assert.Equal(test.Commands[2].Env, "user")
+		assert.Equal(test.Commands[2].Type, "user")
 		assert.Equal(test.Commands[2].Input.Line, "/testbin/shll -p 10")
-		assert.Equal(test.Commands[3].Env, "user")
+		assert.Equal(test.Commands[3].Type, "user")
 		assert.Equal(test.Commands[3].Input.Line, "exit")
-		assert.Equal(test.Commands[4].Env, "user")
+		assert.Equal(test.Commands[4].Type, "user")
 		assert.Equal(test.Commands[4].Input.Line, "exit")
-		assert.Equal(test.Commands[5].Env, "kernel")
+		assert.Equal(test.Commands[5].Type, "kernel")
 		assert.Equal(test.Commands[5].Input.Line, "q")
 	}
 

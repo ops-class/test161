@@ -166,7 +166,7 @@ func (t *Test) getStats() {
 	}
 
 	// Record when to flush stat cache
-	lastCommandID := -1
+	lastCounter := -1
 
 	statReader := bufio.NewReader(statConn)
 	for {
@@ -194,7 +194,7 @@ func (t *Test) getStats() {
 		// and monitoring flags
 		t.statCond.L.Lock()
 		statRecord := t.statRecord
-		statMonitor := t.currentCommand.Monitor
+		statMonitor := t.statMonitor
 		t.statCond.Signal()
 		t.statCond.L.Unlock()
 
@@ -242,24 +242,24 @@ func (t *Test) getStats() {
 		t.L.Lock()
 		t.SimTime = stats.End
 		if statRecord {
-			if (len(t.command.AllStats) == 0) ||
-				(t.command.AllStats[len(t.command.AllStats)-1].Count == t.Stat.Window) {
-				t.command.AllStats = append(t.command.AllStats, Stat{})
+			if (len(t.currentCommand.AllStats) == 0) ||
+				(t.currentCommand.AllStats[len(t.currentCommand.AllStats)-1].Count == t.Stat.Window) {
+				t.currentCommand.AllStats = append(t.currentCommand.AllStats, Stat{})
 			}
-			t.command.AllStats[len(t.command.AllStats)-1].Append(stats)
-			t.command.SummaryStats.Append(stats)
+			t.currentCommand.AllStats[len(t.currentCommand.AllStats)-1].Append(stats)
+			t.currentCommand.SummaryStats.Append(stats)
 		}
 		// Cached for use by the monitoring code below
 		progressTime := float64(t.SimTime) - t.progressTime
-		currentCommandID := t.command.ID
-		currentEnv := t.command.Env
+		currentCounter := t.commandCounter
+		currentType := t.currentCommand.Type
 		t.L.Unlock()
 
 		// If we've moved forward one command clear the stat cache.
-		if statRecord && int(currentCommandID) != lastCommandID {
+		if statRecord && int(currentCounter) != lastCounter {
 			monitorCache = nil
 			monitorWindow = &Stat{}
-			lastCommandID = int(currentCommandID)
+			lastCounter = int(currentCounter)
 		}
 
 		// Monitoring code starts here. Only run the monitor if it's enabled
@@ -284,21 +284,21 @@ func (t *Test) getStats() {
 		monitorError := ""
 		if progressTime > float64(t.Monitor.ProgressTimeout) {
 			monitorError =
-				fmt.Sprintf("no progress for %v s in %v mode", t.Monitor.ProgressTimeout, currentEnv)
+				fmt.Sprintf("no progress for %v s in %v mode", t.Monitor.ProgressTimeout, currentType)
 		}
 		// Only run these checks if we have enough state
 		if uint(len(monitorCache)) >= t.Monitor.Window {
-			if currentEnv == "kernel" && monitorWindow.User > 0 {
+			if currentType == "kernel" && monitorWindow.User > 0 {
 				monitorError = "non-zero user cycles during kernel operation"
 			} else if t.Monitor.Kernel.EnableMin == "true" &&
 				float64(monitorWindow.Kern)/float64(monitorWindow.Cycles) < t.Monitor.Kernel.Min {
 				monitorError = "insufficient kernel cycles (potential deadlock)"
 			} else if float64(monitorWindow.Kern)/float64(monitorWindow.Cycles) > t.Monitor.Kernel.Max {
 				monitorError = "too many kernel cycles (potential livelock)"
-			} else if currentEnv == "user" && t.Monitor.User.EnableMin == "true" &&
+			} else if currentType == "user" && t.Monitor.User.EnableMin == "true" &&
 				(float64(monitorWindow.User)/float64(monitorWindow.Cycles) < t.Monitor.User.Min) {
 				monitorError = "insufficient user cycles"
-			} else if currentEnv == "user" &&
+			} else if currentType == "user" &&
 				(float64(monitorWindow.User)/float64(monitorWindow.Cycles) > t.Monitor.User.Max) {
 				monitorError = "too many user cycles"
 			}
@@ -313,7 +313,7 @@ func (t *Test) getStats() {
 			t.statCond.L.Unlock()
 			if blowup {
 				t.L.Lock()
-				blowup = blowup && (currentCommandID == t.command.ID)
+				blowup = blowup && (currentCounter == t.commandCounter)
 				t.L.Unlock()
 				if blowup {
 					t.stopStats("monitor", monitorError)
@@ -324,17 +324,17 @@ func (t *Test) getStats() {
 }
 
 // enableStats turns on stats collection
-func (t *Test) enableStats() {
+func (t *Test) enableStats() error {
 	t.statCond.L.Lock()
 	defer t.statCond.L.Unlock()
 	t.statRecord = true
-	t.statMonitor = t.currentCommand.Monitor
+	t.statMonitor = t.currentCommand.Monitored
 	t.statCond.Wait()
 	return t.statError
 }
 
 // enableStats disables stats collection
-func (t *Test) disableStats() {
+func (t *Test) disableStats() error {
 	t.statCond.L.Lock()
 	defer t.statCond.L.Unlock()
 	t.statRecord = false

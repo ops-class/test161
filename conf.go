@@ -2,6 +2,7 @@ package test161
 
 import (
 	"bytes"
+	"errors"
 	"github.com/ericaro/frontmatter"
 	"github.com/imdario/mergo"
 	"io/ioutil"
@@ -52,9 +53,10 @@ type Limits struct {
 }
 
 type MiscConf struct {
-	CommandRetries uint    `yaml:"commandretries" json:"commandretries"`
-	PromptTimeout  float32 `yaml:"prompttimeout" json:"prompttimeout"`
-	TempDir        string  `yaml:"tempdir" json:"-"`
+	CommandRetries   uint    `yaml:"commandretries" json:"commandretries"`
+	PromptTimeout    float32 `yaml:"prompttimeout" json:"prompttimeout"`
+	CharacterTimeout float32 `yaml:"charactertimeout" json:"charactertimeout"`
+	TempDir          string  `yaml:"tempdir" json:"-"`
 }
 
 var CONF_DEFAULTS = Test{
@@ -94,8 +96,9 @@ var CONF_DEFAULTS = Test{
 		ProgressTimeout: 10.0,
 	},
 	Misc: MiscConf{
-		CommandRetries: 5,
-		PromptTimeout:  300.0,
+		CommandRetries:   5,
+		PromptTimeout:    300.0,
+		CharacterTimeout: 0.1,
 	},
 }
 
@@ -157,19 +160,22 @@ func (t *Test) PrintConf() (string, error) {
 	return confString, nil
 }
 
-func (t *Test) initCommands() {
+func (t *Test) initCommands() error {
 	// Set the boot command
-	t.Commands = append(t.Commands, &Command{
+	t.Commands = append(t.Commands, Command{
 		Type:      "kernel",
 		Monitored: false,
-		Input: &InputLine{
+		Input: InputLine{
 			Line: "boot",
 		},
 	})
 
-	shutdown = false
-	lastType = "kernel"
+	shutdown := false
+	lastType := "kernel"
 	for _, commandLine := range strings.Split(strings.TrimSpace(t.Content), "\n") {
+		var monitored bool
+		var currentType string
+
 		commandLine = strings.TrimSpace(commandLine)
 		if commandLine == "" {
 			return errors.New("test161: found empty command")
@@ -179,10 +185,10 @@ func (t *Test) initCommands() {
 		}
 		if string(commandLine[0]) == "$" {
 			if lastType == "kernel" {
-				t.Commands = append(t.Commands, &Command{
+				t.Commands = append(t.Commands, Command{
 					Type:      "user",
 					Monitored: true,
-					Input: &InputLine{
+					Input: InputLine{
 						Line: "s",
 					},
 				})
@@ -192,24 +198,24 @@ func (t *Test) initCommands() {
 			commandLine = strings.TrimSpace(commandLine[1:])
 		} else {
 			if lastType == "user" {
-				t.Commands = append(t.Commands, &Command{
+				t.Commands = append(t.Commands, Command{
 					Type:      "user",
 					Monitored: true,
-					Input: &InputLine{
+					Input: InputLine{
 						Line: "exit",
 					},
 				})
 			}
-			monitored = (command != "q")
+			monitored = (commandLine != "q")
 			currentType = "kernel"
 			if commandLine == "q" {
 				shutdown = true
 			}
 		}
-		t.Commands = append(t.Commands, &Command{
+		t.Commands = append(t.Commands, Command{
 			Type:      currentType,
 			Monitored: monitored,
-			Input: &InputLine{
+			Input: InputLine{
 				Line: commandLine,
 			},
 		})
@@ -217,20 +223,21 @@ func (t *Test) initCommands() {
 	}
 	if !shutdown {
 		if lastType == "user" {
-			t.Commands = append(t.Commands, &Command{
+			t.Commands = append(t.Commands, Command{
 				Type:      "user",
 				Monitored: true,
-				Input: &InputLine{
+				Input: InputLine{
 					Line: "exit",
 				},
 			})
 		}
-		t.Commands = append(t.Commands, &Command{
+		t.Commands = append(t.Commands, Command{
 			Type:      "kernel",
 			Monitored: false,
-			Input: &InputLine{
+			Input: InputLine{
 				Line: "q",
 			},
 		})
 	}
+	return nil
 }
