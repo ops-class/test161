@@ -326,7 +326,7 @@ func (t *Test) start161() error {
 		return err
 	}
 	killer := func() {
-		run.Process.Kill()
+		run.Process.Signal(os.Kill)
 	}
 	// Set timeout at create. Otherwise expect uses a ridiculous value and we
 	// can hang with early failures.
