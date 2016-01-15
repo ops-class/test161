@@ -55,7 +55,7 @@ type Limits struct {
 type MiscConf struct {
 	CommandRetries   uint    `yaml:"commandretries" json:"commandretries"`
 	PromptTimeout    float32 `yaml:"prompttimeout" json:"prompttimeout"`
-	CharacterTimeout float32 `yaml:"charactertimeout" json:"charactertimeout"`
+	CharacterTimeout uint    `yaml:"charactertimeout" json:"charactertimeout"`
 	TempDir          string  `yaml:"tempdir" json:"-"`
 }
 

@@ -77,6 +77,7 @@ monitor:
 misc:
   commandretries: 10
   prompttimeout: 100.0
+  charactertimeout: 10
   tempdir: "/blah/"
 ---
 `)
@@ -120,9 +121,10 @@ misc:
 			ProgressTimeout: 20.0,
 		},
 		Misc: MiscConf{
-			CommandRetries: 10,
-			PromptTimeout:  100.0,
-			TempDir:        "/blah/",
+			CommandRetries:   10,
+			PromptTimeout:    100.0,
+			CharacterTimeout: 10,
+			TempDir:          "/blah/",
 		},
 	}
 	assert.Equal(&overrides, test)
