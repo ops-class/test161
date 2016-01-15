@@ -51,12 +51,11 @@ type Test struct {
 
 	// Output
 
-	ConfString      string         `json:"confstring"`      // Only set during once
-	Status          string         `json:"status"`          // Protected by L
-	ShutdownMessage string         `json:"shutdownmessage"` // Protected by L
-	WallTime        TimeFixedPoint `json:"walltime"`        // Protected by L
-	SimTime         TimeFixedPoint `json:"simtime"`         // Protected by L
-	Commands        []Command      `json:"commands"`        // Protected by L
+	ConfString string         `json:"confstring"` // Only set during once
+	WallTime   TimeFixedPoint `json:"walltime"`   // Protected by L
+	SimTime    TimeFixedPoint `json:"simtime"`    // Protected by L
+	Commands   []Command      `json:"commands"`   // Protected by L
+	Status     []Status       `json:"status"`     // Protected by L
 
 	// Unproctected Private fields
 	tempDir     string // Only set once
@@ -71,7 +70,6 @@ type Test struct {
 
 	// Fields used by getStats but shared with Run
 	statCond    *sync.Cond // Used by the main loop to wait for stat reception
-	statError   error      // Protected by statCond.L
 	statRecord  bool       // Protected by statCond.L
 	statMonitor bool       // Protected by statCond.L
 
@@ -101,6 +99,13 @@ type OutputLine struct {
 	Line     string         `json:"line"`
 }
 
+type Status struct {
+	WallTime TimeFixedPoint `json:"walltime"`
+	SimTime  TimeFixedPoint `json:"simtime"`
+	Status   string         `json:"status"`
+	Message  string         `json:"message"`
+}
+
 type TimeFixedPoint float64
 
 // MarshalJSON prints our TimeFixedPoint type as a fixed point float for JSON.
@@ -116,18 +121,17 @@ func (t *Test) getWallTime() TimeFixedPoint {
 // Run a test161 test.
 func (t *Test) Run(root string) (err error) {
 
-	// Exit status for configuration and initialization failures.
-	t.Status = "aborted"
-
 	// Merge in test161 defaults for any missing configuration values
 	err = t.MergeConf(CONF_DEFAULTS)
 	if err != nil {
+		t.addStatus("aborted", "")
 		return err
 	}
 
 	// Create temp directory.
 	tempRoot, err := ioutil.TempDir(t.Misc.TempDir, "test161")
 	if err != nil {
+		t.addStatus("aborted", "")
 		return err
 	}
 	defer os.RemoveAll(tempRoot)
@@ -136,6 +140,7 @@ func (t *Test) Run(root string) (err error) {
 	// Copy root.
 	err = shutil.CopyTree(root, t.tempDir, nil)
 	if err != nil {
+		t.addStatus("aborted", "")
 		return err
 	}
 
@@ -143,6 +148,7 @@ func (t *Test) Run(root string) (err error) {
 	kernelTarget := path.Join(t.tempDir, "kernel")
 	_, err = os.Stat(kernelTarget)
 	if err != nil {
+		t.addStatus("aborted", "")
 		return err
 	}
 
@@ -150,13 +156,16 @@ func (t *Test) Run(root string) (err error) {
 	confTarget := path.Join(t.tempDir, "test161.conf")
 	t.ConfString, err = t.PrintConf()
 	if err != nil {
+		t.addStatus("aborted", "")
 		return err
 	}
 	err = ioutil.WriteFile(confTarget, []byte(t.ConfString), 0440)
 	if err != nil {
+		t.addStatus("aborted", "")
 		return err
 	}
 	if _, err := os.Stat(confTarget); os.IsNotExist(err) {
+		t.addStatus("aborted", "")
 		return err
 	}
 
@@ -166,6 +175,7 @@ func (t *Test) Run(root string) (err error) {
 		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
+			t.addStatus("aborted", "")
 			return err
 		}
 	}
@@ -174,6 +184,7 @@ func (t *Test) Run(root string) (err error) {
 		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
+			t.addStatus("aborted", "")
 			return err
 		}
 	}
@@ -182,6 +193,7 @@ func (t *Test) Run(root string) (err error) {
 	// started. Doing this first makes the main loop and retry logic simpler.
 	err = t.initCommands()
 	if err != nil {
+		t.addStatus("aborted", "")
 		return err
 	}
 
@@ -209,45 +221,39 @@ func (t *Test) Run(root string) (err error) {
 	// Start sys161 and defer close.
 	err = t.start161()
 	if err != nil {
+		t.addStatus("aborted", "")
 		return err
 	}
-	defer t.sys161.Close()
+	defer t.stop161()
+	t.addStatus("started", "")
 
 	for int(t.commandCounter) < len(t.Commands) {
 		if t.commandCounter != 0 {
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
 			if err != nil {
-				t.finish("expect", "couldn't send a command")
+				t.addStatus("expect", "couldn't send a command")
 				return nil
 			}
-			err = t.enableStats()
-			if err != nil {
-				t.finish("stats", "stats error")
-				return nil
-			}
+			t.enableStats()
 		}
 
 		if int(t.commandCounter) == len(t.Commands)-1 {
 			t.sys161.ExpectEOF()
-			t.finish("shutdown", "")
+			t.addStatus("shutdown", "")
 			return nil
 		}
 		match, expectErr := t.sys161.ExpectRegexp(prompts)
-		err = t.disableStats()
-		if err != nil {
-			t.finish("stats", "stats error")
-			return nil
-		}
+		t.disableStats()
 
 		// Handle timeouts, unexpected shutdowns, and other errors
 		if expectErr == expect.ErrTimeout {
-			t.finish("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
+			t.addStatus("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
 			return nil
 		} else if err == io.EOF {
-			t.finish("crash", "")
+			t.addStatus("crash", "")
 			return nil
 		} else if err != nil {
-			t.finish("expect", "")
+			t.addStatus("expect", "")
 			return nil
 		}
 
@@ -265,21 +271,21 @@ func (t *Test) Run(root string) (err error) {
 
 		// Check the prompt against the expected environment
 		if len(match.Groups) != 2 {
-			t.finish("expect", "prompt didn't match")
+			t.addStatus("expect", "prompt didn't match")
 			return nil
 		}
 		prompt := match.Groups[0]
 
 		if prompt == KERNEL_PROMPT {
 			if t.currentCommand.Type != "kernel" {
-				t.finish("expect", "prompt doesn't match kernel environment")
+				t.addStatus("expect", "prompt doesn't match kernel environment")
 			}
 		} else if prompt == SHELL_PROMPT {
 			if t.currentCommand.Type != "user" {
-				t.finish("expect", "prompt doesn't match user environment")
+				t.addStatus("expect", "prompt doesn't match user environment")
 			}
 		} else {
-			t.finish("expect", fmt.Sprintf("found invalid prompt: %s", prompt))
+			t.addStatus("expect", fmt.Sprintf("found invalid prompt: %s", prompt))
 			return nil
 		}
 	}
@@ -337,19 +343,22 @@ func (t *Test) start161() error {
 	// Set timeout at create to avoid hanging with early failures.
 	t.sys161 = expect.Create(pty, killer, t, time.Duration(t.Misc.PromptTimeout)*time.Second)
 	t.startTime = time.Now().UnixNano()
-	t.Status = "started"
 
 	return nil
 }
 
-// finish sets error messages as needed.
-func (t *Test) finish(status string, shutdownMessage string) {
-	t.L.Lock()
-	// Make sure nobody beat us here. (Also set by getStats.)
-	if t.Status == "" {
-		t.Status = status
-		t.ShutdownMessage = shutdownMessage
-	}
+func (t *Test) stop161() {
 	t.WallTime = t.getWallTime()
+	t.sys161.Close()
+}
+
+func (t *Test) addStatus(status string, message string) {
+	t.L.Lock()
+	t.Status = append(t.Status, Status{
+		WallTime: t.getWallTime(),
+		SimTime:  t.SimTime,
+		Status:   status,
+		Message:  message,
+	})
 	t.L.Unlock()
 }

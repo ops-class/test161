@@ -117,22 +117,9 @@ func (i *Stat) Shift(j Stat) {
 }
 
 // stopStats disables stats collection.
-func (t *Test) stopStats(Status string, ShutdownMessage string) {
-
-	// This is normal shutdown.
-	if t.statError == io.EOF {
-		t.statError = nil
-		Status = ""
-	}
-
-	// Mark failure and kill sys161
-	t.L.Lock()
-	if Status != "" && t.Status != "" {
-		t.Status = Status
-		t.ShutdownMessage = ShutdownMessage
-	}
-	t.L.Unlock()
-	t.sys161.Killer()
+func (t *Test) stopStats(status string, message string) {
+	t.addStatus(status, message)
+	t.stop161()
 }
 
 // getStats is the main stats collection and monitor goroutine.
@@ -141,15 +128,15 @@ func (t *Test) getStats() {
 
 	// Connect to the sys161 stats socket.
 	var statConn net.Conn
-	statConn, t.statError = net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
-	if t.statError != nil {
+	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
+	if err != nil {
 		t.stopStats("stats", "couldn't connect")
 	}
 
 	// Configure stat interval.
-	_, t.statError =
+	_, err =
 		statConn.Write([]byte(fmt.Sprintf("INTERVAL %v\n", uint32(t.Stat.Resolution*1000*1000*1000))))
-	if t.statError != nil {
+	if err != nil {
 		t.stopStats("stats", "couldn't set interval")
 	}
 
@@ -173,10 +160,10 @@ func (t *Test) getStats() {
 		var line string
 
 		// Grab a stat message.
-		line, t.statError = statReader.ReadString('\n')
-		if t.statError != nil {
-			// This error gets cleared if we've read EOF, since that's normal
-			// shutdown.
+		line, err := statReader.ReadString('\n')
+		if err == io.EOF {
+			return
+		} else if err != nil {
 			t.stopStats("stats", "problem reading stats")
 			return
 		}
@@ -324,19 +311,17 @@ func (t *Test) getStats() {
 }
 
 // enableStats turns on stats collection
-func (t *Test) enableStats() error {
+func (t *Test) enableStats() {
 	t.statCond.L.Lock()
-	defer t.statCond.L.Unlock()
 	t.statRecord = true
 	t.statMonitor = t.currentCommand.Monitored
 	t.statCond.Wait()
-	return t.statError
+	t.statCond.L.Unlock()
 }
 
 // enableStats disables stats collection
-func (t *Test) disableStats() error {
+func (t *Test) disableStats() {
 	t.statCond.L.Lock()
-	defer t.statCond.L.Unlock()
 	t.statRecord = false
-	return t.statError
+	t.statCond.L.Unlock()
 }

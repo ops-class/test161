@@ -34,10 +34,13 @@ func (t *Test) OutputString() string {
 	if string(output[len(output)-1]) != "\n" {
 		output += "\n"
 	}
-	output += fmt.Sprintf("%.6f\t%s", t.SimTime, t.Status)
-	if t.ShutdownMessage != "" {
-		output += fmt.Sprintf(": %s", t.ShutdownMessage)
+	if len(t.Status) > 0 {
+		status := t.Status[len(t.Status)-1]
+		output += fmt.Sprintf("%.6f\t%s", t.SimTime, status.Status)
+		if status.Message != "" {
+			output += fmt.Sprintf(": %s", status.Message)
+		}
+		output += "\n"
 	}
-	output += "\n"
 	return output
 }

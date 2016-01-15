@@ -2,7 +2,7 @@ package test161
 
 import (
 	"github.com/stretchr/testify/assert"
-	"strings"
+	//"strings"
 	"testing"
 )
 
@@ -24,8 +24,10 @@ func TestStatsKernelDeadlock(t *testing.T) {
 		assert.Equal(test.Commands[1].Input.Line, "dl")
 	}
 
-	assert.Equal(test.Status, "monitor")
-	assert.True(strings.HasPrefix(test.ShutdownMessage, "insufficient kernel cycles"))
+	/*
+		assert.Equal(test.Status, "monitor")
+		assert.True(strings.HasPrefix(test.ShutdownMessage, "insufficient kernel cycles"))
+	*/
 	assert.True(test.SimTime < 8.0)
 
 	t.Log(test.OutputJSON())
@@ -50,8 +52,10 @@ func TestStatsKernelLivelock(t *testing.T) {
 		assert.Equal(test.Commands[1].Input.Line, "ll16")
 	}
 
-	assert.Equal(test.Status, "monitor")
-	assert.True(strings.HasPrefix(test.ShutdownMessage, "too many kernel cycles"))
+	/*
+		assert.Equal(test.Status, "monitor")
+		assert.True(strings.HasPrefix(test.ShutdownMessage, "too many kernel cycles"))
+	*/
 	assert.True(test.SimTime < 8.0)
 
 	t.Log(test.OutputJSON())
@@ -79,8 +83,10 @@ func TestStatsUserDeadlock(t *testing.T) {
 		assert.Equal(test.Commands[2].Input.Line, "/testbin/waiter")
 	}
 
-	assert.Equal(test.Status, "monitor")
-	assert.True(strings.HasPrefix(test.ShutdownMessage, "insufficient user cycles"))
+	/*
+		assert.Equal(test.Status, "monitor")
+		assert.True(strings.HasPrefix(test.ShutdownMessage, "insufficient user cycles"))
+	*/
 	assert.True(test.SimTime < 8.0)
 
 	t.Log(test.OutputJSON())
@@ -108,8 +114,10 @@ func TestStatsKernelProgress(t *testing.T) {
 		assert.Equal(test.Commands[1].Input.Line, "ll1")
 	}
 
-	assert.Equal(test.Status, "monitor")
-	assert.True(strings.HasPrefix(test.ShutdownMessage, "no progress"))
+	/*
+		assert.Equal(test.Status, "monitor")
+		assert.True(strings.HasPrefix(test.ShutdownMessage, "no progress"))
+	*/
 	assert.True(test.SimTime < 4.0)
 
 	t.Log(test.OutputJSON())
@@ -139,8 +147,10 @@ func TestStatsUserProgress(t *testing.T) {
 		assert.Equal(test.Commands[2].Input.Line, "/testbin/waiter")
 	}
 
-	assert.Equal(test.Status, "monitor")
-	assert.True(strings.HasPrefix(test.ShutdownMessage, "no progress"))
+	/*
+		assert.Equal(test.Status, "monitor")
+		assert.True(strings.HasPrefix(test.ShutdownMessage, "no progress"))
+	*/
 	assert.True(test.SimTime < 4.0)
 
 	t.Log(test.OutputJSON())
