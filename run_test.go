@@ -20,7 +20,7 @@ func TestRunBoot(t *testing.T) {
 	test, err := TestFromString("q")
 	assert.Nil(err)
 
-	err = test.Run("./fixtures/", "")
+	err = test.Run("./fixtures/")
 	assert.Nil(err)
 	if err != nil {
 		t.Log(test.Status)
@@ -45,7 +45,7 @@ func TestRunShell(t *testing.T) {
 	test, err := TestFromString("$ /bin/true")
 	assert.Nil(err)
 
-	err = test.Run("./fixtures/", "")
+	err = test.Run("./fixtures/")
 	assert.Nil(err)
 
 	assert.Equal(len(test.Commands), 5)
@@ -68,7 +68,7 @@ func TestRunPanic(t *testing.T) {
 	test, err := TestFromString("panic")
 	assert.Nil(err)
 
-	err = test.Run("./fixtures/", "")
+	err = test.Run("./fixtures/")
 	assert.Nil(err)
 
 	assert.Equal(len(test.Commands), 2)

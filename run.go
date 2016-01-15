@@ -18,7 +18,6 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -88,7 +87,7 @@ type Command struct {
 	Input        InputLine    `json:"input"`
 	Output       []OutputLine `json:"output"`
 	SummaryStats Stat         `json:"summarystats"`
-	AllStats     []Stat       `json:"-"`
+	AllStats     []Stat       `json:"stats"`
 	Retries      uint         `json:"retries"`
 }
 
@@ -118,17 +117,19 @@ func (t *Test) getWallTime() TimeFixedPoint {
 }
 
 // Run a test161 test.
-func (t *Test) Run(root string, tempRoot string) (err error) {
+func (t *Test) Run(root string) (err error) {
 
 	// Exit status for configuration and initialization failures.
 	t.Status = "aborted"
 
-	if root == "" {
-		return errors.New("test161: run requires a root directory")
+	// Merge in test161 defaults for any missing configuration values
+	err = t.MergeConf(CONF_DEFAULTS)
+	if err != nil {
+		return err
 	}
 
 	// Create temp directory.
-	tempRoot, err = ioutil.TempDir(tempRoot, "test161")
+	tempRoot, err := ioutil.TempDir(t.Misc.TempDir, "test161")
 	if err != nil {
 		return err
 	}
@@ -163,7 +164,7 @@ func (t *Test) Run(root string, tempRoot string) (err error) {
 	}
 
 	// Create disks.
-	if t.Sys161.Disk2.Enabled == "true" {
+	if t.Sys161.Disk1.Enabled == "true" {
 		create := exec.Command("disk161", "create", "LHD0.img", t.Sys161.Disk1.Bytes)
 		create.Dir = t.tempDir
 		err = create.Run()

@@ -4,8 +4,9 @@ import (
 	"bytes"
 	//"errors"
 	"github.com/ericaro/frontmatter"
-	//"github.com/gchallen/expect"
 	"github.com/imdario/mergo"
+	//"github.com/gchallen/expect"
+	//"github.com/imdario/mergo"
 	"io/ioutil"
 	"math/rand"
 	//"regexp"
@@ -39,7 +40,7 @@ type DiskConf struct {
 }
 
 type StatConf struct {
-	Resolution float32 `yaml:"interval" json:"interval"`
+	Resolution float32 `yaml:"resolution" json:"resolution"`
 	Window     uint    `yaml:"window" json:"window"`
 }
 
@@ -59,6 +60,7 @@ type Limits struct {
 type MiscConf struct {
 	CommandRetries uint    `yaml:"commandretries" json:"commandretries"`
 	PromptTimeout  float32 `yaml:"prompttimeout" json:"prompttimeout"`
+	TempDir        string  `yaml:"tempdir" json:"-"`
 }
 
 var CONF_DEFAULTS = Test{
@@ -67,14 +69,14 @@ var CONF_DEFAULTS = Test{
 		RAM:  "1M",
 		Disk1: DiskConf{
 			Enabled: "true",
+			Bytes:   "4M",
 			RPM:     7200,
-			Bytes:   "2M",
 			NoDoom:  "true",
 		},
 		Disk2: DiskConf{
 			Enabled: "false",
-			RPM:     7200,
 			Bytes:   "2M",
+			RPM:     7200,
 			NoDoom:  "false",
 		},
 	},
@@ -97,50 +99,40 @@ var CONF_DEFAULTS = Test{
 	},
 	Misc: MiscConf{
 		CommandRetries: 5,
+		PromptTimeout:  300.0,
 	},
 }
 
 // TestFromFile parses the test file and sets configuration defaults.
-func TestFromFile(filename string, defaults *Test) (*Test, error) {
+func TestFromFile(filename string) (*Test, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
-	return TestFromString(string(data), defaults)
+	return TestFromString(string(data))
 }
 
 // TestFromFile parses the test string and sets configuration defaults.
-func TestFromString(data string, defaults *Test) (*Test, error) {
+func TestFromString(data string) (*Test, error) {
 	test := new(Test)
-
 	err := frontmatter.Unmarshal([]byte(data), test)
 	if err != nil {
 		return nil, err
 	}
-
-	if defaults != nil {
-		err := mergo.Map(&test, defaults)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	err = mergo.Map(&test, CONF_DEFAULTS)
-	if err != nil {
-		return nil, err
-	}
-
 	test.Sys161.Random = rand.Uint32() >> 16
-
-	return test, err
+	return test, nil
 }
 
-const SYS161_TEMPLATE = `0	serial
+func (t *Test) MergeConf(defaults Test) error {
+	return mergo.Map(t, defaults)
+}
+
+const SYS161_TEMPLATE = `0 serial
 1	emufs
 {{if eq .Disk1.Enabled "true"}}
 2	disk rpm={{.Disk1.RPM}} file=LHD0.img {{if eq .Disk1.NoDoom "true"}}nodoom{{end}} # bytes={{.Disk1.Bytes }}
 {{end}}
-{{if eq .Disk1.Enabled "true"}}
+{{if eq .Disk2.Enabled "true"}}
 3	disk rpm={{.Disk2.RPM}} file=LHD1.img {{if eq .Disk2.NoDoom "true"}}nodoom{{end}} # bytes={{.Disk2.Bytes }}
 {{end}}
 28	random seed={{.Random}}
@@ -163,7 +155,7 @@ func (t *Test) PrintConf() (string, error) {
 	var confString string
 	for _, line := range strings.Split(strings.TrimSpace(buffer.String()), "\n") {
 		if strings.TrimSpace(line) != "" {
-			confString += line
+			confString += line + "\n"
 		}
 	}
 	return confString, nil

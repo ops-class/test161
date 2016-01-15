@@ -3,8 +3,8 @@ package test161
 import (
 	"github.com/stretchr/testify/assert"
 	"reflect"
-	"strconv"
-	"strings"
+	//"strconv"
+	//"strings"
 	"testing"
 )
 
@@ -26,8 +26,8 @@ depends:
 
 	assert.Equal(test.Name, "test")
 	assert.NotEqual(test.Description, "")
-	assert.Equal(reflect.DeepEqual(test.Tags, []string{"testing", "test161"}), true)
-	assert.Equal(reflect.DeepEqual(test.Depends, []string{"boot", "shell"}), true)
+	assert.True(reflect.DeepEqual(test.Tags, []string{"testing", "test161"}))
+	assert.True(reflect.DeepEqual(test.Depends, []string{"boot", "shell"}))
 
 }
 
@@ -37,34 +37,11 @@ func TestConfDefaults(t *testing.T) {
 
 	test, err := TestFromString("")
 	assert.Nil(err)
-
-	assert.Equal(test.Conf.CPUs, uint(8))
-	assert.Equal(test.Conf.RAM, strconv.Itoa(1024*1024))
-	assert.Equal(test.Conf.Disk1.Sectors, strconv.Itoa(8000))
-	assert.Equal(test.Conf.Disk1.RPM, uint(7200))
-	assert.Equal(test.Conf.Disk1.NoDoom, "true")
-	assert.Equal(test.Conf.Disk1.File, "LHD0.img")
-	assert.True(strings.HasPrefix(test.Conf.Random, "seed="))
-
-	assert.Equal(test.MonitorConf.Enabled, "true")
-	assert.Equal(test.MonitorConf.Window, float32(2.0))
-	assert.Equal(test.MonitorConf.Resolution, uint(100))
-	assert.Equal(test.MonitorConf.Timeouts.Prompt, uint(5*60))
-	assert.Equal(test.MonitorConf.Timeouts.Progress, uint(60))
-	assert.Equal(test.MonitorConf.Kernel.Min, 0.001)
-	assert.Equal(test.MonitorConf.Kernel.Max, 0.99)
-	assert.Equal(test.MonitorConf.User.Min, 0.0001)
-	assert.Equal(test.MonitorConf.User.Max, 1.0)
-	assert.Equal(test.MonitorConf.CommandRetries, uint(5))
-
-	test, err = TestFromString(`---
-monitor:
-  allstats: true
----
-`)
+	test.Sys161.Random = 0
+	err = test.MergeConf(CONF_DEFAULTS)
 	assert.Nil(err)
 
-	assert.Equal(test.MonitorConf.Resolution, uint(50000))
+	assert.Equal(&CONF_DEFAULTS, test)
 }
 
 func TestConfOverrides(t *testing.T) {
@@ -72,60 +49,85 @@ func TestConfOverrides(t *testing.T) {
 	assert := assert.New(t)
 
 	test, err := TestFromString(`---
-name: override
-conf:
+sys161:
   cpus: 1
   ram: 2M
   disk1:
-    sectors: 10240
+    enabled: false
+    bytes: 4M
     rpm: 14400
     nodoom: false
   disk2:
-    sectors: 1024
-  random: seed=1024
+    enabled: true
+    bytes: 6M
+    rpm: 28800
+    nodoom: true
+stat:
+  resolution: 0.0001
+  window: 100
 monitor:
   enabled: false
-  allstats: true
-  window: 2.5
-  resolution: 2000
+  window: 20
   kernel:
     min: 0.1
     max: 0.8
   user:
     min: 0.2
     max: 0.9
-  timeouts:
-    prompt: 60
-    progress: 30
+  progresstimeout: 20.0
+misc:
   commandretries: 10
+  prompttimeout: 100.0
+  tempdir: "/blah/"
 ---
 `)
-
 	assert.Nil(err)
-	assert.Equal(test.Name, "override")
+	test.Sys161.Random = 0
 
-	assert.Equal(test.Conf.CPUs, uint(1))
-	assert.Equal(test.Conf.RAM, strconv.Itoa(2*1024*1024))
-	assert.Equal(test.Conf.Disk1.Sectors, strconv.Itoa(10240))
-	assert.Equal(test.Conf.Disk1.RPM, uint(14400))
-	assert.Equal(test.Conf.Disk1.NoDoom, "false")
-	assert.Equal(test.Conf.Disk2.Sectors, strconv.Itoa(1024))
-	assert.Equal(test.Conf.Disk2.RPM, uint(7200))
-	assert.Equal(test.Conf.Disk2.NoDoom, "false")
-	assert.Equal(test.Conf.Disk2.File, "LHD1.img")
-	assert.Equal(test.Conf.Random, "seed=1024")
-
-	assert.Equal(test.MonitorConf.Enabled, "false")
-	assert.Equal(test.MonitorConf.AllStats, "true")
-	assert.Equal(test.MonitorConf.Window, float32(2.5))
-	assert.Equal(test.MonitorConf.Resolution, uint(2000))
-	assert.Equal(test.MonitorConf.Timeouts.Prompt, uint(60))
-	assert.Equal(test.MonitorConf.Timeouts.Progress, uint(30))
-	assert.Equal(test.MonitorConf.Kernel.Min, 0.1)
-	assert.Equal(test.MonitorConf.Kernel.Max, 0.8)
-	assert.Equal(test.MonitorConf.User.Min, 0.2)
-	assert.Equal(test.MonitorConf.User.Max, 0.9)
-	assert.Equal(test.MonitorConf.CommandRetries, uint(10))
+	overrides := Test{
+		Sys161: Sys161Conf{
+			CPUs: 1,
+			RAM:  "2M",
+			Disk1: DiskConf{
+				Enabled: "false",
+				Bytes:   "4M",
+				RPM:     14400,
+				NoDoom:  "false",
+			},
+			Disk2: DiskConf{
+				Enabled: "true",
+				Bytes:   "6M",
+				RPM:     28800,
+				NoDoom:  "true",
+			},
+		},
+		Stat: StatConf{
+			Resolution: 0.0001,
+			Window:     100,
+		},
+		Monitor: MonitorConf{
+			Enabled: "false",
+			Window:  20,
+			Kernel: Limits{
+				Min: 0.1,
+				Max: 0.8,
+			},
+			User: Limits{
+				Min: 0.2,
+				Max: 0.9,
+			},
+			ProgressTimeout: 20.0,
+		},
+		Misc: MiscConf{
+			CommandRetries: 10,
+			PromptTimeout:  100.0,
+			TempDir:        "/blah/",
+		},
+	}
+	assert.Equal(&overrides, test)
+	err = test.MergeConf(CONF_DEFAULTS)
+	assert.Nil(err)
+	assert.Equal(&overrides, test)
 }
 
 func TestConfPrintConf(t *testing.T) {
@@ -133,6 +135,8 @@ func TestConfPrintConf(t *testing.T) {
 	assert := assert.New(t)
 
 	test, err := TestFromString("")
+	assert.Nil(err)
+	err = test.MergeConf(CONF_DEFAULTS)
 	assert.Nil(err)
 
 	conf, err := test.PrintConf()

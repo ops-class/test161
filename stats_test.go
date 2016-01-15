@@ -11,9 +11,9 @@ func TestStatsKernelDeadlock(t *testing.T) {
 
 	test, err := TestFromString("dl")
 	assert.Nil(err)
-	test.MonitorConf.Timeouts.Progress = 8
+	test.Monitor.ProgressTimeout = 8.0
 
-	err = test.Run("./fixtures/", "")
+	err = test.Run("./fixtures/")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "monitor")
@@ -29,9 +29,9 @@ func TestStatsKernelLivelock(t *testing.T) {
 
 	test, err := TestFromString("ll16")
 	assert.Nil(err)
-	test.MonitorConf.Timeouts.Progress = 8
+	test.Monitor.ProgressTimeout = 8.0
 
-	err = test.Run("./fixtures/", "")
+	err = test.Run("./fixtures/")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "monitor")
@@ -48,10 +48,10 @@ func TestStatsUserDeadlock(t *testing.T) {
 	test, err := TestFromString("$ /testbin/waiter")
 	assert.Nil(err)
 
-	test.MonitorConf.Kernel.Min = 0.0
-	test.MonitorConf.Timeouts.Prompt = 8
+	test.Monitor.Kernel.Min = 0.0
+	test.Misc.PromptTimeout = 8.0
 
-	err = test.Run("./fixtures/", "")
+	err = test.Run("./fixtures/")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "monitor")
@@ -68,12 +68,12 @@ func TestStatsKernelProgress(t *testing.T) {
 	test, err := TestFromString("ll16")
 	assert.Nil(err)
 
-	test.MonitorConf.Kernel.Min = 0.0
-	test.MonitorConf.Kernel.Max = 1.0
-	test.MonitorConf.Timeouts.Progress = 2
-	test.MonitorConf.Timeouts.Prompt = 60
+	test.Monitor.Kernel.Min = 0.0
+	test.Monitor.Kernel.Max = 1.0
+	test.Monitor.ProgressTimeout = 8.0
+	test.Misc.PromptTimeout = 8.0
 
-	err = test.Run("./fixtures/", "")
+	err = test.Run("./fixtures/")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "monitor")
@@ -90,12 +90,12 @@ func TestStatsUserProgress(t *testing.T) {
 	test, err := TestFromString("$ /testbin/waiter")
 	assert.Nil(err)
 
-	test.MonitorConf.Kernel.Min = 0.0
-	test.MonitorConf.User.Min = 0.0
-	test.MonitorConf.Timeouts.Progress = 2
-	test.MonitorConf.Timeouts.Prompt = 60
+	test.Monitor.Kernel.Min = 0.0
+	test.Monitor.User.Min = 0.0
+	test.Monitor.ProgressTimeout = 2.0
+	test.Misc.PromptTimeout = 60.0
 
-	err = test.Run("./fixtures/", "")
+	err = test.Run("./fixtures/")
 	assert.Nil(err)
 
 	assert.Equal(test.Status, "monitor")
