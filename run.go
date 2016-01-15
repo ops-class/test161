@@ -45,10 +45,10 @@ type Test struct {
 	Misc    MiscConf    `yaml:"misc" json:"misc"`
 
 	// Actual test commands to run
-	Content string `fm:"content" yaml:"-"`
+	Content string `fm:"content" yaml:"-" json:"-"`
 
 	// Big lock that protects most fields shared between Run and getStats
-	L *sync.Mutex
+	L *sync.Mutex `json:"-"`
 
 	// Output
 
@@ -232,8 +232,8 @@ func (t *Test) Run(root string) (err error) {
 		}
 	}
 
-	// Boot environment is blank.
-	currentEnv := ""
+	// Boot environment is the kernel.
+	currentEnv := "kernel"
 
 	// Flag for final pass to grab exit output.
 	finished := false
@@ -268,6 +268,7 @@ func (t *Test) Run(root string) (err error) {
 				}
 				if previousCommand != expectedCommand {
 					rollback = true
+					fmt.Println("RETRY")
 				}
 			}
 
@@ -278,7 +279,7 @@ func (t *Test) Run(root string) (err error) {
 				retryCount += 1
 				if retryCount >= t.Misc.CommandRetries {
 					t.Status = "expect"
-					t.ShutdownMessage = fmt.Sprintf("couldn't echo command after %d retries", t.Misc.CommandRetries)
+					t.ShutdownMessage = fmt.Sprintf("couldn't echo command after %v retries", t.Misc.CommandRetries)
 					t.WallTime = t.getWallTime()
 					t.L.Unlock()
 					return
@@ -312,13 +313,20 @@ func (t *Test) Run(root string) (err error) {
 				commandLine = "s"
 				statMonitor = true
 				bumpedIndex = false
-			} else if string(commandLine[0]) != "$" && currentEnv == "shell" {
+				// This command quickly enters userspace and should be marked as such
+				currentEnv = "user"
+			} else if string(commandLine[0]) != "$" && currentEnv == "user" {
 				commandLine = "exit"
 				statMonitor = false
 				bumpedIndex = false
 			} else {
 				if string(commandLine[0]) == "$" {
-					commandLine = commandLine[1:]
+					commandLine = strings.TrimSpace(commandLine[1:])
+				}
+				// Mark other commands that run in userspace, including "p" which
+				// launches from the kernel menu.
+				if currentEnv == "kernel" && commandLine == "s" || strings.HasPrefix(commandLine, "p ") {
+					currentEnv = "user"
 				}
 				statMonitor = true
 				commandIndex += 1
@@ -329,7 +337,7 @@ func (t *Test) Run(root string) (err error) {
 			// Shutdown cleanly if needed.
 			if currentEnv == "kernel" {
 				commandLine = "q"
-			} else if currentEnv == "shell" {
+			} else if currentEnv == "user" {
 				commandLine = "exit"
 			}
 		}
@@ -400,7 +408,7 @@ func (t *Test) Run(root string) (err error) {
 		if err == expect.ErrTimeout {
 			t.L.Lock()
 			t.Status = "timeout"
-			t.ShutdownMessage = fmt.Sprintf("no prompt for %d s", t.Misc.PromptTimeout)
+			t.ShutdownMessage = fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout)
 			t.WallTime = t.getWallTime()
 			t.L.Unlock()
 			finished = true
@@ -429,13 +437,13 @@ func (t *Test) Run(root string) (err error) {
 		}
 		prompt := match.Groups[0]
 
-		if currentEnv == "" && prompt != KERNEL_PROMPT {
+		if commandLine == "boot" && prompt != KERNEL_PROMPT {
 			// Handle incorrect boot prompt. We shouldn't boot into the shell!
 			return errors.New(fmt.Sprintf("test161: incorrect prompt at boot: %s", prompt))
 		} else if prompt == KERNEL_PROMPT {
 			currentEnv = "kernel"
 		} else if prompt == SHELL_PROMPT {
-			currentEnv = "shell"
+			currentEnv = "user"
 		} else {
 			return errors.New(fmt.Sprintf("test161: found invalid prompt: %s", prompt))
 		}

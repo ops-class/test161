@@ -2,19 +2,12 @@ package test161
 
 import (
 	"bytes"
-	//"errors"
 	"github.com/ericaro/frontmatter"
 	"github.com/imdario/mergo"
-	//"github.com/gchallen/expect"
-	//"github.com/imdario/mergo"
 	"io/ioutil"
 	"math/rand"
-	//"regexp"
-	//"strconv"
 	"strings"
-	//"sync"
 	"text/template"
-	//"unicode"
 )
 
 // Many of the values below that come in from YAML are string types. This
@@ -53,8 +46,9 @@ type MonitorConf struct {
 }
 
 type Limits struct {
-	Min float64 `yaml:"min" json:"min"`
-	Max float64 `yaml:"max" json:"max"`
+	EnableMin string  `yaml:"enablemin" json:"enablemin"`
+	Min       float64 `yaml:"min" json:"min"`
+	Max       float64 `yaml:"max" json:"max"`
 }
 
 type MiscConf struct {
@@ -86,14 +80,16 @@ var CONF_DEFAULTS = Test{
 	},
 	Monitor: MonitorConf{
 		Enabled: "true",
-		Window:  10,
+		Window:  100,
 		Kernel: Limits{
-			Min: 0.001,
-			Max: 0.99,
+			EnableMin: "true",
+			Min:       0.001,
+			Max:       0.99,
 		},
 		User: Limits{
-			Min: 0.0001,
-			Max: 1.0,
+			EnableMin: "true",
+			Min:       0.0001,
+			Max:       1.0,
 		},
 		ProgressTimeout: 10.0,
 	},

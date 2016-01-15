@@ -3,8 +3,6 @@ package test161
 import (
 	"github.com/stretchr/testify/assert"
 	"reflect"
-	//"strconv"
-	//"strings"
 	"testing"
 )
 
@@ -38,8 +36,7 @@ func TestConfDefaults(t *testing.T) {
 	test, err := TestFromString("")
 	assert.Nil(err)
 	test.Sys161.Random = 0
-	err = test.MergeConf(CONF_DEFAULTS)
-	assert.Nil(err)
+	assert.Nil(test.MergeConf(CONF_DEFAULTS))
 
 	assert.Equal(&CONF_DEFAULTS, test)
 }
@@ -69,9 +66,11 @@ monitor:
   enabled: false
   window: 20
   kernel:
+    enablemin: false
     min: 0.1
     max: 0.8
   user:
+    enablemin: false
     min: 0.2
     max: 0.9
   progresstimeout: 20.0
@@ -109,12 +108,14 @@ misc:
 			Enabled: "false",
 			Window:  20,
 			Kernel: Limits{
-				Min: 0.1,
-				Max: 0.8,
+				EnableMin: "false",
+				Min:       0.1,
+				Max:       0.8,
 			},
 			User: Limits{
-				Min: 0.2,
-				Max: 0.9,
+				EnableMin: "false",
+				Min:       0.2,
+				Max:       0.9,
 			},
 			ProgressTimeout: 20.0,
 		},
@@ -125,22 +126,6 @@ misc:
 		},
 	}
 	assert.Equal(&overrides, test)
-	err = test.MergeConf(CONF_DEFAULTS)
-	assert.Nil(err)
+	assert.Nil(test.MergeConf(CONF_DEFAULTS))
 	assert.Equal(&overrides, test)
-}
-
-func TestConfPrintConf(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-
-	test, err := TestFromString("")
-	assert.Nil(err)
-	err = test.MergeConf(CONF_DEFAULTS)
-	assert.Nil(err)
-
-	conf, err := test.PrintConf()
-	assert.Nil(err)
-	assert.NotNil(conf)
-	t.Log(conf)
 }
