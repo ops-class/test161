@@ -156,3 +156,81 @@ func (t *Test) PrintConf() (string, error) {
 	}
 	return confString, nil
 }
+
+func (t *Test) initCommands() {
+	// Set the boot command
+	t.Commands = append(t.Commands, &Command{
+		Type:      "kernel",
+		Monitored: false,
+		Input: &InputLine{
+			Line: "boot",
+		},
+	})
+
+	shutdown = false
+	lastType = "kernel"
+	for _, commandLine := range strings.Split(strings.TrimSpace(t.Content), "\n") {
+		commandLine = strings.TrimSpace(commandLine)
+		if commandLine == "" {
+			return errors.New("test161: found empty command")
+		}
+		if shutdown {
+			return errors.New("test161: found commands after shutdown")
+		}
+		if string(commandLine[0]) == "$" {
+			if lastType == "kernel" {
+				t.Commands = append(t.Commands, &Command{
+					Type:      "user",
+					Monitored: true,
+					Input: &InputLine{
+						Line: "s",
+					},
+				})
+			}
+			monitored = true
+			currentType = "user"
+			commandLine = strings.TrimSpace(commandLine[1:])
+		} else {
+			if lastType == "user" {
+				t.Commands = append(t.Commands, &Command{
+					Type:      "user",
+					Monitored: true,
+					Input: &InputLine{
+						Line: "exit",
+					},
+				})
+			}
+			monitored = (command != "q")
+			currentType = "kernel"
+			if commandLine == "q" {
+				shutdown = true
+			}
+		}
+		t.Commands = append(t.Commands, &Command{
+			Type:      currentType,
+			Monitored: monitored,
+			Input: &InputLine{
+				Line: commandLine,
+			},
+		})
+		lastType = currentType
+	}
+	if !shutdown {
+		if lastType == "user" {
+			t.Commands = append(t.Commands, &Command{
+				Type:      "user",
+				Monitored: true,
+				Input: &InputLine{
+					Line: "exit",
+				},
+			})
+		}
+		t.Commands = append(t.Commands, &Command{
+			Type:      "kernel",
+			Monitored: false,
+			Input: &InputLine{
+				Line: "q",
+			},
+		})
+	}
+}

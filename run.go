@@ -64,15 +64,14 @@ type Test struct {
 	startTime   int64  // Only set once
 	statStarted bool   // Only changed once
 
-	sys161        *expect.Expect // Protected by L
-	progressTime  float64        // Protected by L
-	command       *Command       // Protected by L
-	currentOutput OutputLine     // Protected by L
+	sys161         *expect.Expect // Protected by L
+	progressTime   float64        // Protected by L
+	currentCommand *Command       // Protected by L
+	currentOutput  OutputLine     // Protected by L
 
-	// Fields used by etStats but shared with Run
+	// Fields used by getStats but shared with Run
 	statCond    *sync.Cond // Used by the main loop to wait for stat reception
 	statError   error      // Protected by statCond.L
-	statActive  bool       // Protected by statCond.L
 	statRecord  bool       // Protected by statCond.L
 	statMonitor bool       // Protected by statCond.L
 
@@ -81,14 +80,12 @@ type Test struct {
 }
 
 type Command struct {
-	Counter      uint         `json:"counter"`
-	ID           uint         `json:"-"`
-	Env          string       `json:"env"`
+	Type         string       `json:"type"`
 	Input        InputLine    `json:"input"`
 	Output       []OutputLine `json:"output"`
 	SummaryStats Stat         `json:"summarystats"`
 	AllStats     []Stat       `json:"stats"`
-	Retries      uint         `json:"retries"`
+	Monitored    bool         `json:"monitored"`
 }
 
 type InputLine struct {
@@ -181,6 +178,13 @@ func (t *Test) Run(root string) (err error) {
 		}
 	}
 
+	// Check for empty commands and expand syntatic sugar before getting
+	// started. Doing this first makes the main loop and retry logic simpler.
+	err = t.initCommands()
+	if err != nil {
+		return err
+	}
+
 	// Serialize the current command state.
 	t.L = &sync.Mutex{}
 
@@ -191,268 +195,126 @@ func (t *Test) Run(root string) (err error) {
 	// Initialize stat channel. Closed by getStats
 	t.statChan = make(chan Stat)
 
-	// Record stats during boot, but don't active the monitor.
+	// Record stats during boot, but don't activate the monitor.
 	t.statRecord = true
 	t.statMonitor = false
 
 	// Wait for either kernel or user prompts.
 	prompts := regexp.MustCompile(PROMPT_PATTERN)
 
-	// Parse commands and counters:
-	//
-	// 		commandIndex: holds the index into the commands array and usually the
-	// 		current command. -1 means boot and len(commands) means we are in the
-	// 		shutdown sequence.
-	//
-	//    commandCounter: monotonically-increasing command counter. Not
-	//    increased when commands are repeated due to output mismatches. Used
-	//    for output indexing.
-	//
-	//		commandID: monotonically-increasing command counter that _does_ bump
-	//		when we repeat commands. Shared wiht getStats for command
-	//		identification.
-	//
-	// Note that a zero-length commands string is legitimate, causing boot and
-	// immediate shutdown.
-	commands := strings.Split(strings.TrimSpace(t.Content), "\n")
-	commandIndex := BOOT
-	commandCounter := BOOT
-	commandID := BOOT
+	// Set up the current command to point at boot
+	t.currentCommand = &t.Commands[0]
 
-	// We increased the index during the last time through
-	bumpedIndex := false
-	// Retry count for failed commands
-	retryCount := uint(0)
-
-	// Check for empty commands before starting sys161.
-	for _, command := range commands {
-		command = strings.TrimSpace(command)
-		if command == "" {
-			return errors.New("test161: found empty command")
-		}
+	// Start sys161 and defer close.
+	err = t.start161()
+	if err != nil {
+		return err
 	}
+	defer t.stop161()
 
-	// Boot environment is the kernel.
-	currentEnv := "kernel"
+	for commandCounter, _ := range t.Commands {
+		if commandCounter != 0 {
+			err = t.sendCommand(t.currentCommand.InputLine.Line + "\n")
+			if err != nil {
+				t.finish("expect", "couldn't send a command")
+				return nil
+			}
+			err = t.enableStats()
+			if err != nil {
+				t.finish("stats", "stats error")
+				return nil
+			}
+		}
 
-	// Flag for final pass to grab exit output.
-	finished := false
+		if commandCounter == len(t.Commands)-1 {
+			t.sys161.ExpectEOF()
+			t.finish("shutdown", "")
+			return nil
+		} else {
+			prompt, expectErr := t.sys161.ExpectRegexp(prompts)
+			err = t.disableStats()
+			if err != nil {
+				t.finish("stats", "stats error")
+				return nil
+			}
+		}
 
-	// Main command loop. Note that sys161 is not started until the first time
-	// through, and the loop completes in the middle to mop up output from
-	// previous commands.
-	for {
-		var commandLine string
-		var statMonitor bool
+		// Handle timeouts, unexpected shutdowns, and other errors
+		if expectErr == expect.ErrTimeout {
+			t.finish("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
+			return nil
+		} else if err == io.EOF {
+			t.finish("crash", "")
+			return nil
+		} else if err != nil {
+			t.finish("expect", "")
+			return nil
+		}
 
 		// Rotate running command to the next command, saving any previous
 		// output as needed.
 		t.L.Lock()
-		if t.command != nil {
-			if t.currentOutput.WallTime != 0.0 {
-				t.currentOutput.Line = t.currentOutput.Buffer.String()
-				t.command.Output = append(t.command.Output, t.currentOutput)
-			}
-
-			// We work hard to make sure that the previous command actually got
-			// executed by comparing the expect output with what we send it. Sadly,
-			// this does happen, particularly during parallel testing. No idea why.
-			previousCommand := strings.TrimSpace(t.command.Input.Line)
-			var expectedCommand string
-
-			rollback := false
-			if previousCommand != "boot" && !finished {
-				// Did we get any output?
-				if len(t.command.Output) > 0 {
-					expectedCommand = strings.TrimSpace(t.command.Output[0].Line)
-				}
-				if previousCommand != expectedCommand {
-					rollback = true
-				}
-			}
-
-			if !rollback {
-				t.Commands = append(t.Commands, *t.command)
-				retryCount = 0
-			} else {
-				retryCount += 1
-				if retryCount >= t.Misc.CommandRetries {
-					t.Status = "expect"
-					t.ShutdownMessage = fmt.Sprintf("couldn't echo command after %v retries", t.Misc.CommandRetries)
-					t.WallTime = t.getWallTime()
-					t.L.Unlock()
-					return
-				}
-
-				if bumpedIndex {
-					commandIndex -= 1
-				}
-				commandCounter -= 1
-			}
-			t.currentOutput = OutputLine{}
+		if t.currentOutput.WallTime != 0.0 {
+			t.currentOutput.Line = t.currentOutput.Buffer.String()
+			t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
 		}
-
-		// Grab the next command, bumping counters as appropriate.
-		if finished {
-			// Shutdowns exit here after we save the previous output.
-			t.L.Unlock()
-			return nil
-		} else if commandIndex == BOOT {
-			commandLine = "boot"
-			commandIndex += 1
-			// Don't set bumpedIndex here since we're in boot
-		} else if commandIndex < len(commands) {
-			commandLine = strings.TrimSpace(commands[commandIndex])
-
-			// Handle testfile syntatic sugar by getting back and forth to the menu
-			// or shell. Added commands don't bump the commandIndex. If the command
-			// fails the environment should stay the same and we'll retry
-			// automatically.
-			if string(commandLine[0]) == "$" && currentEnv == "kernel" {
-				commandLine = "s"
-				statMonitor = true
-				bumpedIndex = false
-				// This command quickly enters userspace and should be marked as such
-				currentEnv = "user"
-			} else if string(commandLine[0]) != "$" && currentEnv == "user" {
-				commandLine = "exit"
-				statMonitor = false
-				bumpedIndex = false
-			} else {
-				if string(commandLine[0]) == "$" {
-					commandLine = strings.TrimSpace(commandLine[1:])
-				}
-				// Mark other commands that run in userspace, including "p" which
-				// launches from the kernel menu.
-				if currentEnv == "kernel" && commandLine == "s" || strings.HasPrefix(commandLine, "p ") {
-					currentEnv = "user"
-				}
-				statMonitor = true
-				commandIndex += 1
-				bumpedIndex = true
-			}
-		} else {
-			statMonitor = false
-			// Shutdown cleanly if needed.
-			if currentEnv == "kernel" {
-				commandLine = "q"
-			} else if currentEnv == "user" {
-				commandLine = "exit"
-			}
-		}
-		// Shutdown the monitor during shutdown
-		if currentEnv == "kernel" && commandLine == "q" {
-			statMonitor = false
-		}
-
-		// Bump counters
-		commandCounter += 1
-		commandID += 1
-
-		t.command = &Command{
-			Counter: uint(commandCounter),
-			ID:      uint(commandID),
-			Env:     currentEnv,
-			Input:   InputLine{WallTime: t.getWallTime(), SimTime: t.SimTime, Line: commandLine},
-			Retries: retryCount,
-		}
+		t.currentOutput = OutputLine{}
+		t.currentCommand = &t.Commands[commandCounter+1]
 		t.L.Unlock()
 
-		if t.Status == "aborted" {
-			// Start sys161 if needed and defer Close.
-			err = t.start161()
-			if err != nil {
-				return err
-			}
-			defer t.stop161()
-		} else {
-			// Send the command. To start as cleanly as possible, we transmit
-			// everything but the newline, wait for a stat signal, and then run the
-			// command. With the exception of boot stat collection is disabled at this
-			// point due to code below.
-			err = t.sys161.Send(commandLine)
-			if err != nil {
-				return err
-			}
-
-			// Flip on stat monitoring (except during shutdown) and stat recording
-			// always.
-			t.statCond.L.Lock()
-			t.statMonitor = statMonitor
-			t.statRecord = true
-
-			// Wait for stat signal (and check for stat errors)...
-			if t.statActive {
-				t.statCond.Wait()
-			}
-			err = t.statError
-			t.statCond.L.Unlock()
-			if err != nil {
-				return err
-			}
-
-			// Now go!
-			t.sys161.Send("\n")
-		}
-		match, expectErr := t.sys161.ExpectRegexp(prompts)
-
-		// Disable stat recording and monitoring (and check for stat errors).
-		t.statCond.L.Lock()
-		t.statRecord = false
-		t.statMonitor = false
-		err = t.statError
-		t.statCond.L.Unlock()
-		if err != nil {
-			return err
-		}
-
-		// Handle timeouts, unexpected shutdowns, and other errors
-		err = expectErr
-		if err == expect.ErrTimeout {
-			t.L.Lock()
-			t.Status = "timeout"
-			t.ShutdownMessage = fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout)
-			t.WallTime = t.getWallTime()
-			t.L.Unlock()
-			finished = true
-			continue
-		} else if err == io.EOF {
-			t.L.Lock()
-			// Triggered normally or not?
-			if t.Status == "started" {
-				if currentEnv == "kernel" && commandLine == "q" {
-					t.Status = "shutdown"
-				} else {
-					t.Status = "crash"
-				}
-			}
-			t.WallTime = t.getWallTime()
-			t.L.Unlock()
-			finished = true
-			continue
-		} else if err != nil {
-			return err
-		}
-
-		// Parse the prompt to set the environment
+		// Check the prompt against the expected environment
 		if len(match.Groups) != 2 {
-			return errors.New("test161: prompt didn't match")
+			t.finish("expect", "prompt didn't match")
+			return nil
 		}
 		prompt := match.Groups[0]
 
-		if commandLine == "boot" && prompt != KERNEL_PROMPT {
-			// Handle incorrect boot prompt. We shouldn't boot into the shell!
-			return errors.New(fmt.Sprintf("test161: incorrect prompt at boot: %s", prompt))
-		} else if prompt == KERNEL_PROMPT {
-			currentEnv = "kernel"
-		} else if prompt == SHELL_PROMPT {
-			currentEnv = "user"
+		if prompt == KERNEL_PROMPT {
+			if t.currentCommand.Type != "kernel" {
+				t.finish("expect", "prompt doesn't match kernel environment")
+			}
+		} else if prompt == USER_PROMPT {
+			if t.currentCommand.Type != "user" {
+				t.finish("expect", "prompt doesn't match user environment")
+			}
 		} else {
-			return errors.New(fmt.Sprintf("test161: found invalid prompt: %s", prompt))
+			t.finish("expect", "found invalid prompt: %s", prompt)
+			return nil
 		}
 	}
 	return nil
 }
+
+// sendCommand sends a command persistently. All the retry logic to deal with
+// dropped characters is now here.
+func (t *Test) sendCommand(commandLine string, retryLimit int) error {
+	t.sys161.SetTimeout(time.Second)
+	defer t.sys161.SetTimeout(time.Duration(t.Misc.PromptTimeout) * time.Second)
+
+	for _, character := range commandLine {
+		for retryCount := 0; retryCount < retryLimit; retryCount++ {
+			err := t.sys161.Send(character)
+			if err {
+				return err
+			}
+			_, err := t.sys161.ExpectRegexp(regexp.QuoteMeta(character))
+			if err == nil {
+				break
+			} else if err == expect.ErrTimeout {
+				continue
+			} else {
+				return err
+			}
+		}
+		if retryCount == retryLimit {
+			return errors.New("test161: timeout sending command")
+		}
+	}
+
+	return nil
+}
+
+// Lifecycle functions
 
 // start161 is a private helper function to start the sys161 expect process.
 // This makes the main loop a bit cleaner.
@@ -477,6 +339,18 @@ func (t *Test) start161() error {
 	}
 	t.L.Unlock()
 	return nil
+}
+
+// start161 is a private helper function to stop the sys161 expect process.
+// Defered to the end of Run.
+func (t *Test) finish(status string, shutdownMessage string) {
+	t.L.Lock()
+	if t.Status == "" {
+		t.Status = status
+		t.ShutdownMessage = shutdownMessage
+	}
+	t.WallTime = t.getWallTime()
+	t.L.Unlock()
 }
 
 // start161 is a private helper function to stop the sys161 expect process.

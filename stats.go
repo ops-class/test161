@@ -130,15 +130,9 @@ func (t *Test) stopStats(Status string, ShutdownMessage string) {
 	if Status != "" && t.Status != "" {
 		t.Status = Status
 		t.ShutdownMessage = ShutdownMessage
-		t.sys161.Killer()
 	}
 	t.L.Unlock()
-
-	// Pulse the CV to free the main loop.
-	t.statCond.L.Lock()
-	t.statActive = false
-	t.statCond.Signal()
-	t.statCond.L.Unlock()
+	t.sys161.Killer()
 }
 
 // getStats is the main stats collection and monitor goroutine.
@@ -199,9 +193,8 @@ func (t *Test) getStats() {
 		// Pulse the CV to free the main loop if needed and update our recording
 		// and monitoring flags
 		t.statCond.L.Lock()
-		t.statActive = true
 		statRecord := t.statRecord
-		statMonitor := t.statMonitor
+		statMonitor := t.currentCommand.Monitor
 		t.statCond.Signal()
 		t.statCond.L.Unlock()
 
@@ -328,4 +321,22 @@ func (t *Test) getStats() {
 			}
 		}
 	}
+}
+
+// enableStats turns on stats collection
+func (t *Test) enableStats() {
+	t.statCond.L.Lock()
+	defer t.statCond.L.Unlock()
+	t.statRecord = true
+	t.statMonitor = t.currentCommand.Monitor
+	t.statCond.Wait()
+	return t.statError
+}
+
+// enableStats disables stats collection
+func (t *Test) disableStats() {
+	t.statCond.L.Lock()
+	defer t.statCond.L.Unlock()
+	t.statRecord = false
+	return t.statError
 }
