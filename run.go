@@ -240,13 +240,13 @@ func (t *Test) Run(root string) (err error) {
 		if int(t.commandCounter) == len(t.Commands)-1 {
 			t.sys161.ExpectEOF()
 			t.addStatus("shutdown", "")
-			return nil
+			break
 		}
-		match, expectErr := t.sys161.ExpectRegexp(prompts)
+		_, err := t.sys161.ExpectRegexp(prompts)
 		t.disableStats()
 
 		// Handle timeouts, unexpected shutdowns, and other errors
-		if expectErr == expect.ErrTimeout {
+		if err == expect.ErrTimeout {
 			t.addStatus("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
 			return nil
 		} else if err == io.EOF {
@@ -268,26 +268,6 @@ func (t *Test) Run(root string) (err error) {
 		t.commandCounter++
 		t.currentCommand = &t.Commands[t.commandCounter]
 		t.L.Unlock()
-
-		// Check the prompt against the expected environment
-		if len(match.Groups) != 2 {
-			t.addStatus("expect", "prompt didn't match")
-			return nil
-		}
-		prompt := match.Groups[0]
-
-		if prompt == KERNEL_PROMPT {
-			if t.currentCommand.Type != "kernel" {
-				t.addStatus("expect", "prompt doesn't match kernel environment")
-			}
-		} else if prompt == SHELL_PROMPT {
-			if t.currentCommand.Type != "user" {
-				t.addStatus("expect", "prompt doesn't match user environment")
-			}
-		} else {
-			t.addStatus("expect", fmt.Sprintf("found invalid prompt: %s", prompt))
-			return nil
-		}
 	}
 	return nil
 }
@@ -297,7 +277,7 @@ func (t *Test) Run(root string) (err error) {
 func (t *Test) sendCommand(commandLine string) error {
 
 	// Temporarily lower the expect timeout.
-	t.sys161.SetTimeout(time.Duration(t.Misc.CharacterTimeout) * time.Second)
+	t.sys161.SetTimeout(time.Duration(t.Misc.CharacterTimeout) * time.Millisecond)
 	defer t.sys161.SetTimeout(time.Duration(t.Misc.PromptTimeout) * time.Second)
 
 	for _, character := range commandLine {
@@ -348,6 +328,7 @@ func (t *Test) start161() error {
 }
 
 func (t *Test) stop161() {
+	t.Commands = t.Commands[0 : t.commandCounter+1]
 	t.WallTime = t.getWallTime()
 	t.sys161.Close()
 }

@@ -98,7 +98,7 @@ var CONF_DEFAULTS = Test{
 	Misc: MiscConf{
 		CommandRetries:   5,
 		PromptTimeout:    300.0,
-		CharacterTimeout: 0.1,
+		CharacterTimeout: 100,
 	},
 }
 
@@ -207,7 +207,11 @@ func (t *Test) initCommands() error {
 				})
 			}
 			monitored = (commandLine != "q")
-			currentType = "kernel"
+			if commandLine[0:1] == "p " {
+				currentType = "user"
+			} else {
+				currentType = "kernel"
+			}
 			if commandLine == "q" {
 				shutdown = true
 			}
