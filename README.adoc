@@ -119,10 +119,11 @@ running in kernel mode, which could be caused by a hung progress.
 
 == TODOs
 
+=== Nits
+
 * Handle missing newline correctly. Test with shll for lossy shell support.
 * Configuration sanity checks
 * sys161 version checks
-* Split total and active simulation time
 
 === Running multiple tests and dependencies
 
@@ -150,3 +151,8 @@ fine-grained, just a sense of whether the test(s) completely successfully and
 didn't panic. I'm working on standardizing the OS/161 test output to make
 this easier so that every test prints a SUCCESS or FAILURE message on exit,
 but we still need to grab panics.
+
+=== Support for GDB backtraces on error
+
+It should be possible to automate the process of hooking up a debugger and
+running BT on panics.
