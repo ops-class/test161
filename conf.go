@@ -80,7 +80,7 @@ var CONF_DEFAULTS = Test{
 	},
 	Monitor: MonitorConf{
 		Enabled: "true",
-		Window:  100,
+		Window:  400,
 		Kernel: Limits{
 			EnableMin: "true",
 			Min:       0.001,

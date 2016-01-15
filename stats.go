@@ -284,9 +284,6 @@ func (t *Test) getStats() {
 		}
 		monitorCache = append(monitorCache, stats)
 		monitorWindow.Append(stats)
-		if uint(len(monitorCache)) < t.Monitor.Window {
-			continue
-		}
 
 		// Begin checks for various error conditions. No real rhyme or reason to
 		// the order here. We could return multiple errors but that would be a bit
@@ -295,19 +292,23 @@ func (t *Test) getStats() {
 		if progressTime > float64(t.Monitor.ProgressTimeout) {
 			monitorError =
 				fmt.Sprintf("no progress for %v s in %v mode", t.Monitor.ProgressTimeout, currentEnv)
-		} else if currentEnv == "kernel" && monitorWindow.User > 0 {
-			monitorError = "non-zero user cycles during kernel operation"
-		} else if t.Monitor.Kernel.EnableMin == "true" &&
-			float64(monitorWindow.Kern)/float64(monitorWindow.Cycles) < t.Monitor.Kernel.Min {
-			monitorError = "insufficient kernel cycles (potential deadlock)"
-		} else if float64(monitorWindow.Kern)/float64(monitorWindow.Cycles) > t.Monitor.Kernel.Max {
-			monitorError = "too many kernel cycles (potential livelock)"
-		} else if currentEnv == "user" && t.Monitor.User.EnableMin == "true" &&
-			(float64(monitorWindow.User)/float64(monitorWindow.Cycles) < t.Monitor.User.Min) {
-			monitorError = "insufficient user cycles"
-		} else if currentEnv == "user" &&
-			(float64(monitorWindow.User)/float64(monitorWindow.Cycles) > t.Monitor.User.Max) {
-			monitorError = "too many user cycles"
+		}
+		// Only run these checks if we have enough state
+		if uint(len(monitorCache)) >= t.Monitor.Window {
+			if currentEnv == "kernel" && monitorWindow.User > 0 {
+				monitorError = "non-zero user cycles during kernel operation"
+			} else if t.Monitor.Kernel.EnableMin == "true" &&
+				float64(monitorWindow.Kern)/float64(monitorWindow.Cycles) < t.Monitor.Kernel.Min {
+				monitorError = "insufficient kernel cycles (potential deadlock)"
+			} else if float64(monitorWindow.Kern)/float64(monitorWindow.Cycles) > t.Monitor.Kernel.Max {
+				monitorError = "too many kernel cycles (potential livelock)"
+			} else if currentEnv == "user" && t.Monitor.User.EnableMin == "true" &&
+				(float64(monitorWindow.User)/float64(monitorWindow.Cycles) < t.Monitor.User.Min) {
+				monitorError = "insufficient user cycles"
+			} else if currentEnv == "user" &&
+				(float64(monitorWindow.User)/float64(monitorWindow.Cycles) > t.Monitor.User.Max) {
+				monitorError = "too many user cycles"
+			}
 		}
 
 		// Before we blow up check to make sure that we haven't moved on to a

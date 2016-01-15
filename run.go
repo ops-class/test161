@@ -9,8 +9,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/gchallen/expect"
 	"github.com/kr/pty"
+	"github.com/ops-class/test161/expect"
 	"github.com/termie/go-shutil"
 	"io"
 	"io/ioutil"
@@ -268,7 +268,6 @@ func (t *Test) Run(root string) (err error) {
 				}
 				if previousCommand != expectedCommand {
 					rollback = true
-					fmt.Println("RETRY")
 				}
 			}
 
@@ -341,17 +340,21 @@ func (t *Test) Run(root string) (err error) {
 				commandLine = "exit"
 			}
 		}
+		// Shutdown the monitor during shutdown
+		if currentEnv == "kernel" && commandLine == "q" {
+			statMonitor = false
+		}
+
+		// Bump counters
 		commandCounter += 1
 		commandID += 1
 
-		if !finished {
-			t.command = &Command{
-				Counter: uint(commandCounter),
-				ID:      uint(commandID),
-				Env:     currentEnv,
-				Input:   InputLine{WallTime: t.getWallTime(), SimTime: t.SimTime, Line: commandLine},
-				Retries: retryCount,
-			}
+		t.command = &Command{
+			Counter: uint(commandCounter),
+			ID:      uint(commandID),
+			Env:     currentEnv,
+			Input:   InputLine{WallTime: t.getWallTime(), SimTime: t.SimTime, Line: commandLine},
+			Retries: retryCount,
 		}
 		t.L.Unlock()
 
@@ -463,7 +466,9 @@ func (t *Test) start161() error {
 	killer := func() {
 		run.Process.Kill()
 	}
-	t.sys161 = expect.Create(pty, killer, t)
+	// Set timeout at create. Otherwise expect uses a ridiculous value and we
+	// can hang with early failures.
+	t.sys161 = expect.Create(pty, killer, t, time.Duration(t.Misc.PromptTimeout)*time.Second)
 	t.startTime = time.Now().UnixNano()
 	t.sys161.SetTimeout(time.Duration(t.Misc.PromptTimeout) * time.Second)
 	t.L.Lock()

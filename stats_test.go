@@ -65,7 +65,7 @@ func TestStatsUserDeadlock(t *testing.T) {
 	test, err := TestFromString("$ /testbin/waiter")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	test.Monitor.Kernel.Min = 0.0
+	test.Monitor.Kernel.EnableMin = "false"
 	test.Misc.PromptTimeout = 8.0
 	assert.Nil(test.Run("./fixtures/"))
 
@@ -91,7 +91,7 @@ func TestStatsKernelProgress(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	test, err := TestFromString("ll16")
+	test, err := TestFromString("ll1")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Kernel.EnableMin = "false"
@@ -105,7 +105,7 @@ func TestStatsKernelProgress(t *testing.T) {
 		assert.Equal(test.Commands[0].Env, "kernel")
 		assert.Equal(test.Commands[0].Input.Line, "boot")
 		assert.Equal(test.Commands[1].Env, "kernel")
-		assert.Equal(test.Commands[1].Input.Line, "ll16")
+		assert.Equal(test.Commands[1].Input.Line, "ll1")
 	}
 
 	assert.Equal(test.Status, "monitor")

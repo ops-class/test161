@@ -1,7 +1,7 @@
 package test161
 
 import (
-	"github.com/gchallen/expect"
+	"github.com/ops-class/test161/expect"
 	"regexp"
 	"time"
 )

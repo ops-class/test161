@@ -84,6 +84,7 @@ func TestRunPanic(t *testing.T) {
 	test, err := TestFromString("panic")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.Enabled = "false"
 	assert.Nil(test.Run("./fixtures/"))
 
 	assert.Equal(len(test.Commands), 2)
