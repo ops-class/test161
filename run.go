@@ -70,8 +70,10 @@ type Test struct {
 
 	// Fields used by getStats but shared with Run
 	statCond    *sync.Cond // Used by the main loop to wait for stat reception
-	statRecord  bool       // Protected by statCond.L
-	statMonitor bool       // Protected by statCond.L
+	statActive  bool
+	statErr     error
+	statRecord  bool // Protected by statCond.L
+	statMonitor bool // Protected by statCond.L
 
 	// Output channels
 	statChan chan Stat // Nonblocking write
@@ -215,6 +217,7 @@ func (t *Test) Run(root string) (err error) {
 		t.addStatus("aborted", "")
 		return err
 	}
+	t.statActive = true
 	defer t.stop161()
 	t.addStatus("started", "")
 
@@ -223,29 +226,33 @@ func (t *Test) Run(root string) (err error) {
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
 			if err != nil {
 				t.addStatus("expect", "couldn't send a command")
-				return nil
+				return err
 			}
-			t.enableStats()
+			statActive, err := t.enableStats()
+			if !statActive {
+				return err
+			}
 		}
-
 		if int(t.commandCounter) == len(t.Commands)-1 {
 			t.sys161.ExpectEOF()
-			t.addStatus("shutdown", "")
-			break
+			t.addStatus("shutdown", "normal shutdown")
+			return nil
 		}
-		_, err := t.sys161.ExpectRegexp(prompts)
-		t.disableStats()
+		_, expectErr := t.sys161.ExpectRegexp(prompts)
+		statActive, statErr := t.disableStats()
 
 		// Handle timeouts, unexpected shutdowns, and other errors
-		if err == expect.ErrTimeout {
+		if expectErr == expect.ErrTimeout {
 			t.addStatus("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
 			return nil
-		} else if err == io.EOF {
-			t.addStatus("crash", "")
+		} else if expectErr == io.EOF {
+			t.addStatus("shutdown", "unexpected shutdown")
 			return nil
-		} else if err != nil {
+		} else if expectErr != nil {
 			t.addStatus("expect", "")
-			return nil
+			return expectErr
+		} else if !statActive {
+			return statErr
 		}
 
 		// Rotate running command to the next command, saving any previous

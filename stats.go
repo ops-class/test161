@@ -117,27 +117,40 @@ func (i *Stat) Shift(j Stat) {
 }
 
 // stopStats disables stats collection.
-func (t *Test) stopStats(status string, message string) {
-	t.addStatus(status, message)
+func (t *Test) stopStats(status string, message string, statErr error) {
+	if status != "" {
+		t.addStatus(status, message)
+	}
 	t.stop161()
+	t.statCond.L.Lock()
+	defer t.statCond.L.Unlock()
+	t.statErr = statErr
+	t.statActive = false
+	t.statCond.Signal()
 }
 
 // getStats is the main stats collection and monitor goroutine.
 func (t *Test) getStats() {
 	defer close(t.statChan)
 
+	// Mark started
+	t.statCond.L.Lock()
+	t.statActive = true
+	t.statCond.L.Unlock()
+
 	// Connect to the sys161 stats socket.
 	var statConn net.Conn
 	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
 	if err != nil {
-		t.stopStats("stats", "couldn't connect")
+		t.stopStats("stats", "couldn't connect", err)
 	}
 
 	// Configure stat interval.
 	_, err =
 		statConn.Write([]byte(fmt.Sprintf("INTERVAL %v\n", uint32(t.Stat.Resolution*1000*1000*1000))))
 	if err != nil {
-		t.stopStats("stats", "couldn't set interval")
+		t.stopStats("stats", "couldn't set interval", err)
+		return
 	}
 
 	// Set up previous stat values and timestamps for diffs.
@@ -162,9 +175,10 @@ func (t *Test) getStats() {
 		// Grab a stat message.
 		line, err := statReader.ReadString('\n')
 		if err == io.EOF {
+			t.stopStats("", "", nil)
 			return
 		} else if err != nil {
-			t.stopStats("stats", "problem reading stats")
+			t.stopStats("stats", "problem reading stats", err)
 			return
 		}
 		// Set the timestamp
@@ -303,25 +317,34 @@ func (t *Test) getStats() {
 				blowup = blowup && (currentCounter == t.commandCounter)
 				t.L.Unlock()
 				if blowup {
-					t.stopStats("monitor", monitorError)
+					t.stopStats("monitor", monitorError, nil)
+					return
 				}
 			}
 		}
 	}
 }
 
-// enableStats turns on stats collection
-func (t *Test) enableStats() {
+// enableStats enables stats collection
+func (t *Test) enableStats() (bool, error) {
 	t.statCond.L.Lock()
+	defer t.statCond.L.Unlock()
+	if !t.statActive {
+		return false, t.statErr
+	}
 	t.statRecord = true
 	t.statMonitor = t.currentCommand.Monitored
 	t.statCond.Wait()
-	t.statCond.L.Unlock()
+	return true, nil
 }
 
-// enableStats disables stats collection
-func (t *Test) disableStats() {
+// disableStats disables stats collection
+func (t *Test) disableStats() (bool, error) {
 	t.statCond.L.Lock()
+	defer t.statCond.L.Unlock()
+	if !t.statActive {
+		return false, t.statErr
+	}
 	t.statRecord = false
-	t.statCond.L.Unlock()
+	return true, nil
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -44,6 +45,7 @@ func TestRunBoot(t *testing.T) {
 	if len(test.Status) == 2 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "shutdown")
+		assert.True(strings.HasPrefix(test.Status[1].Message, "normal"))
 	}
 
 	t.Log(test.OutputJSON())
@@ -77,6 +79,7 @@ func TestRunShell(t *testing.T) {
 	if len(test.Status) == 2 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "shutdown")
+		assert.True(strings.HasPrefix(test.Status[1].Message, "normal"))
 	}
 
 	t.Log(test.OutputJSON())
@@ -104,7 +107,8 @@ func TestRunPanic(t *testing.T) {
 	assert.Equal(len(test.Status), 2)
 	if len(test.Status) == 2 {
 		assert.Equal(test.Status[0].Status, "started")
-		assert.Equal(test.Status[1].Status, "crash")
+		assert.Equal(test.Status[1].Status, "shutdown")
+		assert.True(strings.HasPrefix(test.Status[1].Message, "unexpected"))
 	}
 
 	t.Log(test.OutputJSON())
@@ -143,6 +147,7 @@ func TestRunShll(t *testing.T) {
 	if len(test.Status) == 2 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "shutdown")
+		assert.True(strings.HasPrefix(test.Status[1].Message, "normal"))
 	}
 
 	t.Log(test.OutputJSON())
