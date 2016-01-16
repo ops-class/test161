@@ -226,11 +226,12 @@ func (t *Test) Run(root string) (err error) {
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
 			if err != nil {
 				t.addStatus("expect", "couldn't send a command")
-				return err
+				break
 			}
-			statActive, err := t.enableStats()
+			statActive, statErr := t.enableStats()
 			if !statActive {
-				return err
+				err = statErr
+				break
 			}
 		}
 		if int(t.commandCounter) == len(t.Commands)-1 {
@@ -238,21 +239,23 @@ func (t *Test) Run(root string) (err error) {
 			t.addStatus("shutdown", "normal shutdown")
 			return nil
 		}
-		_, expectErr := t.sys161.ExpectRegexp(prompts)
+		match, expectErr := t.sys161.ExpectRegexp(prompts)
 		statActive, statErr := t.disableStats()
 
 		// Handle timeouts, unexpected shutdowns, and other errors
 		if expectErr == expect.ErrTimeout {
 			t.addStatus("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
-			return nil
-		} else if expectErr == io.EOF {
+			break
+		} else if expectErr == io.EOF || len(match.Groups) == 0 {
 			t.addStatus("shutdown", "unexpected shutdown")
-			return nil
+			break
 		} else if expectErr != nil {
 			t.addStatus("expect", "")
-			return expectErr
+			err = expectErr
+			break
 		} else if !statActive {
-			return statErr
+			err = statErr
+			break
 		}
 
 		// Rotate running command to the next command, saving any previous
@@ -267,38 +270,45 @@ func (t *Test) Run(root string) (err error) {
 		t.currentCommand = &t.Commands[t.commandCounter]
 		t.L.Unlock()
 	}
-	return nil
+
+	t.Commands = t.Commands[0 : t.commandCounter+1]
+	return err
 }
 
 // sendCommand sends a command persistently. All the retry logic to deal with
 // dropped characters is now here.
 func (t *Test) sendCommand(commandLine string) error {
 
-	// Temporarily lower the expect timeout.
-	t.sys161.SetTimeout(time.Duration(t.Misc.CharacterTimeout) * time.Millisecond)
-	defer t.sys161.SetTimeout(time.Duration(t.Misc.PromptTimeout) * time.Second)
+	// If t.Misc.CharacterTimeout is set to zero disable the character retry
+	// logic
 
-	for _, character := range commandLine {
-		retryCount := uint(0)
-		for ; retryCount < t.Misc.CommandRetries; retryCount++ {
-			err := t.sys161.Send(string(character))
-			if err != nil {
-				return err
+	if t.Misc.CharacterTimeout == 0 {
+	} else {
+		// Temporarily lower the expect timeout.
+		t.sys161.SetTimeout(time.Duration(t.Misc.CharacterTimeout) * time.Millisecond)
+		defer t.sys161.SetTimeout(time.Duration(t.Misc.PromptTimeout) * time.Second)
+
+		for _, character := range commandLine {
+			retryCount := uint(0)
+			for ; retryCount < t.Misc.CommandRetries; retryCount++ {
+				err := t.sys161.Send(string(character))
+				if err != nil {
+					return err
+				}
+				_, err = t.sys161.ExpectRegexp(regexp.MustCompile(regexp.QuoteMeta(string(character))))
+				if err == nil {
+					break
+				} else if err == expect.ErrTimeout {
+					continue
+				} else {
+					return err
+				}
 			}
-			_, err = t.sys161.ExpectRegexp(regexp.MustCompile(regexp.QuoteMeta(string(character))))
-			if err == nil {
-				break
-			} else if err == expect.ErrTimeout {
-				continue
-			} else {
-				return err
+			if retryCount == t.Misc.CommandRetries {
+				return errors.New("test161: timeout sending command")
 			}
-		}
-		if retryCount == t.Misc.CommandRetries {
-			return errors.New("test161: timeout sending command")
 		}
 	}
-
 	return nil
 }
 
@@ -326,7 +336,6 @@ func (t *Test) start161() error {
 }
 
 func (t *Test) stop161() {
-	t.Commands = t.Commands[0 : t.commandCounter+1]
 	t.WallTime = t.getWallTime()
 	t.sys161.Close()
 }

@@ -121,12 +121,12 @@ func (t *Test) stopStats(status string, message string, statErr error) {
 	if status != "" {
 		t.addStatus(status, message)
 	}
-	t.stop161()
 	t.statCond.L.Lock()
-	defer t.statCond.L.Unlock()
 	t.statErr = statErr
 	t.statActive = false
 	t.statCond.Signal()
+	t.statCond.L.Unlock()
+	t.stop161()
 }
 
 // getStats is the main stats collection and monitor goroutine.

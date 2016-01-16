@@ -138,7 +138,7 @@ func TestStatsKernelProgress(t *testing.T) {
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
 
-	assert.True(test.SimTime < 4.0)
+	assert.True(test.SimTime < 6.0)
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
@@ -176,7 +176,7 @@ func TestStatsUserProgress(t *testing.T) {
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
 
-	assert.True(test.SimTime < 4.0)
+	assert.True(test.SimTime < 6.0)
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
