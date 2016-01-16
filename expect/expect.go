@@ -221,7 +221,7 @@ func (exp *Expect) readData(giveUpTime time.Time) {
 func (exp *Expect) mergeRead(read readEvent) {
 	exp.buffer = append(exp.buffer, read.buf...)
 	exp.readStatus = read.status
-	exp.fixNewLines()
+	// exp.fixNewLines()
 
 	if len(read.buf) > 0 {
 		exp.logger.Recv(time.Now(), read.buf)

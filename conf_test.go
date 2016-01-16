@@ -79,6 +79,8 @@ misc:
   prompttimeout: 100.0
   charactertimeout: 10
   tempdir: "/blah/"
+  retrycharacters: false
+  killonexit: false
 ---
 q
 `)
@@ -126,6 +128,8 @@ q
 			PromptTimeout:    100.0,
 			CharacterTimeout: 10,
 			TempDir:          "/blah/",
+			RetryCharacters:  "false",
+			KillOnExit:       "false",
 		},
 	}
 	assert.True(test.confEqual(&overrides))

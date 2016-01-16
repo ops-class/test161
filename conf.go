@@ -57,6 +57,8 @@ type MiscConf struct {
 	PromptTimeout    float32 `yaml:"prompttimeout" json:"prompttimeout"`
 	CharacterTimeout uint    `yaml:"charactertimeout" json:"charactertimeout"`
 	TempDir          string  `yaml:"tempdir" json:"-"`
+	RetryCharacters  string  `yaml:"retrycharacters" json:"retrycharacters"`
+	KillOnExit       string  `yaml:"killonexit" json:"killonexit"`
 }
 
 var CONF_DEFAULTS = Test{
@@ -99,6 +101,8 @@ var CONF_DEFAULTS = Test{
 		CommandRetries:   5,
 		PromptTimeout:    300.0,
 		CharacterTimeout: 250,
+		RetryCharacters:  "true",
+		KillOnExit:       "true",
 	},
 }
 
@@ -218,7 +222,7 @@ func (t *Test) initCommands() error {
 				})
 			}
 			monitored = (commandLine != "q")
-			if commandLine[0:1] == "p " {
+			if len(commandLine) > 2 && commandLine[0:2] == "p " {
 				currentType = "user"
 			} else {
 				currentType = "kernel"

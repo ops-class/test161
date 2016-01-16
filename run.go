@@ -282,7 +282,8 @@ func (t *Test) sendCommand(commandLine string) error {
 	// If t.Misc.CharacterTimeout is set to zero disable the character retry
 	// logic
 
-	if t.Misc.CharacterTimeout == 0 {
+	if t.Misc.RetryCharacters == "false" {
+		t.sys161.Send(commandLine)
 	} else {
 		// Temporarily lower the expect timeout.
 		t.sys161.SetTimeout(time.Duration(t.Misc.CharacterTimeout) * time.Millisecond)
@@ -324,8 +325,15 @@ func (t *Test) start161() error {
 	}
 
 	// Get serious about killing things.
-	killer := func() {
-		run.Process.Signal(os.Kill)
+	var killer func()
+	if t.Misc.KillOnExit == "true" {
+		killer = func() {
+			run.Process.Signal(os.Kill)
+		}
+	} else {
+		killer = func() {
+			run.Process.Kill()
+		}
 	}
 
 	// Set timeout at create to avoid hanging with early failures.

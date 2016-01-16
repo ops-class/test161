@@ -153,3 +153,35 @@ func TestRunShll(t *testing.T) {
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
 }
+
+func TestRunShllLossy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping shlllossy test in short mode")
+	}
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("$ /testbin/shll -p 50\n$ exit")
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.User.EnableMin = "false"
+	test.Monitor.Kernel.EnableMin = "false"
+	test.Misc.RetryCharacters = "false"
+	test.Monitor.ProgressTimeout = 1.0
+	test.Misc.KillOnExit = "false"
+	assert.Nil(test.Run("./fixtures/"))
+
+	assert.NotEqual(len(test.Commands), 6)
+
+	assert.Equal(len(test.Status), 3)
+	if len(test.Status) == 3 {
+		assert.Equal(test.Status[0].Status, "started")
+		assert.Equal(test.Status[1].Status, "monitor")
+		assert.True(strings.HasPrefix(test.Status[1].Message, "no progress"))
+		assert.Equal(test.Status[2].Status, "shutdown")
+		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
+	}
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}
