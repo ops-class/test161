@@ -80,7 +80,7 @@ misc:
   charactertimeout: 10
   tempdir: "/blah/"
   retrycharacters: false
-  killonexit: false
+  killonexit: true
 ---
 q
 `)
@@ -129,7 +129,7 @@ q
 			CharacterTimeout: 10,
 			TempDir:          "/blah/",
 			RetryCharacters:  "false",
-			KillOnExit:       "false",
+			KillOnExit:       "true",
 		},
 	}
 	assert.True(test.confEqual(&overrides))

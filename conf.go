@@ -102,7 +102,7 @@ var CONF_DEFAULTS = Test{
 		PromptTimeout:    300.0,
 		CharacterTimeout: 250,
 		RetryCharacters:  "true",
-		KillOnExit:       "true",
+		KillOnExit:       "false",
 	},
 }
 
