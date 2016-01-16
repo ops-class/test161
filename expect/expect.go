@@ -163,7 +163,9 @@ func (exp *Expect) ExpectRegexp(pat *regexp.Regexp) (Match, error) {
 	for first := true; first || time.Now().Before(giveUpTime); first = false {
 		// Read some data
 		if !first {
-			exp.readData(giveUpTime)
+			if !exp.readData(giveUpTime) {
+				return Match{}, io.EOF
+			}
 		}
 
 		// Check for match
@@ -205,17 +207,20 @@ func (exp *Expect) checkForMatch(pat *regexp.Regexp) (m Match, found bool) {
 	return
 }
 
-func (exp *Expect) readData(giveUpTime time.Time) {
+func (exp *Expect) readData(giveUpTime time.Time) bool {
 	wait := giveUpTime.Sub(time.Now())
 	select {
 	case read, ok := <-exp.readChan:
 		if ok {
 			exp.mergeRead(read)
+		} else {
+			return false
 		}
 
 	case <-time.After(wait):
 		// Timeout & return
 	}
+	return true
 }
 
 func (exp *Expect) mergeRead(read readEvent) {
