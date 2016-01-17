@@ -3,11 +3,15 @@ package test161
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/ericaro/frontmatter"
 	"github.com/imdario/mergo"
 	"io/ioutil"
 	"math/rand"
+	"reflect"
+	"regexp"
 	"strings"
+	"sync"
 	"text/template"
 )
 
@@ -59,6 +63,13 @@ type MiscConf struct {
 	TempDir          string  `yaml:"tempdir" json:"-"`
 	RetryCharacters  string  `yaml:"retrycharacters" json:"retrycharacters"`
 	KillOnExit       string  `yaml:"killonexit" json:"killonexit"`
+}
+
+type CommandConf struct {
+	Prefix string `yaml:"prefix" json:"prefix"`
+	Prompt string `yaml:"prompt" json:"prompt"`
+	Start  string `yaml:"start" json:"start"`
+	End    string `yaml:"end" json:"end"`
 }
 
 var CONF_DEFAULTS = Test{
@@ -124,8 +135,11 @@ func TestFromString(data string) (*Test, error) {
 	}
 	test.Sys161.Random = rand.Uint32() >> 16
 
+	// TODO: Error checking here
+
 	// Check for empty commands and expand syntatic sugar before getting
 	// started. Doing this first makes the main loop and retry logic simpler.
+
 	err = test.initCommands()
 	if err != nil {
 		return nil, err
@@ -151,18 +165,20 @@ const SYS161_TEMPLATE = `0 serial
 30	trace
 31	mainboard ramsize={{.RAM}} cpus={{.CPUs}}`
 
+var confTemplate *template.Template
+var confOnce sync.Once
+
 // PrintConf formats the test configuration for use by sys161 via the sys161.conf file.
 func (t *Test) PrintConf() (string, error) {
 
-	conf, err := template.New("conf").Parse(SYS161_TEMPLATE)
-	if err != nil {
-		return "", err
-	}
+	confOnce.Do(func() { confTemplate, _ = template.New("conf").Parse(SYS161_TEMPLATE) })
+
 	buffer := new(bytes.Buffer)
-	err = conf.Execute(buffer, t.Sys161)
-	if err != nil {
-		return "", err
-	}
+
+	// Can't fail, even if the test isn't properly initialized, because
+	// t.Sys161 matches the template
+	confTemplate.Execute(buffer, t.Sys161)
+
 	var confString string
 	for _, line := range strings.Split(strings.TrimSpace(buffer.String()), "\n") {
 		if strings.TrimSpace(line) != "" {
@@ -173,90 +189,122 @@ func (t *Test) PrintConf() (string, error) {
 }
 
 func (t *Test) confEqual(t2 *Test) bool {
-	return t.Sys161 == t2.Sys161 && t.Stat == t2.Stat && t.Monitor == t2.Monitor && t.Misc == t2.Misc
+	return t.Sys161 == t2.Sys161 &&
+		t.Stat == t2.Stat &&
+		t.Monitor == t2.Monitor &&
+		t.Misc == t2.Misc &&
+		reflect.DeepEqual(t.CommandConf, t2.CommandConf)
 }
-func (t *Test) initCommands() error {
+
+var prefixRegexp *regexp.Regexp
+var prefixOnce sync.Once
+
+func (t *Test) checkCommandConf() error {
+	prefixOnce.Do(func() { prefixRegexp = regexp.MustCompile(`^([!@#$%^&*]) `) })
+
+	for _, commandConf := range t.CommandConf {
+		if commandConf.Prefix == "" || commandConf.Prompt == "" ||
+			commandConf.Start == "" || commandConf.End == "" {
+			return errors.New(fmt.Sprintf("test161: need to specific command prefix, prompt, start, and end"))
+		}
+		if len(commandConf.Prefix) > 1 {
+			return errors.New(fmt.Sprintf("test161: illegal multicharacter prefix %v", commandConf.Prefix))
+		}
+		matches := prefixRegexp.FindStringSubmatch(commandConf.Prefix + " ")
+		if len(matches) == 0 {
+			return errors.New(fmt.Sprintf("test161: found invalid prefix %v", commandConf.Prefix))
+		}
+		if matches[1] == "$" {
+			return errors.New(fmt.Sprintf("test161: the $ prefix is reserved for the shell"))
+		}
+	}
+	return nil
+}
+
+var KERNEL_COMMAND_CONF = &CommandConf{
+	Prompt: KERNEL_PROMPT,
+	End:    "q",
+}
+var SHELL_COMMAND_CONF = &CommandConf{
+	Prompt: `OS/161$ `,
+	Start:  "s",
+	End:    "exit",
+}
+
+const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
+
+func (t *Test) commandConfFromLine(commandLine string) (string, *CommandConf) {
+	commandLine = strings.TrimSpace(commandLine)
+	matches := prefixRegexp.FindStringSubmatch(commandLine)
+	if len(matches) == 0 {
+		return commandLine, KERNEL_COMMAND_CONF
+	} else if matches[1] == "$" {
+		return commandLine[2:], SHELL_COMMAND_CONF
+	} else {
+		for _, commandConf := range t.CommandConf {
+			if commandConf.Prefix == matches[1] {
+				return commandLine[2:], &commandConf
+			}
+		}
+	}
+	return commandLine, nil
+}
+
+func (t *Test) initCommands() (err error) {
+
+	// Check defined command prefixes
+	err = t.checkCommandConf()
+	if err != nil {
+		return err
+	}
+
+	// Set up the command configuration stack
+	var commandConfStack []*CommandConf
+	commandConfStack = append(commandConfStack, KERNEL_COMMAND_CONF)
+
 	// Set the boot command
 	t.Commands = append(t.Commands, Command{
-		Type:      "kernel",
-		Monitored: false,
+		Type:   "kernel",
+		Prompt: KERNEL_PROMPT,
 		Input: InputLine{
 			Line: "boot",
 		},
 	})
 
-	shutdown := false
-	lastType := "kernel"
-	for _, commandLine := range strings.Split(strings.TrimSpace(t.Content), "\n") {
-		var monitored bool
-		var currentType string
-
+	commandLines := strings.Split(strings.TrimSpace(t.Content), "\n")
+	counter = 0
+	for {
+		commandLine = commandLines[counter]
 		commandLine = strings.TrimSpace(commandLine)
 		if commandLine == "" {
 			return errors.New("test161: found empty command")
 		}
-		if shutdown {
-			return errors.New("test161: found commands after shutdown")
+
+		commandLine, commandConf := t.commandConfFromLine(commandLine)
+		if commandConf == nil {
+			return errors.New("test161: command with invalid prefix")
 		}
-		if string(commandLine[0]) == "$" {
-			if lastType == "kernel" {
-				t.Commands = append(t.Commands, Command{
-					Type:      "user",
-					Monitored: true,
-					Input: InputLine{
-						Line: "s",
-					},
-				})
+
+		currentConf := commandConfStack[len(commandConfStack)-1]
+		if currentConf != commandConf {
+			var foundPrevious
+			var exitStack []string
+			for i = len(commandConfStack) - 1; i >= 0; i++ {
+				if currentConf == commandConfStack[i] {
+					foundPrevious = true
+					break
+				} else {
+					exitStack = append(exitStack, commandConfStack[i].Exit)
+				}
 			}
-			monitored = true
-			currentType = "user"
-			commandLine = strings.TrimSpace(commandLine[1:])
-		} else {
-			if lastType == "user" {
-				t.Commands = append(t.Commands, Command{
-					Type:      "user",
-					Monitored: true,
-					Input: InputLine{
-						Line: "exit",
-					},
-				})
-			}
-			monitored = (commandLine != "q")
-			if len(commandLine) > 2 && commandLine[0:2] == "p " {
-				currentType = "user"
-			} else {
-				currentType = "kernel"
-			}
-			if commandLine == "q" {
-				shutdown = true
-			}
+			// Get from point a to point b
 		}
 		t.Commands = append(t.Commands, Command{
-			Type:      currentType,
-			Monitored: monitored,
 			Input: InputLine{
 				Line: commandLine,
 			},
 		})
-		lastType = currentType
 	}
-	if !shutdown {
-		if lastType == "user" {
-			t.Commands = append(t.Commands, Command{
-				Type:      "user",
-				Monitored: true,
-				Input: InputLine{
-					Line: "exit",
-				},
-			})
-		}
-		t.Commands = append(t.Commands, Command{
-			Type:      "kernel",
-			Monitored: false,
-			Input: InputLine{
-				Line: "q",
-			},
-		})
-	}
+
 	return nil
 }

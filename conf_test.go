@@ -1,6 +1,7 @@
 package test161
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"
@@ -167,6 +168,23 @@ func TestConfCommandInit(t *testing.T) {
 		assert.Equal(test.Commands[4].Input.Line, "q")
 	}
 
+	test, err = TestFromString("$ /bin/true\n$ exit")
+	assert.Nil(err)
+	fmt.Println(test.Commands)
+	assert.Equal(len(test.Commands), 5)
+	if len(test.Commands) == 5 {
+		assert.Equal(test.Commands[0].Type, "kernel")
+		assert.Equal(test.Commands[0].Input.Line, "boot")
+		assert.Equal(test.Commands[1].Type, "user")
+		assert.Equal(test.Commands[1].Input.Line, "s")
+		assert.Equal(test.Commands[2].Type, "user")
+		assert.Equal(test.Commands[2].Input.Line, "/bin/true")
+		assert.Equal(test.Commands[3].Type, "user")
+		assert.Equal(test.Commands[3].Input.Line, "exit")
+		assert.Equal(test.Commands[4].Type, "kernel")
+		assert.Equal(test.Commands[4].Input.Line, "q")
+	}
+
 	test, err = TestFromString("panic")
 	assert.Nil(err)
 	assert.Equal(len(test.Commands), 3)
@@ -178,7 +196,24 @@ func TestConfCommandInit(t *testing.T) {
 		assert.Equal(test.Commands[2].Type, "kernel")
 		assert.Equal(test.Commands[2].Input.Line, "q")
 	}
+}
 
-	test, err = TestFromString("q\nq")
+func TestConfBroken(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// Broken front matter
+	_, err := TestFromString(`---
+unused
+---
+q`)
+	assert.NotNil(err)
+
+	// Double exit
+	_, err = TestFromString("q\nq")
+	assert.NotNil(err)
+
+	// Empty command
+	_, err = TestFromString(" \n ")
 	assert.NotNil(err)
 }
