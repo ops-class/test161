@@ -31,7 +31,7 @@ func (t *Test) OutputString() string {
 			}
 		}
 	}
-	if string(output[len(output)-1]) != "\n" {
+	if len(output) > 0 && string(output[len(output)-1]) != "\n" {
 		output += "\n"
 	}
 	if len(t.Status) > 0 {
