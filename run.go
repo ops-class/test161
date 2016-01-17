@@ -229,7 +229,12 @@ func (t *Test) Run(root string) (err error) {
 				break
 			}
 			statActive, statErr := t.enableStats()
-			if !statActive {
+
+			// If statErr is nil, getStats() exited cleanly, probably because sys161
+			// shut down before we had a chance to expect anything.  However, we may
+			// or may not have been expecting sys161 to shut down (panic vs q).
+			// In that case, it's best to just keep going and handle the EOF below.
+			if !statActive && statErr != nil {
 				err = statErr
 				break
 			}
