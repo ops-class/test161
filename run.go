@@ -63,6 +63,7 @@ type Test struct {
 	statStarted bool   // Only changed once
 
 	sys161         *expect.Expect // Protected by L
+	running        bool           // Protected by L
 	progressTime   float64        // Protected by L
 	currentCommand *Command       // Protected by L
 	commandCounter uint           // Protected by L
@@ -217,7 +218,6 @@ func (t *Test) Run(root string) (err error) {
 		t.addStatus("aborted", "")
 		return err
 	}
-	t.statActive = true
 	defer t.stop161()
 	t.addStatus("started", "")
 
@@ -337,6 +337,12 @@ func (t *Test) start161() error {
 	}
 
 	// Set timeout at create to avoid hanging with early failures.
+	t.L.Lock()
+	t.running = true
+	t.L.Unlock()
+	t.statCond.L.Lock()
+	t.statActive = true
+	t.statCond.L.Unlock()
 	t.sys161 = expect.Create(pty, killer, t, time.Duration(t.Misc.PromptTimeout)*time.Second)
 	t.startTime = time.Now().UnixNano()
 
@@ -344,8 +350,16 @@ func (t *Test) start161() error {
 }
 
 func (t *Test) stop161() {
-	t.WallTime = t.getWallTime()
-	t.sys161.Close()
+	t.L.Lock()
+	wasRunning := t.running
+	if wasRunning {
+		t.running = false
+		t.WallTime = t.getWallTime()
+	}
+	t.L.Unlock()
+	if wasRunning {
+		t.sys161.Close()
+	}
 }
 
 func (t *Test) addStatus(status string, message string) {
