@@ -228,8 +228,15 @@ func (t *Test) Run(root string) (err error) {
 				break
 			}
 		}
-		if int(t.commandCounter) == len(t.Commands)-1 {
-			t.sys161.ExpectEOF()
+		if t.currentCommand.PromptPattern == nil {
+			// Wrap this so it doesn't fail. We don't really care about failures on
+			// the shutdown path, and I have seen errors here in the regexp module.
+			(func() {
+				defer func() {
+					_ = recover()
+				}()
+				t.sys161.ExpectEOF()
+			})()
 			t.addStatus("shutdown", "normal shutdown")
 			return nil
 		}
