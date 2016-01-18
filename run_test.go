@@ -201,3 +201,33 @@ commandconf:
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
 }
+
+func TestRunForResult(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// Shell - should return OK
+	test, err := TestFromString("$ /bin/true")
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Name = "shell"
+	res := test.RunForResult("./fixtures")
+	assert.Equal("shell", res.Name)
+	assert.Equal(TR_OK, res.ResultCode)
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+
+	// Panic - should return FAIL
+	test, err = TestFromString("panic")
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.Enabled = "false"
+	test.Name = "panic"
+	res = test.RunForResult("./fixtures")
+	assert.Equal("panic", res.Name)
+	assert.Equal(TR_FAIL, res.ResultCode)
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}

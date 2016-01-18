@@ -11,12 +11,28 @@ type TestGroup struct {
 	// All the tests that should be run as part of this group
 	Tests []*Test
 
-	// The results channel to send completed test results.
-	// This is not buffered and
+	// The results channel to receive results from tests in
+	// this group that have finished.
 	ResultsChan chan string
 
 	// Private group id
 	id uint64
+}
+
+type DepWaiter struct {
+	// The channel we send test down when it's ready to
+	// run and all dependencies have been met successfully
+	ReadyChan chan *Test
+
+	// The channel we send the test down when some of it's
+	// dependencies failed and so there's no use in running.
+	AbortChan chan *Test
+
+	// The channel we receive dependency updates on
+	ResultsChan chan *TestResult
+
+	// The test we want to run
+	Test *Test
 }
 
 var idLock = &sync.Mutex{}

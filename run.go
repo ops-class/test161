@@ -109,6 +109,19 @@ type Status struct {
 
 type TimeFixedPoint float64
 
+type TestResultCode int
+
+const (
+	TR_OK TestResultCode = iota
+	TR_FAIL
+	TR_FAIL_ABORT
+)
+
+type TestResult struct {
+	Name       string
+	ResultCode TestResultCode
+}
+
 // MarshalJSON prints our TimeFixedPoint type as a fixed point float for JSON.
 func (t TimeFixedPoint) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("%.6f", t)), nil
@@ -279,6 +292,28 @@ func (t *Test) Run(root string) (err error) {
 
 	t.Commands = t.Commands[0 : t.commandCounter+1]
 	return err
+}
+
+// Run a test161 test and interpret the results
+func (t *Test) RunForResult(root string) (res *TestResult) {
+	err := t.Run(root)
+
+	res = &TestResult{}
+	res.Name = t.Name
+	res.ResultCode = TR_OK
+
+	if err != nil || len(t.Status) == 0 {
+		// Something happened
+		res.ResultCode = TR_FAIL_ABORT
+	} else {
+		// Check the status to see if we shutdown properly
+		last_status := t.Status[len(t.Status)-1]
+		if last_status.Status != "shutdown" || last_status.Message != "normal shutdown" {
+			res.ResultCode = TR_FAIL
+		}
+	}
+
+	return
 }
 
 // sendCommand sends a command persistently. All the retry logic to deal with
