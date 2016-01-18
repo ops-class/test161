@@ -374,7 +374,7 @@ q`)
 	// Check invalid: start with unknown prefix
 	test, err = confFromString(`---
 commandconf:
-  - prefix: .
+  - prefix: "%"
     prompt: TEST
     start: $ test
     end: test

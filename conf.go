@@ -257,7 +257,7 @@ func (t *Test) checkCommandConf() error {
 			break
 		}
 	}
-	if errorMsg != "" {
+	if errorMsg == "" {
 		for _, commandConf = range t.CommandConf {
 			startPrefix, _ := splitPrefix(commandConf.Start)
 			if startPrefix != "" && !strings.ContainsAny(prefixes, startPrefix) {

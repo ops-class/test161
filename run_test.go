@@ -119,7 +119,15 @@ func TestRunShll(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	test, err := TestFromString("$ /testbin/shll -p 30\n$ exit")
+	test, err := TestFromString(`---
+commandconf:
+  - prefix: "!"
+    prompt: "OS/161$ "
+    start: $ /testbin/shll -p 30
+    end: exit
+---
+! exit
+`)
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.User.EnableMin = "false"
@@ -161,7 +169,15 @@ func TestRunShllLossy(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	test, err := TestFromString("$ /testbin/shll -p 50\n$ exit")
+	test, err := TestFromString(`---
+commandconf:
+  - prefix: "!"
+    prompt: "OS/161$ "
+    start: $ /testbin/shll -p 50
+    end: exit
+---
+! exit
+`)
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.User.EnableMin = "false"
