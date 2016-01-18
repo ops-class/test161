@@ -217,3 +217,177 @@ q`)
 	_, err = TestFromString(" \n ")
 	assert.NotNil(err)
 }
+
+func TestConfSplitPrefix(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	prefix, commandLine := splitPrefix("$ simple")
+	assert.Equal(prefix, "$")
+	assert.Equal(commandLine, "simple")
+
+	prefix, commandLine = splitPrefix("$  whitespace ")
+	assert.Equal(prefix, "$")
+	assert.Equal(commandLine, "whitespace")
+
+	prefix, commandLine = splitPrefix("^  another ")
+	assert.Equal(prefix, "^")
+	assert.Equal(commandLine, "another")
+
+	prefix, commandLine = splitPrefix("p not_a_prefix  ")
+	assert.Equal(prefix, "")
+	assert.Equal(commandLine, "p not_a_prefix")
+}
+
+func TestConfCheckCommandConf(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// Check empty
+	test, err := confFromString("q")
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.Nil(err)
+
+	// Check valid
+	test, err = confFromString(`---
+commandconf:
+  - prefix: "!"
+    prompt: TEST
+    start: $ test
+    end: test
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.Nil(err)
+
+	// Check valid, multiple
+	test, err = confFromString(`---
+commandconf:
+  - prefix: "^"
+    prompt: TEST
+    start: "! test"
+    end: test
+  - prefix: "!"
+    prompt: TEST
+    start: $ test
+    end: test
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.Nil(err)
+
+	// Check invalid: missing start
+	test, err = confFromString(`---
+commandconf:
+  - prefix: "!"
+    prompt: TEST
+    end: test
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.NotNil(err)
+
+	// Check invalid: multiple character prefix
+	test, err = confFromString(`---
+commandconf:
+  - prefix: "!!"
+    prompt: TEST
+    start: $ test
+    end: test
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.NotNil(err)
+
+	// Check invalid: bad prefix
+	test, err = confFromString(`---
+commandconf:
+  - prefix: "."
+    prompt: TEST
+    start: $ test
+    end: test
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.NotNil(err)
+
+	// Check invalid: collides with shell
+	test, err = confFromString(`---
+commandconf:
+  - prefix: $ 
+    prompt: TEST
+    start: test
+    end: test
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.NotNil(err)
+
+	// Check invalid: duplicate
+	test, err = confFromString(`---
+commandconf:
+  - prefix: "!"
+    prompt: TEST
+    start: "$ test"
+    end: test
+  - prefix: "!"
+    prompt: TEST
+    start: $ test
+    end: test
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.NotNil(err)
+
+	// Check invalid: start with own prefix
+	test, err = confFromString(`---
+commandconf:
+  - prefix: "!"
+    prompt: TEST
+    start: "! test"
+    end: test
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.NotNil(err)
+
+	// Check invalid: end with prefix
+	test, err = confFromString(`---
+commandconf:
+  - prefix: "!"
+    prompt: TEST
+    start: $ test
+    end: "^ test"
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.NotNil(err)
+
+	// Check invalid: start with unknown prefix
+	test, err = confFromString(`---
+commandconf:
+  - prefix: .
+    prompt: TEST
+    start: $ test
+    end: test
+  - prefix: ^
+    prompt: TEST
+    start: "! blah"
+    end: missing
+---
+q`)
+	assert.Nil(err)
+	err = test.checkCommandConf()
+	assert.NotNil(err)
+
+}

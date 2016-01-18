@@ -36,7 +36,7 @@ type Test struct {
 	Sys161      Sys161Conf    `yaml:"sys161" json:"sys161"`
 	Stat        StatConf      `yaml:"stat" json:"stat"`
 	Monitor     MonitorConf   `yaml:"monitor" json:"monitor"`
-	CommandConf []CommandConf `yaml:"commands" json:"commands"`
+	CommandConf []CommandConf `yaml:"commandconf" json:"commandconf"`
 	Misc        MiscConf      `yaml:"misc" json:"misc"`
 
 	// Actual test commands to run

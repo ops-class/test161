@@ -117,6 +117,20 @@ var CONF_DEFAULTS = Test{
 	},
 }
 
+func confFromString(data string) (*Test, error) {
+	t := new(Test)
+
+	err := frontmatter.Unmarshal([]byte(data), t)
+	if err != nil {
+		return nil, err
+	}
+	t.Sys161.Random = rand.Uint32() >> 16
+
+	// TODO: Error checking here
+
+	return t, nil
+}
+
 // TestFromFile parses the test file and sets configuration defaults.
 func TestFromFile(filename string) (*Test, error) {
 	data, err := ioutil.ReadFile(filename)
@@ -128,24 +142,21 @@ func TestFromFile(filename string) (*Test, error) {
 
 // TestFromFile parses the test string and sets configuration defaults.
 func TestFromString(data string) (*Test, error) {
-	test := new(Test)
-	err := frontmatter.Unmarshal([]byte(data), test)
+
+	t, err := confFromString(data)
 	if err != nil {
 		return nil, err
 	}
-	test.Sys161.Random = rand.Uint32() >> 16
-
-	// TODO: Error checking here
 
 	// Check for empty commands and expand syntatic sugar before getting
 	// started. Doing this first makes the main loop and retry logic simpler.
 
-	err = test.initCommands()
+	err = t.initCommands()
 	if err != nil {
 		return nil, err
 	}
 
-	return test, nil
+	return t, nil
 }
 
 func (t *Test) MergeConf(defaults Test) error {
@@ -199,30 +210,71 @@ func (t *Test) confEqual(t2 *Test) bool {
 var prefixRegexp *regexp.Regexp
 var prefixOnce sync.Once
 
-func (t *Test) checkCommandConf() error {
+func splitPrefix(commandLine string) (string, string) {
 	prefixOnce.Do(func() { prefixRegexp = regexp.MustCompile(`^([!@#$%^&*]) `) })
+	matches := prefixRegexp.FindStringSubmatch(strings.TrimSpace(commandLine))
+	if len(matches) == 0 {
+		return "", strings.TrimSpace(commandLine)
+	} else {
+		return matches[1], strings.TrimSpace(commandLine[1:])
+	}
+}
 
-	for _, commandConf := range t.CommandConf {
+func (t *Test) checkCommandConf() error {
+	prefixes := "$"
+	errorMsg := ""
+	var commandConf CommandConf
+	for _, commandConf = range t.CommandConf {
 		if commandConf.Prefix == "" || commandConf.Prompt == "" ||
 			commandConf.Start == "" || commandConf.End == "" {
-			return errors.New(fmt.Sprintf("test161: need to specific command prefix, prompt, start, and end"))
+			errorMsg = "need to specific command prefix, prompt, start, and end"
+			break
 		}
 		if len(commandConf.Prefix) > 1 {
-			return errors.New(fmt.Sprintf("test161: illegal multicharacter prefix %v", commandConf.Prefix))
+			errorMsg = "illegal multicharacter prefix"
+			break
 		}
-		matches := prefixRegexp.FindStringSubmatch(commandConf.Prefix + " ")
-		if len(matches) == 0 {
-			return errors.New(fmt.Sprintf("test161: found invalid prefix %v", commandConf.Prefix))
+		prefix, _ := splitPrefix(commandConf.Prefix + " t")
+		if prefix == "" {
+			errorMsg = "invalid prefix"
+			break
+		} else if prefix == "$" {
+			errorMsg = "the $ prefix is reserved for the shell"
+			break
+		} else if strings.ContainsAny(prefixes, prefix) {
+			errorMsg = "duplicate prefix"
+			break
 		}
-		if matches[1] == "$" {
-			return errors.New(fmt.Sprintf("test161: the $ prefix is reserved for the shell"))
+		prefixes += prefix
+		startPrefix, _ := splitPrefix(commandConf.Start)
+		if startPrefix != "" && startPrefix == prefix {
+			errorMsg = "command start cannot start with own prefix"
+			break
+		}
+		endPrefix, _ := splitPrefix(commandConf.End)
+		if endPrefix != "" {
+			errorMsg = "command exits should not contain a prefix"
+			break
 		}
 	}
-	return nil
+	if errorMsg != "" {
+		for _, commandConf = range t.CommandConf {
+			startPrefix, _ := splitPrefix(commandConf.Start)
+			if startPrefix != "" && !strings.ContainsAny(prefixes, startPrefix) {
+				errorMsg = "command start contains an unknown prefix"
+				break
+			}
+		}
+	}
+	if errorMsg != "" {
+		return errors.New(fmt.Sprintf("test161: %s (%v)", errorMsg, commandConf))
+	} else {
+		return nil
+	}
 }
 
 var KERNEL_COMMAND_CONF = &CommandConf{
-	Prompt: KERNEL_PROMPT,
+	Prompt: `OS/161 kernel [? for menu]: `,
 	End:    "q",
 }
 var SHELL_COMMAND_CONF = &CommandConf{
@@ -231,19 +283,16 @@ var SHELL_COMMAND_CONF = &CommandConf{
 	End:    "exit",
 }
 
-const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
-
 func (t *Test) commandConfFromLine(commandLine string) (string, *CommandConf) {
-	commandLine = strings.TrimSpace(commandLine)
-	matches := prefixRegexp.FindStringSubmatch(commandLine)
-	if len(matches) == 0 {
+	prefix, commandLine := splitPrefix(commandLine)
+	if prefix == "" {
 		return commandLine, KERNEL_COMMAND_CONF
-	} else if matches[1] == "$" {
-		return commandLine[2:], SHELL_COMMAND_CONF
+	} else if prefix == "$" {
+		return commandLine, SHELL_COMMAND_CONF
 	} else {
 		for _, commandConf := range t.CommandConf {
-			if commandConf.Prefix == matches[1] {
-				return commandLine[2:], &commandConf
+			if commandConf.Prefix == prefix {
+				return commandLine, &commandConf
 			}
 		}
 	}
@@ -265,16 +314,16 @@ func (t *Test) initCommands() (err error) {
 	// Set the boot command
 	t.Commands = append(t.Commands, Command{
 		Type:   "kernel",
-		Prompt: KERNEL_PROMPT,
+		Prompt: KERNEL_COMMAND_CONF.Prompt,
 		Input: InputLine{
 			Line: "boot",
 		},
 	})
 
 	commandLines := strings.Split(strings.TrimSpace(t.Content), "\n")
-	counter = 0
+	counter := 0
 	for {
-		commandLine = commandLines[counter]
+		commandLine := commandLines[counter]
 		commandLine = strings.TrimSpace(commandLine)
 		if commandLine == "" {
 			return errors.New("test161: found empty command")
@@ -282,28 +331,45 @@ func (t *Test) initCommands() (err error) {
 
 		commandLine, commandConf := t.commandConfFromLine(commandLine)
 		if commandConf == nil {
-			return errors.New("test161: command with invalid prefix")
+			return errors.New(fmt.Sprintf("test161: command with invalid prefix %v", commandLine))
 		}
 
 		currentConf := commandConfStack[len(commandConfStack)-1]
 		if currentConf != commandConf {
-			var foundPrevious
-			var exitStack []string
-			for i = len(commandConfStack) - 1; i >= 0; i++ {
-				if currentConf == commandConfStack[i] {
-					foundPrevious = true
+			found := false
+			for _, search := range commandConfStack {
+				if currentConf == search {
+					found = true
 					break
-				} else {
-					exitStack = append(exitStack, commandConfStack[i].Exit)
 				}
 			}
-			// Get from point a to point b
+			if found {
+				commandLines = append([]string{commandConf.Prefix + " " + commandConf.End}, commandLines...)
+				continue
+			} else {
+				commandLines = append([]string{commandConf.Start}, commandLines...)
+				continue
+			}
+		} else {
+			if commandLine == currentConf.End {
+				// The command exits the current configuration
+				commandConfStack = commandConfStack[1:]
+			} else {
+				for _, search := range t.CommandConf {
+					if search.Start == currentConf.Prefix+" "+commandLine {
+						// The command starts a new configuration
+						commandConfStack = append(commandConfStack, &search)
+						break
+					}
+				}
+			}
+			t.Commands = append(t.Commands, Command{
+				Input: InputLine{
+					Line: commandLine,
+				},
+			})
+			counter += 1
 		}
-		t.Commands = append(t.Commands, Command{
-			Input: InputLine{
-				Line: commandLine,
-			},
-		})
 	}
 
 	return nil
