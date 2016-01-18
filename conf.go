@@ -314,8 +314,8 @@ func (t *Test) initCommands() (err error) {
 
 	// Set the boot command
 	t.Commands = append(t.Commands, Command{
-		Type:   "kernel",
-		Prompt: KERNEL_COMMAND_CONF.Prompt,
+		Type:          "kernel",
+		PromptPattern: regexp.MustCompile(regexp.QuoteMeta(KERNEL_COMMAND_CONF.Prompt)),
 		Input: InputLine{
 			Line: "boot",
 		},
@@ -367,27 +367,40 @@ func (t *Test) initCommands() (err error) {
 			}
 			continue
 		} else {
+			typeConf := currentConf
+			nextConf := currentConf
 			if commandLine == currentConf.End {
 				// The command exits the current configuration
 				commandConfStack = commandConfStack[1:]
+				if len(commandConfStack) > 0 {
+					nextConf = commandConfStack[0]
+				} else {
+					nextConf = nil
+				}
 			} else {
 				for _, search := range allConfs {
 					if search.Start == strings.TrimSpace(currentConf.Prefix+" "+commandLine) {
 						// The command starts a new configuration
 						commandConfStack = append([]*CommandConf{&search}, commandConfStack...)
-						currentConf = commandConfStack[0]
+						typeConf = commandConfStack[0]
+						nextConf = commandConfStack[0]
 						break
 					}
 				}
 			}
 			var commandType string
-			if currentConf.Prefix != "" || strings.HasPrefix(commandLine, "p ") {
+			if typeConf.Prefix != "" || strings.HasPrefix(commandLine, "p ") {
 				commandType = "user"
 			} else {
 				commandType = "kernel"
 			}
+			var promptPattern *regexp.Regexp
+			if nextConf != nil {
+				promptPattern = regexp.MustCompile(regexp.QuoteMeta(nextConf.Prompt))
+			}
 			t.Commands = append(t.Commands, Command{
-				Type: commandType,
+				Type:          commandType,
+				PromptPattern: promptPattern,
 				Input: InputLine{
 					Line: commandLine,
 				},

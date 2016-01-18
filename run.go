@@ -78,7 +78,6 @@ type Test struct {
 type Command struct {
 	// Set during init
 	Type          string         `json:"type"`
-	Prompt        string         `json:"prompt"`
 	PromptPattern *regexp.Regexp `json:"-"`
 	Input         InputLine      `json:"input"`
 
