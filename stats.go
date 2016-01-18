@@ -195,7 +195,6 @@ func (t *Test) getStats() {
 		// and monitoring flags
 		t.statCond.L.Lock()
 		statRecord := t.statRecord
-		statMonitor := t.statMonitor
 		t.statCond.Signal()
 		t.statCond.L.Unlock()
 
@@ -264,9 +263,8 @@ func (t *Test) getStats() {
 		}
 
 		// Monitoring code starts here. Only run the monitor if it's enabled
-		// globally, for this command (statMonitor), and at this time
-		// (statRecord).
-		if t.Monitor.Enabled != "true" || !statMonitor || !statRecord {
+		// globally and at this time (statRecord).
+		if t.Monitor.Enabled != "true" || !statRecord {
 			continue
 		}
 
@@ -310,7 +308,7 @@ func (t *Test) getStats() {
 		// calculating.
 		if monitorError != "" {
 			t.statCond.L.Lock()
-			blowup := (t.statRecord && t.statMonitor)
+			blowup := t.statRecord
 			t.statCond.L.Unlock()
 			if blowup {
 				t.L.Lock()
@@ -333,7 +331,6 @@ func (t *Test) enableStats() (bool, error) {
 		return false, t.statErr
 	}
 	t.statRecord = true
-	t.statMonitor = t.currentCommand.Monitored
 	t.statCond.Wait()
 	return true, nil
 }

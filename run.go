@@ -22,11 +22,6 @@ import (
 	"time"
 )
 
-const KERNEL_PROMPT = `OS/161 kernel [? for menu]: `
-const SHELL_PROMPT = `OS/161$ `
-const PROMPT_PATTERN = `(OS/161 kernel \[\? for menu\]\:|OS/161\$)\s$`
-const BOOT = -1
-
 type Test struct {
 
 	// Input
@@ -38,10 +33,11 @@ type Test struct {
 	Depends     []string `yaml:"depends" json:"depends"`
 
 	// Configuration chunks
-	Sys161  Sys161Conf  `yaml:"sys161" json:"sys161"`
-	Stat    StatConf    `yaml:"stat" json:"stat"`
-	Monitor MonitorConf `yaml:"monitor" json:"monitor"`
-	Misc    MiscConf    `yaml:"misc" json:"misc"`
+	Sys161      Sys161Conf    `yaml:"sys161" json:"sys161"`
+	Stat        StatConf      `yaml:"stat" json:"stat"`
+	Monitor     MonitorConf   `yaml:"monitor" json:"monitor"`
+	CommandConf []CommandConf `yaml:"commandconf" json:"commandconf"`
+	Misc        MiscConf      `yaml:"misc" json:"misc"`
 
 	// Actual test commands to run
 	Content string `fm:"content" yaml:"-" json:"-"`
@@ -70,23 +66,25 @@ type Test struct {
 	currentOutput  OutputLine     // Protected by L
 
 	// Fields used by getStats but shared with Run
-	statCond    *sync.Cond // Used by the main loop to wait for stat reception
-	statActive  bool
-	statErr     error
-	statRecord  bool // Protected by statCond.L
-	statMonitor bool // Protected by statCond.L
+	statCond   *sync.Cond // Used by the main loop to wait for stat reception
+	statActive bool
+	statErr    error
+	statRecord bool // Protected by statCond.L
 
 	// Output channels
 	statChan chan Stat // Nonblocking write
 }
 
 type Command struct {
-	Type         string       `json:"type"`
-	Input        InputLine    `json:"input"`
+	// Set during init
+	Type          string         `json:"type"`
+	PromptPattern *regexp.Regexp `json:"-"`
+	Input         InputLine      `json:"input"`
+
+	// Set during testing
 	Output       []OutputLine `json:"output"`
 	SummaryStats Stat         `json:"summarystats"`
 	AllStats     []Stat       `json:"stats"`
-	Monitored    bool         `json:"monitored"`
 }
 
 type InputLine struct {
@@ -203,10 +201,6 @@ func (t *Test) Run(root string) (err error) {
 
 	// Record stats during boot, but don't activate the monitor.
 	t.statRecord = true
-	t.statMonitor = false
-
-	// Wait for either kernel or user prompts.
-	prompts := regexp.MustCompile(PROMPT_PATTERN)
 
 	// Set up the current command to point at boot
 	t.commandCounter = 0
@@ -239,12 +233,19 @@ func (t *Test) Run(root string) (err error) {
 				break
 			}
 		}
-		if int(t.commandCounter) == len(t.Commands)-1 {
-			t.sys161.ExpectEOF()
+		if t.currentCommand.PromptPattern == nil {
+			// Wrap this so it doesn't fail. We don't really care about failures on
+			// the shutdown path, and I have seen errors here in the regexp module.
+			(func() {
+				defer func() {
+					_ = recover()
+				}()
+				t.sys161.ExpectEOF()
+			})()
 			t.addStatus("shutdown", "normal shutdown")
 			return nil
 		}
-		match, expectErr := t.sys161.ExpectRegexp(prompts)
+		match, expectErr := t.sys161.ExpectRegexp(t.currentCommand.PromptPattern)
 		statActive, statErr := t.disableStats()
 
 		// Handle timeouts, unexpected shutdowns, and other errors
