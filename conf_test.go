@@ -1,7 +1,6 @@
 package test161
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"
@@ -170,7 +169,6 @@ func TestConfCommandInit(t *testing.T) {
 
 	test, err = TestFromString("$ /bin/true\n$ exit")
 	assert.Nil(err)
-	fmt.Println(test.Commands)
 	assert.Equal(len(test.Commands), 5)
 	if len(test.Commands) == 5 {
 		assert.Equal(test.Commands[0].Type, "kernel")

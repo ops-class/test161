@@ -278,6 +278,7 @@ var KERNEL_COMMAND_CONF = &CommandConf{
 	End:    "q",
 }
 var SHELL_COMMAND_CONF = &CommandConf{
+	Prefix: "$",
 	Prompt: `OS/161$ `,
 	Start:  "s",
 	End:    "exit",
@@ -320,11 +321,28 @@ func (t *Test) initCommands() (err error) {
 		},
 	})
 
+	// Set all confs including kernel and shell
+	allConfs := append(t.CommandConf, *SHELL_COMMAND_CONF, *KERNEL_COMMAND_CONF)
+
 	commandLines := strings.Split(strings.TrimSpace(t.Content), "\n")
-	counter := 0
 	for {
-		commandLine := commandLines[counter]
-		commandLine = strings.TrimSpace(commandLine)
+		if len(commandConfStack) == 0 {
+			if len(commandLines) != 0 {
+				return errors.New("test161: premature exit in command list")
+			}
+			// This is normal exit
+			break
+		}
+		currentConf := commandConfStack[0]
+
+		// May need to clean up previous configurations
+		if len(commandLines) == 0 {
+			commandLines = []string{strings.TrimSpace(currentConf.Prefix + " " + currentConf.End)}
+			continue
+		}
+
+		// Peek at the first command
+		commandLine := strings.TrimSpace(commandLines[0])
 		if commandLine == "" {
 			return errors.New("test161: found empty command")
 		}
@@ -334,41 +352,47 @@ func (t *Test) initCommands() (err error) {
 			return errors.New(fmt.Sprintf("test161: command with invalid prefix %v", commandLine))
 		}
 
-		currentConf := commandConfStack[len(commandConfStack)-1]
-		if currentConf != commandConf {
+		if !reflect.DeepEqual(currentConf, commandConf) {
 			found := false
 			for _, search := range commandConfStack {
-				if currentConf == search {
+				if commandConf == search {
 					found = true
 					break
 				}
 			}
 			if found {
-				commandLines = append([]string{commandConf.Prefix + " " + commandConf.End}, commandLines...)
-				continue
+				commandLines = append([]string{strings.TrimSpace(commandConf.Prefix + " " + commandConf.End)}, commandLines...)
 			} else {
 				commandLines = append([]string{commandConf.Start}, commandLines...)
-				continue
 			}
+			continue
 		} else {
 			if commandLine == currentConf.End {
 				// The command exits the current configuration
 				commandConfStack = commandConfStack[1:]
 			} else {
-				for _, search := range t.CommandConf {
-					if search.Start == currentConf.Prefix+" "+commandLine {
+				for _, search := range allConfs {
+					if search.Start == strings.TrimSpace(currentConf.Prefix+" "+commandLine) {
 						// The command starts a new configuration
-						commandConfStack = append(commandConfStack, &search)
+						commandConfStack = append([]*CommandConf{&search}, commandConfStack...)
+						currentConf = commandConfStack[0]
 						break
 					}
 				}
 			}
+			var commandType string
+			if currentConf.Prefix != "" || strings.HasPrefix(commandLine, "p ") {
+				commandType = "user"
+			} else {
+				commandType = "kernel"
+			}
 			t.Commands = append(t.Commands, Command{
+				Type: commandType,
 				Input: InputLine{
 					Line: commandLine,
 				},
 			})
-			counter += 1
+			commandLines = commandLines[1:]
 		}
 	}
 
