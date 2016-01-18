@@ -66,11 +66,10 @@ type Test struct {
 	currentOutput  OutputLine     // Protected by L
 
 	// Fields used by getStats but shared with Run
-	statCond    *sync.Cond // Used by the main loop to wait for stat reception
-	statActive  bool
-	statErr     error
-	statRecord  bool // Protected by statCond.L
-	statMonitor bool // Protected by statCond.L
+	statCond   *sync.Cond // Used by the main loop to wait for stat reception
+	statActive bool
+	statErr    error
+	statRecord bool // Protected by statCond.L
 
 	// Output channels
 	statChan chan Stat // Nonblocking write
@@ -82,7 +81,6 @@ type Command struct {
 	Prompt        string         `json:"prompt"`
 	PromptPattern *regexp.Regexp `json:"-"`
 	Input         InputLine      `json:"input"`
-	Monitored     bool           `json:"monitored"`
 
 	// Set during testing
 	Output       []OutputLine `json:"output"`
@@ -204,7 +202,6 @@ func (t *Test) Run(root string) (err error) {
 
 	// Record stats during boot, but don't activate the monitor.
 	t.statRecord = true
-	t.statMonitor = false
 
 	// Set up the current command to point at boot
 	t.commandCounter = 0
