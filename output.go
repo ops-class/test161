@@ -55,10 +55,11 @@ func (tg *TestGroup) OutputJSON() (string, error) {
 
 func (tg *TestGroup) OutputString() string {
 	var output string
-	output = fmt.Sprintf("group: id      = %v\n", tg.Id())
+	output = fmt.Sprintf("\ngroup: id      = %v\n", tg.Id())
 	output += fmt.Sprintf("group: name    = %v\n", tg.Config.Name)
 	output += fmt.Sprintf("group: rootdir = %v\n", tg.Config.RootDir)
 	output += fmt.Sprintf("group: usedeps = %v\n", tg.Config.UseDeps)
+	output += fmt.Sprintf("group: tags    = %v\n", tg.Config.Tags)
 
 	for _, test := range tg.Tests {
 		output += "\n"

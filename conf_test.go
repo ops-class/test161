@@ -399,10 +399,17 @@ func TestConfFromFile(t *testing.T) {
 	assert.NotNil(test)
 	if test != nil {
 		assert.Equal("shell", test.Name)
+
 		assert.Equal(1, len(test.Depends))
 		if len(test.Depends) == 1 {
 			assert.Equal("boot", test.Depends[0])
 		}
+
+		assert.Equal(1, len(test.Tags))
+		if len(test.Depends) == 1 {
+			assert.Equal("asst1", test.Tags[0])
+		}
+
 		assert.Equal(float32(.01), test.Stat.Resolution)
 		assert.Equal(uint(100), test.Stat.Window)
 		assert.Equal(float32(30.0), test.Misc.PromptTimeout)

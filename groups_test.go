@@ -133,13 +133,52 @@ func TestGroupFromDir(t *testing.T) {
 
 	assert := assert.New(t)
 
-	config := GroupConfig{"asst1", "./fixtures", true, "./fixtures/tests", nil}
+	config := GroupConfig{"asst1", "./fixtures", true, "./fixtures/tests", []string{"common", "asst1"}, nil}
 	tg, err := GroupFromConfig(config)
 	assert.Nil(err)
 
 	assert.True(tg.Config.UseDeps)
 	assert.True(tg.CanRun())
+	assert.Equal(2, len(tg.Tests))
 
 	t.Log(tg.OutputJSON())
 	t.Log(tg.OutputString())
+
+	// This is should be the same as above.  A nil tags slice will
+	// ignore tags
+	config = GroupConfig{"asst1", "./fixtures", true, "./fixtures/tests", nil, nil}
+	tg, err = GroupFromConfig(config)
+	assert.Nil(err)
+
+	assert.True(tg.Config.UseDeps)
+	assert.True(tg.CanRun())
+	assert.Equal(2, len(tg.Tests))
+
+	t.Log(tg.OutputJSON())
+	t.Log(tg.OutputString())
+
+	config = GroupConfig{"asst1", "./fixtures", true, "./fixtures/tests", []string{"asst1"}, nil}
+	tg, err = GroupFromConfig(config)
+	assert.Nil(err)
+	assert.Equal(1, len(tg.Tests))
+
+	// This can't run b/c asst1 relies on boot, which is only tagged as 'common'
+	assert.True(tg.Config.UseDeps)
+	assert.False(tg.CanRun())
+
+	t.Log(tg.OutputJSON())
+	t.Log(tg.OutputString())
+
+	config = GroupConfig{"asst1", "./fixtures", false, "./fixtures/tests", []string{"asst1"}, nil}
+	tg, err = GroupFromConfig(config)
+	assert.Nil(err)
+	assert.Equal(1, len(tg.Tests))
+
+	// This can run b/c we're ignoring dependencies
+	assert.False(tg.Config.UseDeps)
+	assert.True(tg.CanRun())
+
+	t.Log(tg.OutputJSON())
+	t.Log(tg.OutputString())
+
 }

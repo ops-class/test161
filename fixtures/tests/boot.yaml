@@ -1,5 +1,7 @@
 ---
 name: boot
+tags:
+ - common
 stat:
     resolution: 0.01
     window: 100

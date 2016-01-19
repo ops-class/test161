@@ -2,6 +2,8 @@
 name: shell
 depends:
  - boot
+tags:
+ - asst1
 stat:
     resolution: 0.01
     window: 100

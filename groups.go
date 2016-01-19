@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/ops-class/test161/graph"
 	"io/ioutil"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ type GroupConfig struct {
 	RootDir string   `json:rootdir`
 	UseDeps bool     `json:"usedeps"`
 	TestDir string   `json:"testdir"`
+	Tags    []string `json:"tags"`
 	Tests   []string `json:"-"`
 }
 
@@ -71,20 +73,66 @@ func EmptyGroup() *TestGroup {
 	return tg
 }
 
-func loadTestsFromDir(dir string) ([]*Test, error) {
+func isTestFile(name string) bool {
+	//TODO change this to whatever convention we want to use
+	return strings.HasSuffix(name, ".yaml")
+}
+
+// Return a slice of Tests by reading all tests in the given
+// directory and comparing the tags. If no tags are provided,
+// all tests will be loaded.
+//
+// Other behavior:
+//  - the function will recursively process directories
+//  - symlinks are avoided
+func loadTestsFromDir(dir string, tags []string) ([]*Test, error) {
 	info, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
 	tests := make([]*Test, 0)
+
 	for _, f := range info {
-		if strings.HasSuffix(f.Name(), ".yaml") {
+		// We're not even going to bother with symlinks
+		if f.Mode()&os.ModeSymlink == os.ModeSymlink {
+			continue
+		}
+
+		if f.IsDir() {
+			if more, err := loadTestsFromDir(path.Join(dir, f.Name()), tags); err != nil {
+				return nil, err
+			} else if len(more) > 0 {
+				tests = append(tests, more...)
+			}
+		} else if isTestFile(f.Name()) {
 			test, err := TestFromFile(path.Join(dir, f.Name()))
 			if err != nil {
+				// If one of the test files has an error,
+				// don't create the group.
 				return nil, err
 			}
-			tests = append(tests, test)
+
+			add := true
+
+			// O(|tags| * |test.Tags|) because there really shouldn't be a ton of tags here
+			if len(tags) > 0 {
+				add = false
+				for i := range test.Tags {
+					for j := range tags {
+						if strings.TrimSpace(test.Tags[i]) == strings.TrimSpace(tags[j]) {
+							add = true
+							break
+						}
+					}
+					if add {
+						break
+					}
+				}
+			}
+			if add {
+				tests = append(tests, test)
+			}
 		}
 	}
 	return tests, nil
@@ -96,7 +144,7 @@ func GroupFromConfig(config GroupConfig) (*TestGroup, error) {
 
 	// First, try loading from the test dir
 	if strings.TrimSpace(config.TestDir) != "" {
-		tests, err := loadTestsFromDir(config.TestDir)
+		tests, err := loadTestsFromDir(config.TestDir, config.Tags)
 		if err != nil {
 			return nil, err
 		}
