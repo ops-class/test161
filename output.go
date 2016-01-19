@@ -44,3 +44,26 @@ func (t *Test) OutputString() string {
 	}
 	return output
 }
+
+func (tg *TestGroup) OutputJSON() (string, error) {
+	outputBytes, err := json.MarshalIndent(tg, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(outputBytes), nil
+}
+
+func (tg *TestGroup) OutputString() string {
+	var output string
+	output = fmt.Sprintf("group: id      = %v\n", tg.Id())
+	output += fmt.Sprintf("group: name    = %v\n", tg.Config.Name)
+	output += fmt.Sprintf("group: rootdir = %v\n", tg.Config.RootDir)
+	output += fmt.Sprintf("group: usedeps = %v\n", tg.Config.UseDeps)
+
+	for _, test := range tg.Tests {
+		output += "\n"
+		output += test.OutputString()
+	}
+
+	return output
+}

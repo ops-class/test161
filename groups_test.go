@@ -13,6 +13,7 @@ type AbrevTest struct {
 
 func groupFromSlice(t *testing.T, tests []AbrevTest) (*TestGroup, error) {
 	tg := EmptyGroup()
+	tg.Config.UseDeps = true
 
 	for _, loctest := range tests {
 		test, err := TestFromString(loctest.Command)
@@ -125,4 +126,20 @@ func TestGroupCannotRun(t *testing.T) {
 	// Test an empty group
 	tg = EmptyGroup()
 	assert.False(tg.CanRun())
+}
+
+func TestGroupFromDir(t *testing.T) {
+	t.Parallel()
+
+	assert := assert.New(t)
+
+	config := GroupConfig{"asst1", "./fixtures", true, "./fixtures/tests", nil}
+	tg, err := GroupFromConfig(config)
+	assert.Nil(err)
+
+	assert.True(tg.Config.UseDeps)
+	assert.True(tg.CanRun())
+
+	t.Log(tg.OutputJSON())
+	t.Log(tg.OutputString())
 }

@@ -1,38 +1,40 @@
 package test161
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ops-class/test161/graph"
+	"io/ioutil"
+	"path"
+	"strings"
 	"sync"
 )
 
-type TestGroup struct {
-	// All the tests that should be run as part of this group
-	Tests []*Test
+type CompletedTestHandler func(test *Test, res *TestResult)
 
-	// The results channel to receive results from tests in
-	// this group that have finished.
-	ResultsChan chan string
-
-	// Private group id
-	id uint64
+// GroupConfig specifies how a group of tests should be created and run.
+// A TestGroup will be created and run using
+type GroupConfig struct {
+	Name    string   `json:name`
+	RootDir string   `json:rootdir`
+	UseDeps bool     `json:"usedeps"`
+	TestDir string   `json:"testdir"`
+	Tests   []string `json:"-"`
 }
 
-type DepWaiter struct {
-	// The channel we send test down when it's ready to
-	// run and all dependencies have been met successfully
-	ReadyChan chan *Test
+// A group of tests to be run
+type TestGroup struct {
+	id        uint64
+	Tests     []*Test
+	Config    GroupConfig
+	Callbacks []CompletedTestHandler
+}
 
-	// The channel we send the test down when some of it's
-	// dependencies failed and so there's no use in running.
-	AbortChan chan *Test
-
-	// The channel we receive dependency updates on
-	ResultsChan chan *TestResult
-
-	// The test we want to run
-	Test *Test
+type jsonTestGroup struct {
+	Id     uint64      `json:"id"`
+	Config GroupConfig `json:"config"`
+	Tests  []*Test     `json:"tests"`
 }
 
 var idLock = &sync.Mutex{}
@@ -41,6 +43,11 @@ var curID uint64 = 1
 // Id retrieves the group id
 func (t *TestGroup) Id() uint64 {
 	return t.id
+}
+
+// Custom JSON marshaling to deal with our read-only id
+func (tg *TestGroup) MarshalJSON() ([]byte, error) {
+	return json.Marshal(jsonTestGroup{tg.Id(), tg.Config, tg.Tests})
 }
 
 // Increments the global counter and returns the previous value
@@ -61,14 +68,52 @@ func EmptyGroup() *TestGroup {
 	tg := &TestGroup{}
 	tg.id = incrementId()
 	tg.Tests = make([]*Test, 0)
-	tg.ResultsChan = make(chan string)
 	return tg
 }
 
-// GroupFromDirectory creates a TestGroup from all test files
-// in the given directory
-func GroupFromDirectory(dir string) (*TestGroup, error) {
-	return nil, errors.New("Not Implemented")
+func loadTestsFromDir(dir string) ([]*Test, error) {
+	info, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	tests := make([]*Test, 0)
+	for _, f := range info {
+		if strings.HasSuffix(f.Name(), ".yaml") {
+			test, err := TestFromFile(path.Join(dir, f.Name()))
+			if err != nil {
+				return nil, err
+			}
+			tests = append(tests, test)
+		}
+	}
+	return tests, nil
+}
+
+func GroupFromConfig(config GroupConfig) (*TestGroup, error) {
+	tg := EmptyGroup()
+	tg.Config = config
+
+	// First, try loading from the test dir
+	if strings.TrimSpace(config.TestDir) != "" {
+		tests, err := loadTestsFromDir(config.TestDir)
+		if err != nil {
+			return nil, err
+		}
+		if len(tests) > 0 {
+			tg.Tests = append(tg.Tests, tests...)
+		}
+	}
+
+	// Next, add any additional tests
+	for _, s := range config.Tests {
+		test, err := TestFromString(s)
+		if err != nil {
+			return nil, err
+		}
+		tg.Tests = append(tg.Tests, test)
+	}
+	return tg, nil
 }
 
 func (t *TestGroup) VerifyDependencies() ([]string, error) {
@@ -98,7 +143,9 @@ func (t *TestGroup) VerifyDependencies() ([]string, error) {
 	for _, test := range m {
 		for _, dep := range test.Depends {
 			// edge from test -> dep
-			g.AddEdge(test.Name, dep)
+			if err := g.AddEdge(test.Name, dep); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -115,8 +162,10 @@ func (t *TestGroup) CanRun() bool {
 		return false
 	}
 
-	if _, err := t.VerifyDependencies(); err != nil {
-		return false
+	if t.Config.UseDeps {
+		if _, err := t.VerifyDependencies(); err != nil {
+			return false
+		}
 	}
 
 	// other tests here...
