@@ -168,6 +168,12 @@ func (t *TestGroup) VerifyDependencies() ([]string, error) {
 	// create a map of test name
 	m := make(map[string]*Test)
 	for _, t := range t.Tests {
+		if strings.TrimSpace(t.Name) == "" {
+			return nil, errors.New("Unnamed test detected")
+		}
+		if _, ok := m[t.Name]; ok {
+			return nil, errors.New(fmt.Sprintf("Duplicate test name detected:  %v", t.Name))
+		}
 		m[t.Name] = t
 	}
 

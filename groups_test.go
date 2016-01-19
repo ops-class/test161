@@ -126,6 +126,30 @@ func TestGroupCannotRun(t *testing.T) {
 	// Test an empty group
 	tg = EmptyGroup()
 	assert.False(tg.CanRun())
+
+	// Test (erroneous) duplicate names where we're using dependencies
+	testStrings = []AbrevTest{
+		AbrevTest{"boot", "q", []string{}},
+		AbrevTest{"boot", "$ /bin/true", []string{""}},
+		AbrevTest{"randcall", "$ /testbin/randcall", []string{""}},
+	}
+
+	tg, err = groupFromSlice(t, testStrings)
+	assert.Nil(err)
+	assert.NotNil(tg)
+	assert.False(tg.CanRun())
+
+	// Test an unnamed group - not good for dependencies
+	testStrings = []AbrevTest{
+		AbrevTest{"", "q", []string{}},
+		AbrevTest{"boot", "q", []string{""}},
+		AbrevTest{"randcall", "$ /testbin/randcall", []string{""}},
+	}
+
+	tg, err = groupFromSlice(t, testStrings)
+	assert.Nil(err)
+	assert.NotNil(tg)
+	assert.False(tg.CanRun())
 }
 
 func TestGroupFromDir(t *testing.T) {
