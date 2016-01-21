@@ -1,208 +1,254 @@
 package test161
 
 import (
+	//"github.com/ops-class/test161/graph"
 	"github.com/stretchr/testify/assert"
+	"path/filepath"
+	"sort"
 	"testing"
 )
 
-type AbrevTest struct {
-	Name    string
-	Command string
-	Deps    []string
-}
+const TEST_DIR string = "fixtures/tests/nocycle"
+const CYCLE_DIR string = "fixtures/tests/cycle"
 
-func groupFromSlice(t *testing.T, tests []AbrevTest) (*TestGroup, error) {
-	tg := EmptyGroup()
-	tg.Config.UseDeps = true
-
-	for _, loctest := range tests {
-		test, err := TestFromString(loctest.Command)
-		assert.Nil(t, err)
-		if err != nil {
-			return nil, err
-		}
-		test.Name = loctest.Name
-		for _, dep := range loctest.Deps {
-			test.Depends = append(test.Depends, dep)
-		}
-		tg.Tests = append(tg.Tests, test)
+func testsToSortedSlice(tests []*Test) []string {
+	res := make([]string, len(tests))
+	for i, t := range tests {
+		res[i] = t.DependencyID
 	}
-	return tg, nil
+	sort.Strings(res)
+	return res
 }
 
-func TestGroupDepNoCycle(t *testing.T) {
+func TestTestMapLoad(t *testing.T) {
 	t.Parallel()
-
 	assert := assert.New(t)
 
-	var testStrings = []AbrevTest{
-		AbrevTest{"boot", "q", []string{}},
-		AbrevTest{"shell", "$ /bin/true", []string{"boot"}},
-		AbrevTest{"shll", "$ /testbin/shll", []string{"boot"}},
-		AbrevTest{"badcall", "$ /testbin/badcall a", []string{"shell"}},
-		AbrevTest{"badcall2", "$ /testbin/badcall b", []string{"badcall", "shell"}},
-		AbrevTest{"badcall3", "$ /testbin/badcall c", []string{"badcall"}},
-		AbrevTest{"randcall", "$ /testbin/randcall", []string{"shell"}},
-		AbrevTest{"forktest", "$ forktest", []string{"shell", "badcall2"}},
-		AbrevTest{"bigfork", "$ bigfork", []string{"forktest"}},
+	tm, errs := NewTestMap(TEST_DIR)
+	assert.NotNil(tm)
+	assert.Equal(0, len(errs))
+
+	expected := []string{
+		"boot.t",
+		"threads/tt1.t",
+		"threads/tt2.t",
+		"threads/tt3.t",
+		"sync/sy1.t",
+		"sync/sy2.t",
+		"sync/sy3.t",
+		"sync/sy4.t",
+		"sync/sy5.t",
+		"sync/semu1.t",
 	}
 
-	tg, err := groupFromSlice(t, testStrings)
-	assert.Nil(err)
-	assert.NotNil(tg)
+	assert.Equal(len(expected), len(tm.Tests))
 
-	assert.Equal(len(testStrings), len(tg.Tests))
-
-	sorted, err := tg.VerifyDependencies()
-	assert.Nil(err)
-	if err == nil {
-		t.Log(sorted)
+	for _, id := range expected {
+		_, ok := tm.Tests[id]
+		assert.True(ok)
 	}
-	assert.True(tg.CanRun())
+
+	expected = []string{
+		"boot", "threads", "sync",
+		"sem", "locks", "rwlock", "cv",
+	}
+
+	assert.Equal(len(expected), len(tm.Tags))
+
+	for _, id := range expected {
+		_, ok := tm.Tags[id]
+		assert.True(ok)
+	}
 }
 
-func TestGroupDepCycle(t *testing.T) {
+func TestTestMapGlobs(t *testing.T) {
 	t.Parallel()
-
 	assert := assert.New(t)
 
-	// There is a cycle forktest -> badcall2 -> bigfork -> forktest
-	var testStrings = []AbrevTest{
-		AbrevTest{"boot", "q", []string{}},
-		AbrevTest{"shell", "$ /bin/true", []string{"boot"}},
-		AbrevTest{"shll", "$ /testbin/shll", []string{"boot"}},
-		AbrevTest{"badcall", "$ /testbin/badcall a", []string{"shell"}},
-		AbrevTest{"badcall2", "$ /testbin/badcall b", []string{"badcall", "shell", "bigfork"}},
-		AbrevTest{"badcall3", "$ /testbin/badcall c", []string{"badcall"}},
-		AbrevTest{"randcall", "$ /testbin/randcall", []string{"shell"}},
-		AbrevTest{"forktest", "$ forktest", []string{"shell", "badcall2"}},
-		AbrevTest{"bigfork", "$ bigfork", []string{"forktest"}},
-	}
-
-	tg, err := groupFromSlice(t, testStrings)
+	abs, err := filepath.Abs(TEST_DIR)
 	assert.Nil(err)
 
-	assert.Equal(len(testStrings), len(tg.Tests))
+	tm, errs := NewTestMap(TEST_DIR)
+	assert.NotNil(tm)
+	assert.Equal(0, len(errs))
 
-	sorted, err := tg.VerifyDependencies()
+	// Glob
+	tests, err := tm.TestsFromGlob("**/sy*.t", abs)
+	expected := []string{
+		"sync/sy1.t",
+		"sync/sy2.t",
+		"sync/sy3.t",
+		"sync/sy4.t",
+		"sync/sy5.t",
+	}
+
+	assert.Nil(err)
+	assert.Equal(len(expected), len(tests))
+
+	actual := testsToSortedSlice(tests)
+	assert.Equal(expected, actual)
+
+	// Single test
+	single := "threads/tt2.t"
+	tests, err = tm.TestsFromGlob(single, abs)
+	assert.Nil(err)
+	assert.Equal(1, len(tests))
+	if len(tests) == 1 {
+		assert.Equal(single, tests[0].DependencyID)
+	}
+
+	// Empty
+	tests, err = tm.TestsFromGlob("foo/bar*.t", abs)
+	assert.Nil(err)
+	assert.Equal(0, len(tests))
+
+}
+
+func TestTestMapTags(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	tm, errs := NewTestMap(TEST_DIR)
+	assert.NotNil(tm)
+	assert.Equal(0, len(errs))
+
+	expected := []string{
+		"threads/tt1.t",
+		"threads/tt2.t",
+		"threads/tt3.t",
+	}
+	tests, ok := tm.Tags["threads"]
+	assert.True(ok)
+	assert.Equal(len(expected), len(tests))
+
+	actual := testsToSortedSlice(tests)
+	sort.Strings(actual)
+	assert.Equal(expected, actual)
+
+	expected = []string{
+		"sync/sy3.t",
+		"sync/sy4.t",
+	}
+	tests, ok = tm.Tags["cv"]
+	assert.True(ok)
+	assert.Equal(len(expected), len(tests))
+
+	actual = testsToSortedSlice(tests)
+	sort.Strings(actual)
+	assert.Equal(expected, actual)
+
+}
+
+var DEP_MAP = map[string][]string{
+	"boot.t":        []string{},
+	"threads/tt1.t": []string{"boot.t"},
+	"threads/tt2.t": []string{"boot.t"},
+	"threads/tt3.t": []string{"boot.t"},
+	"sync/semu1.t":  []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/sy1.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/sy2.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/sy3.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t"},
+	"sync/sy4.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t", "sync/sy3.t"},
+	"sync/sy5.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+}
+
+func TestTestMapDependencies(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	tm, errs := NewTestMap(TEST_DIR)
+	assert.NotNil(tm)
+	assert.Equal(0, len(errs))
+
+	errs = tm.expandAllDeps()
+	assert.Equal(0, len(errs))
+	if len(errs) > 0 {
+		t.Log(errs)
+	}
+
+	// Now, test the dependencies by hand.  We have a mix of
+	// glob and tag deps in the test directory
+
+	assert.Equal(len(DEP_MAP), len(tm.Tests))
+
+	for k, v := range DEP_MAP {
+		test, ok := tm.Tests[k]
+		assert.True(ok)
+		if ok {
+			assert.Equal(len(v), len(test.ExpandedDeps))
+			for _, id := range v {
+				dep, ok := test.ExpandedDeps[id]
+				assert.True(ok)
+				assert.Equal(id, dep.DependencyID)
+			}
+		}
+	}
+}
+
+func TestDependencyGraph(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	tm, errs := NewTestMap(TEST_DIR)
+	assert.NotNil(tm)
+	assert.Equal(0, len(errs))
+
+	g, errs := tm.DependencyGraph()
+	assert.Equal(0, len(errs))
+	if len(errs) > 0 {
+		t.Log(errs)
+	}
+
+	assert.NotNil(g)
+
+	// Now, test the dependencies by hand.  We have a mix of
+	// glob and tag deps in the test directory
+
+	assert.Equal(len(DEP_MAP), len(g.NodeMap))
+
+	for k, v := range DEP_MAP {
+		node, ok := g.NodeMap[k]
+		assert.True(ok)
+		if ok {
+			assert.Equal(len(v), len(node.EdgesOut))
+			for _, id := range v {
+				depNode, ok := node.EdgesOut[id]
+				assert.True(ok)
+				assert.Equal(id, depNode.Name)
+			}
+		}
+	}
+}
+
+func TestDependencyCycle(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	tm, errs := NewTestMap(TEST_DIR)
+	assert.NotNil(tm)
+	assert.Equal(0, len(errs))
+
+	g, errs := tm.DependencyGraph()
+	assert.Equal(0, len(errs))
+	if len(errs) > 0 {
+		t.Log(errs)
+	}
+
+	assert.NotNil(g)
+	_, err := g.TopSort()
+	assert.Nil(err)
+
+	tm, errs = NewTestMap(CYCLE_DIR)
+	assert.NotNil(tm)
+	assert.Equal(0, len(errs))
+
+	g, errs = tm.DependencyGraph()
+	assert.Equal(0, len(errs))
+	if len(errs) > 0 {
+		t.Log(errs)
+	}
+
+	assert.NotNil(g)
+	_, err = g.TopSort()
 	assert.NotNil(err)
-	if err == nil {
-		t.Log(sorted)
-	}
-
-	assert.False(tg.CanRun())
-}
-
-func TestGroupCannotRun(t *testing.T) {
-	t.Parallel()
-
-	assert := assert.New(t)
-
-	// Test missing dependencies
-	var testStrings = []AbrevTest{
-		AbrevTest{"shell", "$ /bin/true", []string{"boot"}},
-		AbrevTest{"randcall", "$ /testbin/randcall", []string{"shell"}},
-		AbrevTest{"forktest", "$ forktest", []string{"shell", "badcall2"}},
-		AbrevTest{"bigfork", "$ bigfork", []string{"forktest"}},
-	}
-
-	tg, err := groupFromSlice(t, testStrings)
-	assert.Nil(err)
-	assert.NotNil(tg)
-	assert.False(tg.CanRun())
-
-	// Test a simple cycle
-	testStrings = []AbrevTest{
-		AbrevTest{"boot", "q", []string{}},
-		AbrevTest{"shell", "$ /bin/true", []string{"boot", "randcall"}},
-		AbrevTest{"randcall", "$ /testbin/randcall", []string{"shell, boot"}},
-	}
-
-	tg, err = groupFromSlice(t, testStrings)
-	assert.Nil(err)
-	assert.NotNil(tg)
-	assert.False(tg.CanRun())
-
-	// Test an empty group
-	tg = EmptyGroup()
-	assert.False(tg.CanRun())
-
-	// Test (erroneous) duplicate names where we're using dependencies
-	testStrings = []AbrevTest{
-		AbrevTest{"boot", "q", []string{}},
-		AbrevTest{"boot", "$ /bin/true", []string{""}},
-		AbrevTest{"randcall", "$ /testbin/randcall", []string{""}},
-	}
-
-	tg, err = groupFromSlice(t, testStrings)
-	assert.Nil(err)
-	assert.NotNil(tg)
-	assert.False(tg.CanRun())
-
-	// Test an unnamed group - not good for dependencies
-	testStrings = []AbrevTest{
-		AbrevTest{"", "q", []string{}},
-		AbrevTest{"boot", "q", []string{""}},
-		AbrevTest{"randcall", "$ /testbin/randcall", []string{""}},
-	}
-
-	tg, err = groupFromSlice(t, testStrings)
-	assert.Nil(err)
-	assert.NotNil(tg)
-	assert.False(tg.CanRun())
-}
-
-func TestGroupFromDir(t *testing.T) {
-	t.Parallel()
-
-	assert := assert.New(t)
-
-	config := GroupConfig{"asst1", "./fixtures", true, "./fixtures/tests", []string{"common", "asst1"}, nil}
-	tg, err := GroupFromConfig(config)
-	assert.Nil(err)
-
-	assert.True(tg.Config.UseDeps)
-	assert.True(tg.CanRun())
-	assert.Equal(2, len(tg.Tests))
-
-	t.Log(tg.OutputJSON())
-	t.Log(tg.OutputString())
-
-	// This is should be the same as above.  A nil tags slice will
-	// ignore tags
-	config = GroupConfig{"asst1", "./fixtures", true, "./fixtures/tests", nil, nil}
-	tg, err = GroupFromConfig(config)
-	assert.Nil(err)
-
-	assert.True(tg.Config.UseDeps)
-	assert.True(tg.CanRun())
-	assert.Equal(2, len(tg.Tests))
-
-	t.Log(tg.OutputJSON())
-	t.Log(tg.OutputString())
-
-	config = GroupConfig{"asst1", "./fixtures", true, "./fixtures/tests", []string{"asst1"}, nil}
-	tg, err = GroupFromConfig(config)
-	assert.Nil(err)
-	assert.Equal(1, len(tg.Tests))
-
-	// This can't run b/c asst1 relies on boot, which is only tagged as 'common'
-	assert.True(tg.Config.UseDeps)
-	assert.False(tg.CanRun())
-
-	t.Log(tg.OutputJSON())
-	t.Log(tg.OutputString())
-
-	config = GroupConfig{"asst1", "./fixtures", false, "./fixtures/tests", []string{"asst1"}, nil}
-	tg, err = GroupFromConfig(config)
-	assert.Nil(err)
-	assert.Equal(1, len(tg.Tests))
-
-	// This can run b/c we're ignoring dependencies
-	assert.False(tg.Config.UseDeps)
-	assert.True(tg.CanRun())
-
-	t.Log(tg.OutputJSON())
-	t.Log(tg.OutputString())
-
 }

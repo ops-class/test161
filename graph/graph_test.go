@@ -10,28 +10,38 @@ func TestGraphCycles(t *testing.T) {
 
 	assert := assert.New(t)
 
-	nodes := []string{"shell", "boot", "badcall2", "randcall", "badcall", "shll", "badcall3"}
+	nodes := []Keyer{
+		StringNode("shell"),
+		StringNode("boot"),
+		StringNode("badcall2"),
+		StringNode("randcall"),
+		StringNode("badcall"),
+		StringNode("shll"),
+		StringNode("badcall3"),
+	}
 
 	graph := New(nodes)
 	assert.Equal(len(nodes), len(graph.NodeMap))
 	if len(nodes) == len(graph.NodeMap) {
 		for _, s := range nodes {
-			assert.NotNil(graph.NodeMap[s])
+			var sn StringNode = s.(StringNode)
+			key := string(sn)
+			assert.NotNil(graph.NodeMap[key])
 		}
 	}
 
-	graph.AddEdge("shell", "boot")
-	graph.AddEdge("badcall", "shell")
-	graph.AddEdge("randcall", "shell")
-	graph.AddEdge("badcall2", "badcall")
-	graph.AddEdge("shll", "boot")
-	graph.AddEdge("badcall3", "badcall2")
+	graph.AddEdge(StringNode("shell"), StringNode("boot"))
+	graph.AddEdge(StringNode("badcall"), StringNode("shell"))
+	graph.AddEdge(StringNode("randcall"), StringNode("shell"))
+	graph.AddEdge(StringNode("badcall2"), StringNode("badcall"))
+	graph.AddEdge(StringNode("shll"), StringNode("boot"))
+	graph.AddEdge(StringNode("badcall3"), StringNode("badcall2"))
 
 	sorted, err := graph.TopSort()
 	assert.Nil(err)
 	t.Log(sorted)
 
-	graph.AddEdge("shell", "badcall3")
+	graph.AddEdge(StringNode("shell"), StringNode("badcall3"))
 	_, err = graph.TopSort()
 	assert.NotNil(err)
 	t.Log(err)
@@ -42,22 +52,32 @@ func TestGraphForest(t *testing.T) {
 
 	assert := assert.New(t)
 
-	nodes := []string{"shell", "boot", "badcall2", "randcall", "badcall", "shll", "badcall3", "boot2", "shell2"}
+	nodes := []Keyer{
+		StringNode("shell"),
+		StringNode("boot"),
+		StringNode("badcall2"),
+		StringNode("randcall"),
+		StringNode("badcall"),
+		StringNode("shll"),
+		StringNode("badcall3"),
+		StringNode("boot2"),
+		StringNode("shell2"),
+	}
 
 	graph := New(nodes)
-	graph.AddEdge("shell", "boot")
-	graph.AddEdge("badcall", "shell")
-	graph.AddEdge("randcall", "shell")
-	graph.AddEdge("badcall2", "badcall")
-	graph.AddEdge("shll", "boot")
-	graph.AddEdge("badcall3", "badcall2")
-	graph.AddEdge("shell2", "boot2")
+	graph.AddEdge(StringNode("shell"), StringNode("boot"))
+	graph.AddEdge(StringNode("badcall"), StringNode("shell"))
+	graph.AddEdge(StringNode("randcall"), StringNode("shell"))
+	graph.AddEdge(StringNode("badcall2"), StringNode("badcall"))
+	graph.AddEdge(StringNode("shll"), StringNode("boot"))
+	graph.AddEdge(StringNode("badcall3"), StringNode("badcall2"))
+	graph.AddEdge(StringNode("shell2"), StringNode("boot2"))
 
 	sorted, err := graph.TopSort()
 	assert.Nil(err)
 	t.Log(sorted)
 
-	graph.AddEdge("boot2", "shell2")
+	graph.AddEdge(StringNode("boot2"), StringNode("shell2"))
 	_, err = graph.TopSort()
 	assert.NotNil(err)
 	t.Log(err)

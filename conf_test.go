@@ -394,11 +394,11 @@ func TestConfFromFile(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	test, err := TestFromFile("./fixtures/tests/shell.yaml")
+	test, err := TestFromFile("./fixtures/tests/nocycle/threads/tt1.t")
 	assert.Nil(err)
 	assert.NotNil(test)
 	if test != nil {
-		assert.Equal("shell", test.Name)
+		assert.Equal("Thread Test 1", test.Name)
 
 		assert.Equal(1, len(test.Depends))
 		if len(test.Depends) == 1 {
@@ -406,8 +406,8 @@ func TestConfFromFile(t *testing.T) {
 		}
 
 		assert.Equal(1, len(test.Tags))
-		if len(test.Depends) == 1 {
-			assert.Equal("asst1", test.Tags[0])
+		if len(test.Tags) == 1 {
+			assert.Equal("threads", test.Tags[0])
 		}
 
 		assert.Equal(float32(.01), test.Stat.Resolution)
@@ -415,7 +415,7 @@ func TestConfFromFile(t *testing.T) {
 		assert.Equal(float32(30.0), test.Misc.PromptTimeout)
 	}
 
-	test, err = TestFromFile("./fixtures/tests/does_not_exist.yaml")
+	test, err = TestFromFile("./fixtures/tests/does_not_exist.t")
 	assert.NotNil(err)
 	assert.Nil(test)
 }

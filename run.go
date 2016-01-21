@@ -53,6 +53,10 @@ type Test struct {
 	Commands   []Command      `json:"commands"`   // Protected by L
 	Status     []Status       `json:"status"`     // Protected by L
 
+	// Dependency data
+	DependencyID string           `json:"depid"`
+	ExpandedDeps map[string]*Test `json:"-"`
+
 	// Unproctected Private fields
 	tempDir     string // Only set once
 	startTime   int64  // Only set once

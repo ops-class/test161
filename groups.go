@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/bmatcuk/doublestar"
 	"github.com/ops-class/test161/graph"
-	"io/ioutil"
-	"os"
+	//"io/ioutil"
+	//"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -73,156 +75,250 @@ func EmptyGroup() *TestGroup {
 	return tg
 }
 
-func isTestFile(name string) bool {
-	//TODO change this to whatever convention we want to use
-	return strings.HasSuffix(name, ".yaml")
+// TagMap store a slice of Tests corresponding to each tag
+type TagMap map[string][]*Test
+
+// Test Map stores Tests indexed by id and maintains a map
+// of tag -> tests for the test set.
+type TestMap struct {
+	TestDir string
+	Tests   map[string]*Test
+	Tags    TagMap
 }
 
-// Return a slice of Tests by reading all tests in the given
-// directory and comparing the tags. If no tags are provided,
-// all tests will be loaded.
-//
-// Other behavior:
-//  - the function will recursively process directories
-//  - symlinks are avoided
-func loadTestsFromDir(dir string, tags []string) ([]*Test, error) {
-	info, err := ioutil.ReadDir(dir)
+// Result type for loading a test from a file
+type testLoadResult struct {
+	Test *Test
+	Err  error
+}
+
+func NewTestMap(testDir string) (*TestMap, []error) {
+	abs, err := filepath.Abs(testDir)
+	if err != nil {
+		return nil, []error{err}
+	}
+	abs = path.Clean(abs)
+	tm := &TestMap{abs, make(map[string]*Test), make(TagMap)}
+	errs := tm.load()
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	tm.buildTagMap()
+
+	return tm, nil
+}
+
+// Helper function to get an id for a particular filename.
+// We use the filename relative to the test directory.
+func idFromFile(filename, testDir string) (string, error) {
+	if temp, err := filepath.Abs(filename); err != nil {
+		return "", err
+	} else {
+		return filepath.Rel(testDir, path.Clean(temp))
+	}
+}
+
+func (tm *TestMap) buildTagMap() {
+	tm.Tags = make(TagMap)
+
+	for _, test := range tm.Tests {
+		for _, tag := range test.Tags {
+			if _, ok := tm.Tags[tag]; !ok {
+				tm.Tags[tag] = make([]*Test, 0)
+			}
+			tm.Tags[tag] = append(tm.Tags[tag], test)
+		}
+	}
+}
+
+// Helper function that just gets all test in the config test directory.
+// It returns a mapping of test name (file name) to test.
+func (tm *TestMap) load() []error {
+	errs := make([]error, 0)
+
+	// Find all test files using globstar snytax
+	// This is relative to our working directory
+	files, err := doublestar.Glob(fmt.Sprintf("%v/**/*.t", tm.TestDir))
+	if err != nil {
+		errs = append(errs, err)
+		return errs
+	}
+
+	resChan := make(chan testLoadResult)
+
+	// Spawn a bunch of workers to load the tests
+	for _, file := range files {
+		go func(f string) {
+			test, err := TestFromFile(f)
+			if err == nil {
+				test.DependencyID, err = idFromFile(f, tm.TestDir)
+			}
+			res := testLoadResult{test, err}
+			resChan <- res
+		}(file)
+	}
+
+	// Retrieve the results
+	for i := 0; i < len(files); i++ {
+		res := <-resChan
+		if res.Err != nil {
+			errs = append(errs, res.Err)
+		} else {
+			tm.Tests[res.Test.DependencyID] = res.Test
+		}
+	}
+
+	return errs
+}
+
+func (tm *TestMap) TestsFromGlob(search, startDir string) ([]*Test, error) {
+	var glob string
+
+	if strings.HasPrefix(search, "/") {
+		// Relative to the test directory
+		glob = path.Join(tm.TestDir, search)
+	} else {
+		// Relative to the path of the current file
+		glob = path.Join(startDir, search)
+	}
+
+	// Test directories need to be self-contained. Clean up the
+	// path and make that's where we're looking.
+	glob = path.Clean(glob)
+
+	if !strings.HasPrefix(glob, tm.TestDir) {
+		fmt.Println(glob, tm.TestDir)
+		return nil,
+			errors.New(fmt.Sprintf("Cannot specify tests outside of testing directory: %v",
+				glob))
+	}
+
+	// Get the files
+	files, err := doublestar.Glob(glob)
 	if err != nil {
 		return nil, err
 	}
 
+	// Finally, create a slice of tests corresponding to the search string
 	tests := make([]*Test, 0)
-
-	for _, f := range info {
-		// We're not even going to bother with symlinks
-		if f.Mode()&os.ModeSymlink == os.ModeSymlink {
-			continue
-		}
-
-		if f.IsDir() {
-			if more, err := loadTestsFromDir(path.Join(dir, f.Name()), tags); err != nil {
-				return nil, err
-			} else if len(more) > 0 {
-				tests = append(tests, more...)
-			}
-		} else if isTestFile(f.Name()) {
-			test, err := TestFromFile(path.Join(dir, f.Name()))
-			if err != nil {
-				// If one of the test files has an error,
-				// don't create the group.
-				return nil, err
-			}
-
-			add := true
-
-			// O(|tags| * |test.Tags|) because there really shouldn't be a ton of tags here
-			if len(tags) > 0 {
-				add = false
-				for i := range test.Tags {
-					for j := range tags {
-						if strings.TrimSpace(test.Tags[i]) == strings.TrimSpace(tags[j]) {
-							add = true
-							break
-						}
-					}
-					if add {
-						break
-					}
-				}
-			}
-			if add {
+	for _, file := range files {
+		if id, err := idFromFile(file, tm.TestDir); err != nil {
+			return nil, err
+		} else {
+			if test, ok := tm.Tests[id]; ok {
 				tests = append(tests, test)
+			} else {
+				return nil,
+					errors.New(fmt.Sprintf("Cannot find test: %v.  Is TestMap initialized?", id))
 			}
 		}
 	}
 	return tests, nil
 }
 
-func GroupFromConfig(config GroupConfig) (*TestGroup, error) {
-	tg := EmptyGroup()
-	tg.Config = config
+// Expand the dependencies for a single test
+func (t *Test) expandTestDeps(tests *TestMap, done chan error) {
 
-	// First, try loading from the test dir
-	if strings.TrimSpace(config.TestDir) != "" {
-		tests, err := loadTestsFromDir(config.TestDir, config.Tags)
-		if err != nil {
-			return nil, err
-		}
-		if len(tests) > 0 {
-			tg.Tests = append(tg.Tests, tests...)
-		}
-	}
+	t.ExpandedDeps = make(map[string]*Test)
 
-	// Next, add any additional tests
-	for _, s := range config.Tests {
-		test, err := TestFromString(s)
-		if err != nil {
-			return nil, err
-		}
-		tg.Tests = append(tg.Tests, test)
-	}
-	return tg, nil
-}
+	for _, dep := range t.Depends {
+		var deps []*Test = nil
+		var ok bool = false
+		var err error = nil
 
-func (t *TestGroup) VerifyDependencies() ([]string, error) {
-	// create a map of test name
-	m := make(map[string]*Test)
-	for _, t := range t.Tests {
-		if strings.TrimSpace(t.Name) == "" {
-			return nil, errors.New("Unnamed test detected")
+		if strings.HasSuffix(dep, ".t") {
+			// it's a file/glob
+			startDir := path.Dir(path.Join(tests.TestDir, t.DependencyID))
+			if deps, err = tests.TestsFromGlob(dep, startDir); err != nil {
+				done <- err
+				return
+			} else if len(deps) == 0 {
+				// The dependency doesn't exist at all
+				done <- errors.New(fmt.Sprintf("No matches for dependency %v in test %v",
+					dep, t.DependencyID))
+				return
+			}
+		} else {
+			// it's a tag, look it up in the tag map
+			if deps, ok = tests.Tags[dep]; !ok {
+				done <- errors.New(fmt.Sprintf("No matches for tag dependency '%v' in test '%v'",
+					dep, t.DependencyID))
+				return
+			}
 		}
-		if _, ok := m[t.Name]; ok {
-			return nil, errors.New(fmt.Sprintf("Duplicate test name detected:  %v", t.Name))
-		}
-		m[t.Name] = t
-	}
 
-	// verify each test's dependencies are in the map
-	for _, test := range m {
-		for _, dep := range test.Depends {
-			if _, ok := m[dep]; !ok {
-				return nil, errors.New(fmt.Sprintf("Cannot find dependency %v for test %v", dep, test.Name))
+		if deps != nil {
+			for _, d := range deps {
+				t.ExpandedDeps[d.DependencyID] = d
 			}
 		}
 	}
 
-	// verify it's a DAG
-	nodes := make([]string, 0, len(m))
-	for testName := range m {
-		nodes = append(nodes, testName)
+	done <- nil
+}
+
+// Expand all tests' dependencies so we can create a dependency graph
+func (tm *TestMap) expandAllDeps() []error {
+	resChan := make(chan error)
+	errors := make([]error, 0)
+
+	// Expand all test dependencies in parallel
+	for _, t := range tm.Tests {
+		go t.expandTestDeps(tm, resChan)
 	}
+
+	// Read the results
+	for i, count := 0, len(tm.Tests); i < count; i++ {
+		res := <-resChan
+		if res != nil {
+			errors = append(errors, res)
+		}
+	}
+
+	return errors
+}
+
+// Keyer interface for the dependency graph
+func (t *Test) Key() string {
+	return t.DependencyID
+}
+
+// DependencyGraph creates a dependency graph from the
+// tests in TestMap
+func (tm *TestMap) DependencyGraph() (*graph.Graph, []error) {
+	errs := tm.expandAllDeps()
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	// Nodes
+	nodes := make([]graph.Keyer, 0, len(tm.Tests))
+	for _, t := range tm.Tests {
+		nodes = append(nodes, t)
+	}
+
+	// Our graph
 	g := graph.New(nodes)
 
-	// add edges
-	for _, test := range m {
-		for _, dep := range test.Depends {
-			// edge from test -> dep
-			if err := g.AddEdge(test.Name, dep); err != nil {
-				return nil, err
+	// Edges.  There is an edge from A->B if A depends on B.
+
+	errs = make([]error, 0)
+	for _, test := range tm.Tests {
+		for _, dep := range test.ExpandedDeps {
+			err := g.AddEdge(test, dep)
+			if err != nil {
+				errs = append(errs, err)
 			}
 		}
 	}
 
-	// If TopSort returns an error, we have a cycle
-	if sort, err := g.TopSort(); err != nil {
-		return nil, err
-	} else {
-		return sort, nil
-	}
+	return g, errs
 }
 
-func (t *TestGroup) CanRun() bool {
-	if len(t.Tests) == 0 {
-		return false
-	}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	if t.Config.UseDeps {
-		if _, err := t.VerifyDependencies(); err != nil {
-			return false
-		}
-	}
-
-	// other tests here...
-
-	return true
-}
+// TODO
+//  - single tests -> config.Tests
+//  - dependency graph
+//  - clean dependencies

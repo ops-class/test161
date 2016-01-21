@@ -15,8 +15,19 @@ type Graph struct {
 // A Node of a directed graph, with incoming and outgoing edges.
 type Node struct {
 	Name     string
+	Value    Keyer
 	EdgesOut map[string]*Node
 	EdgesIn  map[string]*Node
+}
+
+type Keyer interface {
+	Key() string
+}
+
+type StringNode string
+
+func (s StringNode) Key() string {
+	return string(s)
 }
 
 // Add an incoming edge.  This needs to be paired with addEdgeOut.
@@ -81,16 +92,16 @@ func (g *Graph) TopSort() ([]string, error) {
 // (i.e. new nodes/edges are created - pointers aren't copied)
 func (g *Graph) copy() *Graph {
 	// Copy nodes
-	names := make([]string, 0, len(g.NodeMap))
-	for name, _ := range g.NodeMap {
-		names = append(names, name)
+	nodes := make([]Keyer, 0, len(g.NodeMap))
+	for _, node := range g.NodeMap {
+		nodes = append(nodes, node.Value)
 	}
-	other := New(names)
+	other := New(nodes)
 
 	// Copy edges
-	for from, node := range g.NodeMap {
-		for to := range node.EdgesOut {
-			other.addEdge(other.NodeMap[from], other.NodeMap[to])
+	for fromId, node := range g.NodeMap {
+		for toId := range node.EdgesOut {
+			other.addEdge(other.NodeMap[fromId], other.NodeMap[toId])
 		}
 	}
 
@@ -98,12 +109,12 @@ func (g *Graph) copy() *Graph {
 }
 
 // Create a new graph consisting of a set of nodes with no edges.
-func New(nodes []string) *Graph {
+func New(nodes []Keyer) *Graph {
 	g := &Graph{}
 	g.NodeMap = make(map[string]*Node)
 
 	for _, s := range nodes {
-		g.NodeMap[s] = &Node{s, make(map[string]*Node), make(map[string]*Node)}
+		g.AddNode(s)
 	}
 	return g
 }
@@ -113,14 +124,18 @@ func (g *Graph) addEdge(from *Node, to *Node) {
 	to.addEdgeIn(from)
 }
 
+func (g *Graph) AddNode(node Keyer) {
+	g.NodeMap[node.Key()] = &Node{node.Key(), node, make(map[string]*Node), make(map[string]*Node)}
+}
+
 // Add an edge from <from> to <to>
-func (g *Graph) AddEdge(from string, to string) error {
+func (g *Graph) AddEdge(from Keyer, to Keyer) error {
 	if from == to {
 		return errors.New("From node cannot be the same as To node")
 	}
 
-	fromNode, ok1 := g.NodeMap[from]
-	toNode, ok2 := g.NodeMap[to]
+	fromNode, ok1 := g.NodeMap[from.Key()]
+	toNode, ok2 := g.NodeMap[to.Key()]
 
 	if !ok1 {
 		return errors.New("from node not found")
