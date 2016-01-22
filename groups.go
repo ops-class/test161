@@ -14,8 +14,6 @@ import (
 	"sync"
 )
 
-type CompletedTestHandler func(test *Test, res *TestResult)
-
 // GroupConfig specifies how a group of tests should be created and run.
 // A TestGroup will be created and run using
 type GroupConfig struct {
@@ -23,22 +21,20 @@ type GroupConfig struct {
 	RootDir string   `json:rootdir`
 	UseDeps bool     `json:"usedeps"`
 	TestDir string   `json:"testdir"`
-	Tags    []string `json:"tags"`
-	Tests   []string `json:"-"`
+	Tests   []string `json:"tests"`
 }
 
 // A group of tests to be run
 type TestGroup struct {
-	id        uint64
-	Tests     []*Test
-	Config    GroupConfig
-	Callbacks []CompletedTestHandler
+	id     uint64
+	Tests  map[string]*Test
+	Config *GroupConfig
 }
 
 type jsonTestGroup struct {
-	Id     uint64      `json:"id"`
-	Config GroupConfig `json:"config"`
-	Tests  []*Test     `json:"tests"`
+	Id     uint64           `json:"id"`
+	Config *GroupConfig     `json:"config"`
+	Tests  map[string]*Test `json:"tests"`
 }
 
 var idLock = &sync.Mutex{}
@@ -71,7 +67,7 @@ func incrementId() (res uint64) {
 func EmptyGroup() *TestGroup {
 	tg := &TestGroup{}
 	tg.id = incrementId()
-	tg.Tests = make([]*Test, 0)
+	tg.Tests = make(map[string]*Test)
 	return tg
 }
 
@@ -318,7 +314,139 @@ func (tm *TestMap) DependencyGraph() (*graph.Graph, []error) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// TODO
-//  - single tests -> config.Tests
-//  - dependency graph
-//  - clean dependencies
+type expandRes struct {
+	Err   error
+	Tests []*Test
+}
+
+func (tg *TestGroup) expandTests(tm *TestMap) []error {
+	resChan := make(chan *expandRes)
+
+	// Spawn some workers to expand the tests
+	for _, t := range tg.Config.Tests {
+		go func(test string) {
+			var tests []*Test = nil
+			var err error = nil
+			if strings.HasSuffix(test, ".t") {
+				tests, err = tm.TestsFromGlob(test, tg.Config.TestDir)
+			} else {
+				if res, ok := tm.Tags[test]; ok {
+					tests = res
+				} else {
+					err = errors.New(fmt.Sprintf("Cannot find tag: %v", test))
+				}
+			}
+			resChan <- &expandRes{err, tests}
+		}(t)
+	}
+
+	tg.Tests = make(map[string]*Test, 0)
+	errs := make([]error, 0)
+
+	// Get the results
+	for i, count := 0, len(tg.Config.Tests); i < count; i++ {
+		res := <-resChan
+		if res.Err != nil {
+			errs = append(errs, res.Err)
+		} else {
+			for _, test := range res.Tests {
+				tg.Tests[test.DependencyID] = test
+			}
+		}
+	}
+
+	return errs
+}
+
+type depNodesRes struct {
+	Err   error
+	Tests []*Test
+}
+
+func getDepNodesHelper(node *graph.Node, tests []*Test) []*Test {
+	// We have to do a type assertion to get a *Test from a Keyer
+	v := node.Value
+	var test *Test = v.(*Test)
+	tests = append(tests, test)
+
+	for _, node := range node.EdgesOut {
+		tests = getDepNodesHelper(node, tests)
+	}
+
+	return tests
+}
+
+// If there's a cycle, this will loop forever,
+// or at least until we run out of memory.
+func getDepNodes(g *graph.Graph, id string, ch chan *depNodesRes) {
+
+	// Just to be extra cautious
+	if node, ok := g.NodeMap[id]; !ok {
+		ch <- &depNodesRes{errors.New(fmt.Sprintf("Cannot find '%v' in dependency graph", id)), nil}
+	} else {
+		tests := getDepNodesHelper(node, make([]*Test, 0))
+		ch <- &depNodesRes{nil, tests}
+	}
+}
+
+func GroupFromConfig(config *GroupConfig) (*TestGroup, []error) {
+
+	// Get all tests first
+	tm, errs := NewTestMap(config.TestDir)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	tg := EmptyGroup()
+	tg.Config = config
+
+	// Convert to abs path since it's expected later
+	var err error
+	config.TestDir, err = filepath.Abs(config.TestDir)
+	if err != nil {
+		return nil, []error{err}
+	}
+
+	// Next, expand the tests provided as input
+	errs = tg.expandTests(tm)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	// If we're not using depepndencies, we're done.
+	if !config.UseDeps {
+		return tg, nil
+	}
+
+	// If we are using dependencies, we need to do some more work:
+	// 	1. Expand the dependencies and make sure everything is in order.
+	//  2. Make sure there aren't any cycles in the dependency graph
+	//  3. Pluck out all the sub trees for the requested tests
+
+	g, errs := tm.DependencyGraph()
+	if len(errs) > 0 {
+		// problems expanding dependencies
+		return nil, errs
+	}
+
+	// topsort returns an error if there's a cycle
+	if _, err := g.TopSort(); err != nil {
+		return nil, []error{err}
+	}
+
+	// Get the dependencies for everything already in the test group
+	resChan := make(chan *depNodesRes)
+	for id, _ := range tg.Tests {
+		go getDepNodes(g, id, resChan)
+	}
+
+	// Finally, add the dependencies to the TestGroup's map
+	for i, count := 0, len(tg.Tests); i < count; i++ {
+		res := <-resChan
+		for _, test := range res.Tests {
+			tg.Tests[test.DependencyID] = test
+		}
+	}
+
+	return tg, nil
+}

@@ -58,8 +58,9 @@ func (tg *TestGroup) OutputString() string {
 	output = fmt.Sprintf("\ngroup: id      = %v\n", tg.Id())
 	output += fmt.Sprintf("group: name    = %v\n", tg.Config.Name)
 	output += fmt.Sprintf("group: rootdir = %v\n", tg.Config.RootDir)
+	output += fmt.Sprintf("group: testdir = %v\n", tg.Config.TestDir)
 	output += fmt.Sprintf("group: usedeps = %v\n", tg.Config.UseDeps)
-	output += fmt.Sprintf("group: tags    = %v\n", tg.Config.Tags)
+	output += fmt.Sprintf("group: tests   = %v\n", tg.Config.Tests)
 
 	for _, test := range tg.Tests {
 		output += "\n"

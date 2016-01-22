@@ -252,3 +252,52 @@ func TestDependencyCycle(t *testing.T) {
 	_, err = g.TopSort()
 	assert.NotNil(err)
 }
+
+func TestGroupFromConfg(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// Test config with dependencies
+	config := &GroupConfig{
+		Name:    "Test",
+		RootDir: "fixtures",
+		UseDeps: false,
+		TestDir: TEST_DIR,
+		Tests:   []string{"sync/sy1.t"},
+	}
+
+	expected := []string{
+		"boot.t", "threads/tt1.t", "threads/tt2.t",
+		"threads/tt3.t", "snyc/sy1.t",
+	}
+
+	tg, errs := GroupFromConfig(config)
+	assert.Equal(0, len(errs))
+	assert.NotNil(tg)
+
+	assert.Equal(len(expected), len(tg.Tests))
+	for _, t := range expected {
+		test, ok := tg.Tests[t]
+		assert.True(ok)
+		if ok {
+			assert.Equal(t, test.DependencyID)
+		}
+	}
+
+	t.Log(tg)
+
+	// Test same config without dependencies
+	config.UseDeps = false
+	tg, errs = GroupFromConfig(config)
+	assert.Equal(0, len(errs))
+	assert.NotNil(tg)
+	assert.Equal(1, len(tg.Tests))
+	id := config.Tests[0]
+	test, ok := tg.Tests[id]
+	assert.True(ok)
+	if ok {
+		assert.Equal(id, test.DependencyID)
+	}
+
+	t.Log(tg)
+}
