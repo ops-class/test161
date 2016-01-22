@@ -261,14 +261,14 @@ func TestGroupFromConfg(t *testing.T) {
 	config := &GroupConfig{
 		Name:    "Test",
 		RootDir: "fixtures",
-		UseDeps: false,
+		UseDeps: true,
 		TestDir: TEST_DIR,
 		Tests:   []string{"sync/sy1.t"},
 	}
 
 	expected := []string{
 		"boot.t", "threads/tt1.t", "threads/tt2.t",
-		"threads/tt3.t", "snyc/sy1.t",
+		"threads/tt3.t", "sync/sy1.t",
 	}
 
 	tg, errs := GroupFromConfig(config)
@@ -276,11 +276,11 @@ func TestGroupFromConfg(t *testing.T) {
 	assert.NotNil(tg)
 
 	assert.Equal(len(expected), len(tg.Tests))
-	for _, t := range expected {
-		test, ok := tg.Tests[t]
+	for _, id := range expected {
+		test, ok := tg.Tests[id]
 		assert.True(ok)
 		if ok {
-			assert.Equal(t, test.DependencyID)
+			assert.Equal(id, test.DependencyID)
 		}
 	}
 
