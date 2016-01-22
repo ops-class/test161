@@ -10,12 +10,12 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
-var dataMessage = regexp.MustCompile(`^DATA\s+`)
-
 // sys161 2.0.5: nsec kinsns uinsns udud idle irqs exns disk con emu net
-var validStat = regexp.MustCompile(`^DATA\s+(?P<Nanos>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<Udud>\d+)\s+(?P<Idle>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
+var validHead = regexp.MustCompile(`^HEAD\s+nsec\s+kinsns\s+uinsns\s+udud\s+idle\s+irqs\s+exns\s+disk\s+con\s+emu\s+net`)
+var validStat = regexp.MustCompile(`^DATA\s+(?P<Nsec>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<Udud>\d+)\s+(?P<Idle>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
 
 type Stat struct {
 	initialized bool
@@ -30,7 +30,7 @@ type Stat struct {
 	WallLength TimeFixedPoint `json:"walllength"`
 
 	// Read from stat line
-	Nanos  uint64 `json:"-"`
+	Nsec   uint64 `json:"-"`
 	Kinsns uint32 `json:"kinsns"`
 	Uinsns uint32 `json:"uinsns"`
 	Udud   uint32 `json:"udud"`
@@ -48,7 +48,7 @@ type Stat struct {
 
 // Add adds two stat objects.
 func (i *Stat) Add(j Stat) {
-	i.Nanos += j.Nanos
+	i.Nsec += j.Nsec
 	i.Kinsns += j.Kinsns
 	i.Uinsns += j.Uinsns
 	i.Udud += j.Udud
@@ -65,7 +65,7 @@ func (i *Stat) Add(j Stat) {
 
 // Sub subtracts two stat objects.
 func (i *Stat) Sub(j Stat) {
-	i.Nanos -= j.Nanos
+	i.Nsec -= j.Nsec
 	i.Kinsns -= j.Kinsns
 	i.Uinsns -= j.Uinsns
 	i.Udud -= j.Udud
@@ -192,9 +192,14 @@ func (t *Test) getStats() {
 		// Set the timestamp
 		wallEnd := t.getWallTime()
 
+		// Check HEAD messages
+		if strings.HasPrefix(line, "HEAD ") && validHead.FindString(line) == "" {
+			t.stopStats("stats", fmt.Sprintf("incorrect stat format: %v", line), errors.New("incorrect stat format"))
+			return
+		}
+
 		// Ignore non-data messages
-		dataMatch := dataMessage.FindStringSubmatch(line)
-		if dataMatch == nil {
+		if !strings.HasPrefix(line, "DATA ") {
 			continue
 		}
 
@@ -232,14 +237,14 @@ func (t *Test) getStats() {
 			f.SetUint(x)
 		}
 		// ... which doesn't work for all fields
-		stats.Nanos, _ = strconv.ParseUint(statMatch[1], 10, 64)
+		stats.Nsec, _ = strconv.ParseUint(statMatch[1], 10, 64)
 		// sys161 instructions are single-cycle, so we can combine idle (cycles)
 		// with instructions
 		stats.Insns = stats.Kinsns + stats.Uinsns + stats.Idle
 
 		// Parse the simulation timestamps and update our boundaries
 		stats.Start = simStart
-		stats.End = TimeFixedPoint(float64(stats.Nanos) / 1000000000.0)
+		stats.End = TimeFixedPoint(float64(stats.Nsec) / 1000000000.0)
 		stats.Length = TimeFixedPoint(float64(stats.End) - float64(stats.Start))
 		simStart = stats.End
 

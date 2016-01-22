@@ -14,7 +14,7 @@ func TestStatsKernelDeadlock(t *testing.T) {
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.ProgressTimeout = 8.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -48,7 +48,7 @@ func TestStatsKernelLivelock(t *testing.T) {
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Sys161.CPUs = 1
 	test.Monitor.ProgressTimeout = 8.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -82,7 +82,7 @@ func TestStatsUserDeadlock(t *testing.T) {
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Kernel.EnableMin = "false"
 	test.Misc.PromptTimeout = 8.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -118,7 +118,7 @@ func TestStatsKernelProgress(t *testing.T) {
 	test.Monitor.User.EnableMin = "false"
 	test.Monitor.ProgressTimeout = 2.0
 	test.Misc.PromptTimeout = 10.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -154,7 +154,7 @@ func TestStatsUserProgress(t *testing.T) {
 	test.Monitor.User.EnableMin = "false"
 	test.Monitor.ProgressTimeout = 2.0
 	test.Misc.PromptTimeout = 10.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {

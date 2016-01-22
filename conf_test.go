@@ -47,6 +47,7 @@ func TestConfOverrides(t *testing.T) {
 
 	test, err := TestFromString(`---
 sys161:
+  path: ./fixtures/sys161/sys161-2.0.5
   cpus: 1
   ram: 2M
   disk1:
@@ -89,6 +90,7 @@ q
 
 	overrides := Test{
 		Sys161: Sys161Conf{
+			Path: "./fixtures/sys161/sys161-2.0.5",
 			CPUs: 1,
 			RAM:  "2M",
 			Disk1: DiskConf{

@@ -31,7 +31,7 @@ func TestRunBoot(t *testing.T) {
 	test, err := TestFromString("q")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -59,7 +59,7 @@ func TestRunShell(t *testing.T) {
 	test, err := TestFromString("$ /bin/true")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 5)
 	if len(test.Commands) == 5 {
@@ -94,7 +94,7 @@ func TestRunPanic(t *testing.T) {
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Enabled = "false"
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -133,7 +133,7 @@ commandconf:
 	test.Monitor.User.EnableMin = "false"
 	test.Monitor.Kernel.EnableMin = "false"
 	test.Misc.CommandRetries = 20
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 6)
 	if len(test.Commands) == 6 {
@@ -185,7 +185,7 @@ commandconf:
 	test.Misc.RetryCharacters = "false"
 	test.Monitor.ProgressTimeout = 1.0
 	test.Misc.KillOnExit = "false"
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.NotEqual(len(test.Commands), 6)
 
@@ -194,6 +194,33 @@ commandconf:
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "monitor")
 		assert.True(strings.HasPrefix(test.Status[1].Message, "no progress"))
+		assert.Equal(test.Status[2].Status, "shutdown")
+		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
+	}
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}
+
+func TestRunBadSys161(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString(`---
+sys161:
+  path: "./fixtures/sys161/sys161-2.0.5"
+---
+q
+`)
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	assert.Nil(test.Run("./fixtures/root/"))
+
+	assert.Equal(len(test.Status), 3)
+	if len(test.Status) == 3 {
+		assert.Equal(test.Status[0].Status, "started")
+		assert.Equal(test.Status[1].Status, "stats")
+		assert.True(strings.HasPrefix(test.Status[1].Message, "incorrect stat format"))
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
