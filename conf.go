@@ -156,6 +156,8 @@ func TestFromString(data string) (*Test, error) {
 		return nil, err
 	}
 
+	t.Result = T_RES_IDLE
+
 	return t, nil
 }
 
