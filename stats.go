@@ -2,6 +2,7 @@ package test161
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,7 +12,10 @@ import (
 	"strconv"
 )
 
-var validStat = regexp.MustCompile(`^DATA\s+(?P<Nanos>\d+)\s+(?P<Kern>\d+)\s+(?P<User>\d+)\s+(?P<Idle>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
+var dataMessage = regexp.MustCompile(`^DATA\s+`)
+
+// sys161 2.0.5: nsec kinsns uinsns udud idle irqs exns disk con emu net
+var validStat = regexp.MustCompile(`^DATA\s+(?P<Nanos>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<Udud>\d+)\s+(?P<Idle>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
 
 type Stat struct {
 	initialized bool
@@ -25,52 +29,55 @@ type Stat struct {
 	WallEnd    TimeFixedPoint `json:"wallend"`
 	WallLength TimeFixedPoint `json:"walllength"`
 
+	// Read from stat line
 	Nanos  uint64 `json:"-"`
-	Cycles uint32 `json:"cycles"`
-	Kern   uint32 `json:"kern"`
-	User   uint32 `json:"user"`
-	Idle   uint32 `json:"idle"`
 	Kinsns uint32 `json:"kinsns"`
 	Uinsns uint32 `json:"uinsns"`
+	Udud   uint32 `json:"udud"`
+	Idle   uint32 `json:"idle"`
 	IRQs   uint32 `json:"irqs"`
 	Exns   uint32 `json:"exns"`
 	Disk   uint32 `json:"disk"`
 	Con    uint32 `json:"con"`
 	Emu    uint32 `json:"emu"`
 	Net    uint32 `json:"net"`
+
+	// Derived
+	Insns uint32 `json:"insns"`
 }
 
 // Add adds two stat objects.
 func (i *Stat) Add(j Stat) {
-	i.Cycles += j.Cycles
-	i.Kern += j.Kern
-	i.User += j.User
-	i.Idle += j.Idle
+	i.Nanos += j.Nanos
 	i.Kinsns += j.Kinsns
 	i.Uinsns += j.Uinsns
+	i.Udud += j.Udud
+	i.Idle += j.Idle
 	i.IRQs += j.IRQs
 	i.Exns += j.Exns
 	i.Disk += j.Disk
 	i.Con += j.Con
 	i.Emu += j.Emu
 	i.Net += j.Net
-	i.Nanos += j.Nanos
+
+	i.Insns += j.Insns
 }
 
 // Sub subtracts two stat objects.
 func (i *Stat) Sub(j Stat) {
-	i.Cycles -= j.Cycles
-	i.Kern -= j.Kern
-	i.User -= j.User
-	i.Idle -= j.Idle
+	i.Nanos -= j.Nanos
 	i.Kinsns -= j.Kinsns
 	i.Uinsns -= j.Uinsns
+	i.Udud -= j.Udud
+	i.Idle -= j.Idle
 	i.IRQs -= j.IRQs
 	i.Exns -= j.Exns
 	i.Disk -= j.Disk
 	i.Con -= j.Con
 	i.Emu -= j.Emu
 	i.Net -= j.Net
+
+	i.Insns -= j.Insns
 }
 
 // Append appends the stat object to an existing stat object.
@@ -143,6 +150,7 @@ func (t *Test) getStats() {
 	statConn, err := net.Dial("unix", path.Join(t.tempDir, ".sockets/meter"))
 	if err != nil {
 		t.stopStats("stats", "couldn't connect", err)
+		return
 	}
 
 	// Configure stat interval.
@@ -184,11 +192,17 @@ func (t *Test) getStats() {
 		// Set the timestamp
 		wallEnd := t.getWallTime()
 
-		// Make sure it's a data message and not something else. We ignore other
-		// messages.
+		// Ignore non-data messages
+		dataMatch := dataMessage.FindStringSubmatch(line)
+		if dataMatch == nil {
+			continue
+		}
+
+		// Make sure it's a data message and blow up if we can't parse it.
 		statMatch := validStat.FindStringSubmatch(line)
 		if statMatch == nil {
-			continue
+			t.stopStats("stats", "couldn't parse stat message", errors.New("couldn't parse stat message"))
+			return
 		}
 
 		// Pulse the CV to free the main loop if needed and update our recording
@@ -219,7 +233,9 @@ func (t *Test) getStats() {
 		}
 		// ... which doesn't work for all fields
 		stats.Nanos, _ = strconv.ParseUint(statMatch[1], 10, 64)
-		stats.Cycles = stats.Kern + stats.User + stats.Idle
+		// sys161 instructions are single-cycle, so we can combine idle (cycles)
+		// with instructions
+		stats.Insns = stats.Kinsns + stats.Uinsns + stats.Idle
 
 		// Parse the simulation timestamps and update our boundaries
 		stats.Start = simStart
@@ -287,19 +303,19 @@ func (t *Test) getStats() {
 		}
 		// Only run these checks if we have enough state
 		if uint(len(monitorCache)) >= t.Monitor.Window {
-			if currentType == "kernel" && monitorWindow.User > 0 {
-				monitorError = "non-zero user cycles during kernel operation"
+			if currentType == "kernel" && monitorWindow.Uinsns > 0 {
+				monitorError = "non-zero user instructions during kernel operation"
 			} else if t.Monitor.Kernel.EnableMin == "true" &&
-				float64(monitorWindow.Kern)/float64(monitorWindow.Cycles) < t.Monitor.Kernel.Min {
-				monitorError = "insufficient kernel cycles (potential deadlock)"
-			} else if float64(monitorWindow.Kern)/float64(monitorWindow.Cycles) > t.Monitor.Kernel.Max {
-				monitorError = "too many kernel cycles (potential livelock)"
+				float64(monitorWindow.Kinsns)/float64(monitorWindow.Insns) < t.Monitor.Kernel.Min {
+				monitorError = "insufficient kernel instructions (potential deadlock)"
+			} else if float64(monitorWindow.Kinsns)/float64(monitorWindow.Insns) > t.Monitor.Kernel.Max {
+				monitorError = "too many kernel instructions (potential livelock)"
 			} else if currentType == "user" && t.Monitor.User.EnableMin == "true" &&
-				(float64(monitorWindow.User)/float64(monitorWindow.Cycles) < t.Monitor.User.Min) {
-				monitorError = "insufficient user cycles"
+				(float64(monitorWindow.Uinsns)/float64(monitorWindow.Insns) < t.Monitor.User.Min) {
+				monitorError = "insufficient user instructions"
 			} else if currentType == "user" &&
-				(float64(monitorWindow.User)/float64(monitorWindow.Cycles) > t.Monitor.User.Max) {
-				monitorError = "too many user cycles"
+				(float64(monitorWindow.Uinsns)/float64(monitorWindow.Insns) > t.Monitor.User.Max) {
+				monitorError = "too many user instructions"
 			}
 		}
 

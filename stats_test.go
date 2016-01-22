@@ -28,7 +28,7 @@ func TestStatsKernelDeadlock(t *testing.T) {
 	if len(test.Status) == 3 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "monitor")
-		assert.True(strings.HasPrefix(test.Status[1].Message, "insufficient kernel cycles"))
+		assert.True(strings.HasPrefix(test.Status[1].Message, "insufficient kernel instructions"))
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
@@ -62,7 +62,7 @@ func TestStatsKernelLivelock(t *testing.T) {
 	if len(test.Status) == 3 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "monitor")
-		assert.True(strings.HasPrefix(test.Status[1].Message, "too many kernel cycles"))
+		assert.True(strings.HasPrefix(test.Status[1].Message, "too many kernel instructions"))
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
@@ -96,7 +96,7 @@ func TestStatsUserDeadlock(t *testing.T) {
 	if len(test.Status) == 3 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "monitor")
-		assert.True(strings.HasPrefix(test.Status[1].Message, "insufficient user cycles"))
+		assert.True(strings.HasPrefix(test.Status[1].Message, "insufficient user instructions"))
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
