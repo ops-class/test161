@@ -1,9 +1,5 @@
 package test161
 
-import (
-	"log"
-)
-
 type TestRunner interface {
 	Run()
 	GetCompletedChan() chan *test161JobResult
@@ -69,7 +65,6 @@ func waitForDeps(test *Test, depChan, readyChan, abortChan chan *Test) {
 	}
 
 	for len(deps) > 0 {
-		log.Println(test.DependencyID, "waiting on dependencies")
 		res := <-depChan
 		if _, ok := deps[res.DependencyID]; ok {
 			if res.Result == T_RES_OK {
@@ -80,8 +75,6 @@ func waitForDeps(test *Test, depChan, readyChan, abortChan chan *Test) {
 			}
 		}
 	}
-
-	log.Println(test.DependencyID, "dependencies met!")
 
 	// We're clear
 	readyChan <- test
