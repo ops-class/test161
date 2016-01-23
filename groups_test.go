@@ -30,6 +30,8 @@ func TestTestMapLoad(t *testing.T) {
 
 	expected := []string{
 		"boot.t",
+		"panics/panic.t",
+		"panics/deppanic.t",
 		"threads/tt1.t",
 		"threads/tt2.t",
 		"threads/tt3.t",
@@ -99,7 +101,7 @@ func TestTestMapGlobs(t *testing.T) {
 
 	// Empty
 	tests, err = tm.TestsFromGlob("foo/bar*.t", abs)
-	assert.Nil(err)
+	assert.NotNil(err)
 	assert.Equal(0, len(tests))
 
 }
@@ -140,16 +142,18 @@ func TestTestMapTags(t *testing.T) {
 }
 
 var DEP_MAP = map[string][]string{
-	"boot.t":        []string{},
-	"threads/tt1.t": []string{"boot.t"},
-	"threads/tt2.t": []string{"boot.t"},
-	"threads/tt3.t": []string{"boot.t"},
-	"sync/semu1.t":  []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/sy1.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/sy2.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/sy3.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t"},
-	"sync/sy4.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t", "sync/sy3.t"},
-	"sync/sy5.t":    []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"boot.t":            []string{},
+	"threads/tt1.t":     []string{"boot.t"},
+	"threads/tt2.t":     []string{"boot.t"},
+	"threads/tt3.t":     []string{"boot.t"},
+	"sync/semu1.t":      []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/sy1.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/sy2.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/sy3.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t"},
+	"sync/sy4.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t", "sync/sy3.t"},
+	"sync/sy5.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"panics/panic.t":    []string{"boot.t"},
+	"panics/deppanic.t": []string{"panics/panic.t"},
 }
 
 func TestTestMapDependencies(t *testing.T) {
@@ -300,4 +304,29 @@ func TestGroupFromConfg(t *testing.T) {
 	}
 
 	t.Log(tg)
+}
+
+func TestGroupConfigInvalid(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	tests := []string{
+		"threads/tt1.t",
+		"threads/tt2.t",
+		"thread/tt3.t",
+	}
+
+	// Test config with dependencies
+	config := &GroupConfig{
+		Name:    "Test",
+		RootDir: "./fixtures",
+		UseDeps: false,
+		TestDir: TEST_DIR,
+		Tests:   tests,
+	}
+
+	tg, errs := GroupFromConfig(config)
+	assert.NotEqual(0, len(errs))
+	t.Log(errs)
+	assert.Nil(tg)
 }

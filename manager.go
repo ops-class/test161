@@ -1,7 +1,7 @@
 package test161
 
 import (
-	"fmt"
+	"log"
 	"sync"
 )
 
@@ -79,7 +79,7 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 
 	for m.Capacity > 0 && m.stats.NumRunning >= m.Capacity {
 		if !queued {
-			fmt.Println("Queueing job:", job.Test.DependencyID)
+			log.Println("Queueing job:", job.Test.DependencyID)
 			queued = true
 			m.stats.Queued += 1
 			if m.stats.Queued > m.stats.HighQueued {
@@ -102,12 +102,12 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 
 	m.statsCond.L.Unlock()
 
-	fmt.Println("Starting job:", job.Test.DependencyID)
+	log.Println("Starting job:", job.Test.DependencyID)
 
 	// Go!
 	err := job.Test.Run(job.RootDir)
 
-	fmt.Println("Finished job:", job.Test.DependencyID)
+	log.Println("Finished job:", job.Test.DependencyID)
 
 	// And... we're done.
 

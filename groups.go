@@ -184,7 +184,6 @@ func (tm *TestMap) TestsFromGlob(search, startDir string) ([]*Test, error) {
 	glob = path.Clean(glob)
 
 	if !strings.HasPrefix(glob, tm.TestDir) {
-		fmt.Println(glob, tm.TestDir)
 		return nil,
 			errors.New(fmt.Sprintf("Cannot specify tests outside of testing directory: %v",
 				glob))
@@ -194,6 +193,10 @@ func (tm *TestMap) TestsFromGlob(search, startDir string) ([]*Test, error) {
 	files, err := doublestar.Glob(glob)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(files) == 0 {
+		return nil, errors.New(fmt.Sprintf("Cannot find a file match for glob: %v'", glob))
 	}
 
 	// Finally, create a slice of tests corresponding to the search string
