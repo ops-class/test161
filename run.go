@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -344,7 +345,15 @@ func (t *Test) sendCommand(commandLine string) error {
 func (t *Test) start161() error {
 	// Disable debugger connections on panic and set our alternate
 	// configuration.
-	run := exec.Command("sys161", "-X", "-c", "test161.conf", "kernel")
+	sys161Path := t.Sys161.Path
+	if strings.HasPrefix(t.Sys161.Path, "./") {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		sys161Path = path.Join(cwd, sys161Path)
+	}
+	run := exec.Command(sys161Path, "-X", "-c", "test161.conf", "kernel")
 	run.Dir = t.tempDir
 	pty, err := pty.Start(run)
 	if err != nil {

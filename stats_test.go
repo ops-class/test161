@@ -14,7 +14,7 @@ func TestStatsKernelDeadlock(t *testing.T) {
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.ProgressTimeout = 8.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -28,7 +28,7 @@ func TestStatsKernelDeadlock(t *testing.T) {
 	if len(test.Status) == 3 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "monitor")
-		assert.True(strings.HasPrefix(test.Status[1].Message, "insufficient kernel cycles"))
+		assert.True(strings.HasPrefix(test.Status[1].Message, "insufficient kernel instructions"))
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
@@ -48,7 +48,7 @@ func TestStatsKernelLivelock(t *testing.T) {
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Sys161.CPUs = 1
 	test.Monitor.ProgressTimeout = 8.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -62,7 +62,7 @@ func TestStatsKernelLivelock(t *testing.T) {
 	if len(test.Status) == 3 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "monitor")
-		assert.True(strings.HasPrefix(test.Status[1].Message, "too many kernel cycles"))
+		assert.True(strings.HasPrefix(test.Status[1].Message, "too many kernel instructions"))
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
@@ -82,7 +82,7 @@ func TestStatsUserDeadlock(t *testing.T) {
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Kernel.EnableMin = "false"
 	test.Misc.PromptTimeout = 8.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -96,7 +96,7 @@ func TestStatsUserDeadlock(t *testing.T) {
 	if len(test.Status) == 3 {
 		assert.Equal(test.Status[0].Status, "started")
 		assert.Equal(test.Status[1].Status, "monitor")
-		assert.True(strings.HasPrefix(test.Status[1].Message, "insufficient user cycles"))
+		assert.True(strings.HasPrefix(test.Status[1].Message, "insufficient user instructions"))
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
@@ -118,7 +118,7 @@ func TestStatsKernelProgress(t *testing.T) {
 	test.Monitor.User.EnableMin = "false"
 	test.Monitor.ProgressTimeout = 2.0
 	test.Misc.PromptTimeout = 10.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -154,7 +154,7 @@ func TestStatsUserProgress(t *testing.T) {
 	test.Monitor.User.EnableMin = "false"
 	test.Monitor.ProgressTimeout = 2.0
 	test.Misc.PromptTimeout = 10.0
-	assert.Nil(test.Run("./fixtures/"))
+	assert.Nil(test.Run("./fixtures/root/"))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {

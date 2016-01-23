@@ -1,5 +1,5 @@
 = Testing Fixtures
 
 Testing requires a solution kernel for
-`ops-class.org`[https://www.ops-class.org] ASST3 and ass
-please email `challen@buffalo.edu`[mailto:challen@buffalo.edu].
+`ops-class.org`[https://www.ops-class.org] ASST3.  Please email
+shaseley@buffalo.edu`[mailto:shaseley@buffalo.edu].

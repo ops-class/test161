@@ -23,6 +23,7 @@ import (
 // output) it doesn't matter.
 
 type Sys161Conf struct {
+	Path   string   `yaml:"path" json:"path"`
 	CPUs   uint     `yaml:"cpus" json:"cpus"`
 	RAM    string   `yaml:"ram" json:"ram"`
 	Disk1  DiskConf `yaml:"disk1" json:"disk1"`
@@ -74,6 +75,7 @@ type CommandConf struct {
 
 var CONF_DEFAULTS = Test{
 	Sys161: Sys161Conf{
+		Path: "sys161",
 		CPUs: 8,
 		RAM:  "1M",
 		Disk1: DiskConf{
