@@ -52,7 +52,7 @@ func TestRunnerCapacity(t *testing.T) {
 
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures",
+		RootDir: "./fixtures/root",
 		UseDeps: false,
 		TestDir: TEST_DIR,
 		Tests:   expected,
@@ -112,7 +112,7 @@ func TestRunnerSimple(t *testing.T) {
 	// Test config with dependencies
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures",
+		RootDir: "./fixtures/root",
 		UseDeps: false,
 		TestDir: TEST_DIR,
 		Tests:   expected,
@@ -153,7 +153,7 @@ func TestRunnerDependency(t *testing.T) {
 
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures",
+		RootDir: "./fixtures/root",
 		UseDeps: true,
 		TestDir: TEST_DIR,
 		Tests:   []string{"sync/sy4.t"},
@@ -200,7 +200,7 @@ func TestRunnerAbort(t *testing.T) {
 
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures",
+		RootDir: "./fixtures/root",
 		UseDeps: true,
 		TestDir: TEST_DIR,
 		Tests:   []string{"panics/deppanic.t"},
@@ -264,7 +264,7 @@ func TestRunnersParallel(t *testing.T) {
 	for _, group := range tests {
 		config := &GroupConfig{
 			Name:    "Test",
-			RootDir: "./fixtures",
+			RootDir: "./fixtures/root",
 			UseDeps: false,
 			TestDir: TEST_DIR,
 			Tests:   group,

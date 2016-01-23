@@ -210,7 +210,7 @@ func TestRunResults(t *testing.T) {
 	test, err := TestFromString("$ /bin/true")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	err = test.Run("./fixtures")
+	err = test.Run("./fixtures/root")
 	assert.Nil(err)
 	assert.Equal(T_RES_OK, test.Result)
 
@@ -222,7 +222,7 @@ func TestRunResults(t *testing.T) {
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Enabled = "false"
-	err = test.Run("./fixtures")
+	err = test.Run("./fixtures/root")
 	assert.Nil(err)
 	assert.Equal(T_RES_FAIL, test.Result)
 

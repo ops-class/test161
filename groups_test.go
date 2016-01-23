@@ -264,7 +264,7 @@ func TestGroupFromConfg(t *testing.T) {
 	// Test config with dependencies
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "fixtures",
+		RootDir: "fixtures/root",
 		UseDeps: true,
 		TestDir: TEST_DIR,
 		Tests:   []string{"sync/sy1.t"},
@@ -319,7 +319,7 @@ func TestGroupConfigInvalid(t *testing.T) {
 	// Test config with dependencies
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures",
+		RootDir: "./fixtures/root",
 		UseDeps: false,
 		TestDir: TEST_DIR,
 		Tests:   tests,
