@@ -133,7 +133,14 @@ func (t *Test) stopStats(status string, message string, statErr error) {
 	t.statActive = false
 	t.statCond.Signal()
 	t.statCond.L.Unlock()
-	t.stop161()
+
+	// If we're shutting down because the stat socket closed (EOF), then
+	// this is probably just part of the normal shutdown chain of events.
+	// In this case, don't invoke stop161, which closes the underlying pty file.
+	// Doing so can cause races in Test.Run which manifests itself as expect errors.
+	if statErr != nil || message != "" {
+		t.stop161()
+	}
 }
 
 // getStats is the main stats collection and monitor goroutine.

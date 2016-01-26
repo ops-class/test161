@@ -130,7 +130,8 @@ func TestRunnerSimple(t *testing.T) {
 	for res := range done {
 		assert.Nil(res.Err)
 		assert.Equal(T_RES_OK, res.Test.Result)
-		t.Log(fmt.Sprintf("test: %v  status: %v", res.Test.DependencyID, res.Test.Result))
+		t.Log(res.Test.OutputString())
+		t.Log(res.Test.OutputJSON())
 		count += 1
 	}
 
@@ -171,7 +172,8 @@ func TestRunnerDependency(t *testing.T) {
 	for res := range done {
 		assert.Nil(res.Err)
 		assert.Equal(T_RES_OK, res.Test.Result)
-		t.Log(fmt.Sprintf("test: %v  status: %v", res.Test.DependencyID, res.Test.Result))
+		t.Log(res.Test.OutputString())
+		t.Log(res.Test.OutputJSON())
 		count += 1
 		results = append(results, res.Test.DependencyID)
 	}
@@ -215,8 +217,8 @@ func TestRunnerAbort(t *testing.T) {
 	count := 0
 	for res := range done {
 		assert.Nil(res.Err)
-		t.Log(fmt.Sprintf("test: %v  status: %v", res.Test.DependencyID, res.Test.Result))
 		assert.Equal(expected[count], res.Test.DependencyID)
+
 		switch count {
 		case 0: // boot
 			assert.Equal(T_RES_OK, res.Test.Result)
@@ -226,6 +228,9 @@ func TestRunnerAbort(t *testing.T) {
 			assert.Equal(T_RES_SKIP, res.Test.Result)
 		}
 		count += 1
+
+		t.Log(res.Test.OutputString())
+		t.Log(res.Test.OutputJSON())
 	}
 
 	assert.Equal(len(expected), count)
@@ -285,16 +290,17 @@ func TestRunnersParallel(t *testing.T) {
 
 			count := 0
 			done := r.GetCompletedChan()
+
 			for res := range done {
 				assert.Nil(res.Err)
-				t.Log(fmt.Sprintf("test: %v  status: %v", res.Test.DependencyID, res.Test.Result))
 				assert.Equal(T_RES_OK, res.Test.Result)
-				if res.Test.Result != T_RES_OK {
-					t.Log(res.Err)
-					t.Log(res.Test.OutputString())
-				}
+				t.Log(res.Test.OutputString())
+				t.Log(res.Test.OutputJSON())
+
 				count += 1
 			}
+
+			// Done with this test group
 			assert.Equal(len(tests[i]), count)
 			syncChan <- 1
 		}(runner, index)
