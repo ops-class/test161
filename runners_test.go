@@ -9,15 +9,25 @@ import (
 func runnerFromConfig(t *testing.T, config *GroupConfig, expected []string) TestRunner {
 
 	// Create a test the group
-	tg, errs := GroupFromConfig(config)
+	r, errs := TestRunnerFromConfig(config)
 	assert.Equal(t, 0, len(errs))
 	if len(errs) > 0 {
 		t.Log(errs)
+		return nil
 	}
 
-	assert.NotNil(t, tg)
-
+	tg := r.Group()
+	assert.NotNil(t, r.Group())
 	assert.Equal(t, len(expected), len(tg.Tests))
+
+	switch r.(type) {
+	case *SimpleRunner:
+		assert.False(t, config.UseDeps)
+	case *DependencyRunner:
+		assert.True(t, config.UseDeps)
+	default:
+		t.Errorf("Unexpected type for runner r")
+	}
 
 	// Make sure it has what we're expecting
 	for _, id := range expected {
@@ -28,14 +38,7 @@ func runnerFromConfig(t *testing.T, config *GroupConfig, expected []string) Test
 		}
 	}
 
-	done := make(chan *test161JobResult, len(tg.Tests))
-	var r TestRunner
-
-	if config.UseDeps {
-		r = &DependencyRunner{tg, done}
-	} else {
-		r = &DependencyRunner{tg, done}
-	}
+	t.Log(tg)
 
 	return r
 }
@@ -61,24 +64,23 @@ func TestRunnerCapacity(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		switch i {
 		case 0:
-			taskManager.Capacity = 0
+			testManager.Capacity = 0
 		case 1:
-			taskManager.Capacity = 1
+			testManager.Capacity = 1
 		case 2:
-			taskManager.Capacity = 3
+			testManager.Capacity = 3
 		case 3:
-			taskManager.Capacity = 5
+			testManager.Capacity = 5
 		}
 
 		r := runnerFromConfig(t, config, expected)
 
-		taskManager.stop() //clear stats
-		taskManager.start()
+		testManager.stop() //clear stats
+		testManager.start()
 
-		r.Run()
-
+		done := r.Run()
 		count := 0
-		done := r.GetCompletedChan()
+
 		for res := range done {
 			assert.Nil(res.Err)
 			assert.Equal(T_RES_OK, res.Test.Result)
@@ -87,18 +89,18 @@ func TestRunnerCapacity(t *testing.T) {
 		}
 
 		assert.Equal(len(expected), count)
-		assert.Equal(uint(len(expected)), taskManager.stats.Finished)
+		assert.Equal(uint(len(expected)), testManager.stats.Finished)
 
-		if taskManager.Capacity > 0 {
-			assert.True(taskManager.stats.HighCount <= taskManager.Capacity)
+		if testManager.Capacity > 0 {
+			assert.True(testManager.stats.HighCount <= testManager.Capacity)
 		}
 		t.Log(fmt.Sprintf("High count: %v High queue: %v Finished: %v",
-			taskManager.stats.HighCount, taskManager.stats.HighQueued, taskManager.stats.Finished))
+			testManager.stats.HighCount, testManager.stats.HighQueued, testManager.stats.Finished))
 
-		taskManager.stop()
+		testManager.stop()
 	}
 
-	taskManager.Capacity = 0
+	testManager.Capacity = 0
 }
 
 func TestRunnerSimple(t *testing.T) {
@@ -120,12 +122,10 @@ func TestRunnerSimple(t *testing.T) {
 
 	r := runnerFromConfig(t, config, expected)
 
-	taskManager.start()
+	testManager.start()
 
-	r.Run()
-
+	done := r.Run()
 	count := 0
-	done := r.GetCompletedChan()
 
 	for res := range done {
 		assert.Nil(res.Err)
@@ -136,10 +136,10 @@ func TestRunnerSimple(t *testing.T) {
 	}
 
 	assert.Equal(len(expected), count)
-	assert.Equal(uint(len(expected)), taskManager.stats.Finished)
+	assert.Equal(uint(len(expected)), testManager.stats.Finished)
 
 	// Shut it down
-	taskManager.stop()
+	testManager.stop()
 }
 
 func TestRunnerDependency(t *testing.T) {
@@ -161,13 +161,12 @@ func TestRunnerDependency(t *testing.T) {
 	}
 
 	r := runnerFromConfig(t, config, expected)
-	taskManager.Capacity = 0
-	taskManager.start()
-	r.Run()
+	testManager.Capacity = 0
+	testManager.start()
+	done := r.Run()
 
 	results := make([]string, 0)
 	count := 0
-	done := r.GetCompletedChan()
 
 	for res := range done {
 		assert.Nil(res.Err)
@@ -188,7 +187,7 @@ func TestRunnerDependency(t *testing.T) {
 	assert.Equal(expected[len(expected)-2], results[len(expected)-2])
 	assert.Equal(expected[len(expected)-1], results[len(expected)-1])
 
-	taskManager.stop()
+	testManager.stop()
 }
 
 func TestRunnerAbort(t *testing.T) {
@@ -209,10 +208,9 @@ func TestRunnerAbort(t *testing.T) {
 	}
 
 	r := runnerFromConfig(t, config, expected)
-	taskManager.Capacity = 0
-	taskManager.start()
-	r.Run()
-	done := r.GetCompletedChan()
+	testManager.Capacity = 0
+	testManager.start()
+	done := r.Run()
 
 	count := 0
 	for res := range done {
@@ -235,7 +233,7 @@ func TestRunnerAbort(t *testing.T) {
 
 	assert.Equal(len(expected), count)
 
-	taskManager.stop()
+	testManager.stop()
 }
 
 func TestRunnersParallel(t *testing.T) {
@@ -260,9 +258,9 @@ func TestRunnersParallel(t *testing.T) {
 		},
 	}
 
-	taskManager.Capacity = 5
-	taskManager.stop()
-	taskManager.start()
+	testManager.Capacity = 5
+	testManager.stop()
+	testManager.start()
 
 	runners := make([]TestRunner, 0, len(tests))
 
@@ -280,16 +278,14 @@ func TestRunnersParallel(t *testing.T) {
 
 	syncChan := make(chan int)
 
-	taskManager.Capacity = 10
-	taskManager.stop()
-	taskManager.start()
+	testManager.Capacity = 10
+	testManager.stop()
+	testManager.start()
 
 	for index, runner := range runners {
 		go func(r TestRunner, i int) {
-			r.Run()
-
+			done := r.Run()
 			count := 0
-			done := r.GetCompletedChan()
 
 			for res := range done {
 				assert.Nil(res.Err)
@@ -311,13 +307,13 @@ func TestRunnersParallel(t *testing.T) {
 		<-syncChan
 	}
 
-	taskManager.stop()
+	testManager.stop()
 
-	if taskManager.Capacity > 0 {
-		assert.True(taskManager.stats.HighCount <= taskManager.Capacity)
+	if testManager.Capacity > 0 {
+		assert.True(testManager.stats.HighCount <= testManager.Capacity)
 	}
 
 	t.Log(fmt.Sprintf("High count: %v High queue: %v Finished: %v",
-		taskManager.stats.HighCount, taskManager.stats.HighQueued, taskManager.stats.Finished))
+		testManager.stats.HighCount, testManager.stats.HighQueued, testManager.stats.Finished))
 
 }

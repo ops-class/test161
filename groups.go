@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"github.com/bmatcuk/doublestar"
 	"github.com/ops-class/test161/graph"
-	//"io/ioutil"
-	//"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -15,7 +13,6 @@ import (
 )
 
 // GroupConfig specifies how a group of tests should be created and run.
-// A TestGroup will be created and run using
 type GroupConfig struct {
 	Name    string   `json:name`
 	RootDir string   `json:rootdir`
@@ -24,23 +21,26 @@ type GroupConfig struct {
 	Tests   []string `json:"tests"`
 }
 
-// A group of tests to be run
+// A group of tests to be run, which is the result of expanding a GroupConfig.
 type TestGroup struct {
 	id     uint64
 	Tests  map[string]*Test
 	Config *GroupConfig
 }
 
+// Since we don't allow id to be accessed directly, we have a special
+// type for JSON output that exports the ID.
 type jsonTestGroup struct {
 	Id     uint64           `json:"id"`
 	Config *GroupConfig     `json:"config"`
 	Tests  map[string]*Test `json:"tests"`
 }
 
+// Group ID counter and protection
 var idLock = &sync.Mutex{}
 var curID uint64 = 1
 
-// Id retrieves the group id
+// Id retrieves the protected group id
 func (t *TestGroup) Id() uint64 {
 	return t.id
 }
@@ -50,7 +50,7 @@ func (tg *TestGroup) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonTestGroup{tg.Id(), tg.Config, tg.Tests})
 }
 
-// Increments the global counter and returns the previous value
+// Increments the global counter and returns the previous value.
 func incrementId() (res uint64) {
 	idLock.Lock()
 	res = curID
@@ -62,8 +62,8 @@ func incrementId() (res uint64) {
 	return
 }
 
-// EmptyGroup creates an empty TestGroup that can be used to add
-// groups from strings.
+// EmptyGroup creates an empty TestGroup that can be used to add groups from
+// strings.
 func EmptyGroup() *TestGroup {
 	tg := &TestGroup{}
 	tg.id = incrementId()
@@ -71,12 +71,12 @@ func EmptyGroup() *TestGroup {
 	return tg
 }
 
-// TagMap store a slice of Tests corresponding to each tag
+// TagMap stores Tests indexed by id and maintains a map
+// of tag -> tests for the test set.
 type TagMap map[string][]*Test
 
-// Test Map stores Tests indexed by id and maintains a map
-// of tag -> tests for the test set.
-type TestMap struct {
+// TestMap stores a mapping of test id -> test
+type testMap struct {
 	TestDir string
 	Tests   map[string]*Test
 	Tags    TagMap
@@ -88,13 +88,13 @@ type testLoadResult struct {
 	Err  error
 }
 
-func NewTestMap(testDir string) (*TestMap, []error) {
+func newTestMap(testDir string) (*testMap, []error) {
 	abs, err := filepath.Abs(testDir)
 	if err != nil {
 		return nil, []error{err}
 	}
 	abs = path.Clean(abs)
-	tm := &TestMap{abs, make(map[string]*Test), make(TagMap)}
+	tm := &testMap{abs, make(map[string]*Test), make(TagMap)}
 	errs := tm.load()
 	if len(errs) > 0 {
 		return nil, errs
@@ -105,8 +105,8 @@ func NewTestMap(testDir string) (*TestMap, []error) {
 	return tm, nil
 }
 
-// Helper function to get an id for a particular filename.
-// We use the filename relative to the test directory.
+// Helper function to get an id for a particular filename. We use the filename
+// relative to the test directory.
 func idFromFile(filename, testDir string) (string, error) {
 	if temp, err := filepath.Abs(filename); err != nil {
 		return "", err
@@ -115,7 +115,8 @@ func idFromFile(filename, testDir string) (string, error) {
 	}
 }
 
-func (tm *TestMap) buildTagMap() {
+// Creates a mapping of tag -> []test
+func (tm *testMap) buildTagMap() {
 	tm.Tags = make(TagMap)
 
 	for _, test := range tm.Tests {
@@ -130,7 +131,7 @@ func (tm *TestMap) buildTagMap() {
 
 // Helper function that just gets all test in the config test directory.
 // It returns a mapping of test name (file name) to test.
-func (tm *TestMap) load() []error {
+func (tm *testMap) load() []error {
 	errs := make([]error, 0)
 
 	// Find all test files using globstar snytax
@@ -168,7 +169,9 @@ func (tm *TestMap) load() []error {
 	return errs
 }
 
-func (tm *TestMap) TestsFromGlob(search, startDir string) ([]*Test, error) {
+// Get a slice of tests from a single search expression, which can be a glob
+// or single file.
+func (tm *testMap) testsFromGlob(search, startDir string) ([]*Test, error) {
 	var glob string
 
 	if strings.HasPrefix(search, "/") {
@@ -209,7 +212,7 @@ func (tm *TestMap) TestsFromGlob(search, startDir string) ([]*Test, error) {
 				tests = append(tests, test)
 			} else {
 				return nil,
-					errors.New(fmt.Sprintf("Cannot find test: %v.  Is TestMap initialized?", id))
+					errors.New(fmt.Sprintf("Cannot find test: %v.  Is testMap initialized?", id))
 			}
 		}
 	}
@@ -217,7 +220,7 @@ func (tm *TestMap) TestsFromGlob(search, startDir string) ([]*Test, error) {
 }
 
 // Expand the dependencies for a single test
-func (t *Test) expandTestDeps(tests *TestMap, done chan error) {
+func (t *Test) expandTestDeps(tests *testMap, done chan error) {
 
 	t.ExpandedDeps = make(map[string]*Test)
 
@@ -229,7 +232,7 @@ func (t *Test) expandTestDeps(tests *TestMap, done chan error) {
 		if strings.HasSuffix(dep, ".t") {
 			// it's a file/glob
 			startDir := path.Dir(path.Join(tests.TestDir, t.DependencyID))
-			if deps, err = tests.TestsFromGlob(dep, startDir); err != nil {
+			if deps, err = tests.testsFromGlob(dep, startDir); err != nil {
 				done <- err
 				return
 			} else if len(deps) == 0 {
@@ -258,7 +261,7 @@ func (t *Test) expandTestDeps(tests *TestMap, done chan error) {
 }
 
 // Expand all tests' dependencies so we can create a dependency graph
-func (tm *TestMap) expandAllDeps() []error {
+func (tm *testMap) expandAllDeps() []error {
 	resChan := make(chan error)
 	errors := make([]error, 0)
 
@@ -283,9 +286,8 @@ func (t *Test) Key() string {
 	return t.DependencyID
 }
 
-// DependencyGraph creates a dependency graph from the
-// tests in TestMap
-func (tm *TestMap) DependencyGraph() (*graph.Graph, []error) {
+// DependencyGraph creates a dependency graph from the tests in testMap.
+func (tm *testMap) dependencyGraph() (*graph.Graph, []error) {
 	errs := tm.expandAllDeps()
 	if len(errs) > 0 {
 		return nil, errs
@@ -317,12 +319,16 @@ func (tm *TestMap) DependencyGraph() (*graph.Graph, []error) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// The encapsulates the results of expanding a test expression, which can
+// expand to multiple tests.  These get passed on the results channel between
+// worker goroutines and their caller.
 type expandRes struct {
 	Err   error
 	Tests []*Test
 }
 
-func (tg *TestGroup) expandTests(tm *TestMap) []error {
+// Expand all the tests specified in a TestGroups' configuration.
+func (tg *TestGroup) expandTests(tm *testMap) []error {
 	resChan := make(chan *expandRes)
 
 	// Spawn some workers to expand the tests
@@ -331,7 +337,7 @@ func (tg *TestGroup) expandTests(tm *TestMap) []error {
 			var tests []*Test = nil
 			var err error = nil
 			if strings.HasSuffix(test, ".t") {
-				tests, err = tm.TestsFromGlob(test, tg.Config.TestDir)
+				tests, err = tm.testsFromGlob(test, tg.Config.TestDir)
 			} else {
 				if res, ok := tm.Tags[test]; ok {
 					tests = res
@@ -361,11 +367,6 @@ func (tg *TestGroup) expandTests(tm *TestMap) []error {
 	return errs
 }
 
-type depNodesRes struct {
-	Err   error
-	Tests []*Test
-}
-
 func getDepNodesHelper(node *graph.Node, tests []*Test) []*Test {
 	// We have to do a type assertion to get a *Test from a Keyer
 	v := node.Value
@@ -379,23 +380,25 @@ func getDepNodesHelper(node *graph.Node, tests []*Test) []*Test {
 	return tests
 }
 
-// If there's a cycle, this will loop forever,
-// or at least until we run out of memory.
-func getDepNodes(g *graph.Graph, id string, ch chan *depNodesRes) {
+// If there's a cycle, this will loop forever, or at least until we run out of
+// memory.
+func getDepNodes(g *graph.Graph, id string, ch chan *expandRes) {
 
 	// Just to be extra cautious
 	if node, ok := g.NodeMap[id]; !ok {
-		ch <- &depNodesRes{errors.New(fmt.Sprintf("Cannot find '%v' in dependency graph", id)), nil}
+		ch <- &expandRes{errors.New(fmt.Sprintf("Cannot find '%v' in dependency graph", id)), nil}
 	} else {
 		tests := getDepNodesHelper(node, make([]*Test, 0))
-		ch <- &depNodesRes{nil, tests}
+		ch <- &expandRes{nil, tests}
 	}
 }
 
+// Create a TestGroup from a GroupConfig.  All test expressions are expanded
+// and dependencies are added if UseDeps is set to true in the configuration.
 func GroupFromConfig(config *GroupConfig) (*TestGroup, []error) {
 
 	// Get all tests first
-	tm, errs := NewTestMap(config.TestDir)
+	tm, errs := newTestMap(config.TestDir)
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -426,7 +429,7 @@ func GroupFromConfig(config *GroupConfig) (*TestGroup, []error) {
 	//  2. Make sure there aren't any cycles in the dependency graph
 	//  3. Pluck out all the sub trees for the requested tests
 
-	g, errs := tm.DependencyGraph()
+	g, errs := tm.dependencyGraph()
 	if len(errs) > 0 {
 		// problems expanding dependencies
 		return nil, errs
@@ -438,7 +441,7 @@ func GroupFromConfig(config *GroupConfig) (*TestGroup, []error) {
 	}
 
 	// Get the dependencies for everything already in the test group
-	resChan := make(chan *depNodesRes)
+	resChan := make(chan *expandRes)
 	for id, _ := range tg.Tests {
 		go getDepNodes(g, id, resChan)
 	}

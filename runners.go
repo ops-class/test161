@@ -1,58 +1,90 @@
 package test161
 
+// A TestRunner is responsible for running a TestGroup and sending the
+// results back on a read-only channel. test161 runners close the results
+// channel when finished so clients can range over it. test161 runners also
+// return as soon as they are able to and let tests run asynchronously.
 type TestRunner interface {
-	Run()
-	GetCompletedChan() chan *test161JobResult
+	Group() *TestGroup
+	Run() <-chan *Test161JobResult
 }
 
-// A simple runner that tries to run everything as fast as
-// it's allowed to, i.e. doesn't care about dependencies.
+// Create a TestRunner from a GroupConfig.  config.UseDeps determines the
+// type of runner created.
+func TestRunnerFromConfig(config *GroupConfig) (TestRunner, []error) {
+	if tg, errs := GroupFromConfig(config); len(errs) > 0 {
+		return nil, errs
+	} else if config.UseDeps {
+		return NewDependencyRunner(tg), nil
+	} else {
+		return NewSimpleRunner(tg), nil
+	}
+}
+
+// Factory function to create a new SimpleRunner.
+func NewSimpleRunner(group *TestGroup) TestRunner {
+	return &SimpleRunner{group}
+}
+
+// Factory function to create a new DependencyRunner.
+func NewDependencyRunner(group *TestGroup) TestRunner {
+	return &DependencyRunner{group}
+}
+
+// A simple runner that tries to run everything as fast as it's allowed to,
+// i.e. it doesn't care about dependencies.
 type SimpleRunner struct {
-	Group *TestGroup
-
-	// Outgoing, non-blocking, buffered channel
-	// Set to nil or cap 0 if you don't want results
-	// for some reason
-	CompletedChan chan *test161JobResult
+	group *TestGroup
 }
 
-func (r *SimpleRunner) GetCompletedChan() chan *test161JobResult {
-	return r.CompletedChan
+func (r *SimpleRunner) Group() *TestGroup {
+	return r.group
 }
 
-// Run a TestGroup Asynchronously
-func (r *SimpleRunner) Run() {
-	resChan := make(chan *test161JobResult)
+func (r *SimpleRunner) Run() <-chan *Test161JobResult {
+
+	// We create 2 channels, one to receive the results from the test
+	// manager and one to transmit the results to the caller.  We
+	// don't just pass the caller channel to the test manager because
+	// we promise to close the channel when we're done so clients can
+	// range over the channel if they'd like
+
+	// For retrieving results from the test manager
+	resChan := make(chan *Test161JobResult)
+
+	// Buffered channel for our client.
+	callbackChan := make(chan *Test161JobResult, len(r.group.Tests))
 
 	// Spawn every job at once (no dependency tracking)
-	for _, test := range r.Group.Tests {
-		job := &test161Job{test, r.Group.Config.RootDir, resChan}
-		taskManager.SubmitChan <- job
+	for _, test := range r.group.Tests {
+		job := &test161Job{test, r.group.Config.RootDir, resChan}
+		testManager.SubmitChan <- job
 	}
 
 	go func() {
-		for i, count := 0, len(r.Group.Tests); i < count; i++ {
+		for i, count := 0, len(r.group.Tests); i < count; i++ {
 			// Always block recieving the test result
 			res := <-resChan
 
 			// But, never block sending it back
 			select {
-			case r.CompletedChan <- res:
+			case callbackChan <- res:
 			default:
 			}
 		}
-		close(r.CompletedChan)
+		close(callbackChan)
 	}()
+
+	return callbackChan
 }
 
-// This runner has mad respect for dependencies
+// This runner has mad respect for dependencies.
 type DependencyRunner struct {
-	Group         *TestGroup
-	CompletedChan chan *test161JobResult
+	group *TestGroup
 }
 
-func (r *DependencyRunner) GetCompletedChan() chan *test161JobResult {
-	return r.CompletedChan
+func (r *DependencyRunner) Group() *TestGroup {
+	return r.group
 }
 
 // Holding pattern.  An individual test waits here until all of its
@@ -80,30 +112,24 @@ func waitForDeps(test *Test, depChan, readyChan, abortChan chan *Test) {
 	readyChan <- test
 }
 
-func (r *DependencyRunner) Run() {
+func (r *DependencyRunner) Run() <-chan *Test161JobResult {
 
-	// Everything that's still waiting
+	// Everything that's still waiting.
 	// We make it big enough that it can hold all the results
-	waiting := make(map[string]chan *Test, len(r.Group.Tests))
+	waiting := make(map[string]chan *Test, len(r.group.Tests))
 
 	// The channel that our goroutines message us back on
 	// to let us know they're ready
 	readyChan := make(chan *Test)
 
 	// The channel we use to get results back from the manager
-	resChan := make(chan *test161JobResult)
+	resChan := make(chan *Test161JobResult)
 
 	// The channel that our goroutines message us back on
 	// when they can't run because a dependency failed.
 	abortChan := make(chan *Test)
 
-	// Spawn all the tests and put them in a waiting pattern
-	for id, test := range r.Group.Tests {
-		waiting[id] = make(chan *Test)
-		go waitForDeps(test, waiting[id], readyChan, abortChan)
-	}
-
-	// Broadcast the result
+	// A function to broadcast a single test result
 	bcast := func(test *Test) {
 		for _, ch := range waiting {
 			// Non-blocking because it
@@ -114,20 +140,32 @@ func (r *DependencyRunner) Run() {
 		}
 	}
 
-	callback := func(res *test161JobResult) {
-		// But, never block sending it back
+	// Buffered channel for our client.
+	callbackChan := make(chan *Test161JobResult, len(r.group.Tests))
+
+	// A function to send the result back to the caller
+	callback := func(res *Test161JobResult) {
+		// Don't block, not that we should since we're buffered
 		select {
-		case r.CompletedChan <- res:
+		case callbackChan <- res:
 		default:
 		}
 	}
 
+	// Spawn all the tests and put them in a waiting pattern
+	for id, test := range r.group.Tests {
+		waiting[id] = make(chan *Test)
+		go waitForDeps(test, waiting[id], readyChan, abortChan)
+	}
+
+	// Main goroutine responsible for directing traffic.
+	//  - Results from the manager and abort channels are broadcast to the
+	//    remaining blocked tests and caller
+	//  - Tests coming in on the ready channel get sent to the manager
 	go func() {
-		// We wait for a message from either the results channel (manager),
-		// or the abort/ channels.  We're done as soon as we recieve the
-		// final result from the manager.
+		//We're done as soon as we recieve the final result from the manager.
 		results := 0
-		for results < len(r.Group.Tests) {
+		for results < len(r.group.Tests) {
 			select {
 			case res := <-resChan:
 				bcast(res.Test)
@@ -138,16 +176,18 @@ func (r *DependencyRunner) Run() {
 				// Abort!
 				delete(waiting, test.DependencyID)
 				bcast(test)
-				callback(&test161JobResult{test, nil})
+				callback(&Test161JobResult{test, nil})
 				results += 1
 
 			case test := <-readyChan:
 				// We have a test that can run.
 				delete(waiting, test.DependencyID)
-				job := &test161Job{test, r.Group.Config.RootDir, resChan}
-				taskManager.SubmitChan <- job
+				job := &test161Job{test, r.group.Config.RootDir, resChan}
+				testManager.SubmitChan <- job
 			}
 		}
-		close(r.CompletedChan)
+		close(callbackChan)
 	}()
+
+	return callbackChan
 }

@@ -24,7 +24,7 @@ func TestTestMapLoad(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	tm, errs := NewTestMap(TEST_DIR)
+	tm, errs := newTestMap(TEST_DIR)
 	assert.NotNil(tm)
 	assert.Equal(0, len(errs))
 
@@ -70,12 +70,12 @@ func TestTestMapGlobs(t *testing.T) {
 	abs, err := filepath.Abs(TEST_DIR)
 	assert.Nil(err)
 
-	tm, errs := NewTestMap(TEST_DIR)
+	tm, errs := newTestMap(TEST_DIR)
 	assert.NotNil(tm)
 	assert.Equal(0, len(errs))
 
 	// Glob
-	tests, err := tm.TestsFromGlob("**/sy*.t", abs)
+	tests, err := tm.testsFromGlob("**/sy*.t", abs)
 	expected := []string{
 		"sync/sy1.t",
 		"sync/sy2.t",
@@ -92,7 +92,7 @@ func TestTestMapGlobs(t *testing.T) {
 
 	// Single test
 	single := "threads/tt2.t"
-	tests, err = tm.TestsFromGlob(single, abs)
+	tests, err = tm.testsFromGlob(single, abs)
 	assert.Nil(err)
 	assert.Equal(1, len(tests))
 	if len(tests) == 1 {
@@ -100,7 +100,7 @@ func TestTestMapGlobs(t *testing.T) {
 	}
 
 	// Empty
-	tests, err = tm.TestsFromGlob("foo/bar*.t", abs)
+	tests, err = tm.testsFromGlob("foo/bar*.t", abs)
 	assert.NotNil(err)
 	assert.Equal(0, len(tests))
 
@@ -110,7 +110,7 @@ func TestTestMapTags(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	tm, errs := NewTestMap(TEST_DIR)
+	tm, errs := newTestMap(TEST_DIR)
 	assert.NotNil(tm)
 	assert.Equal(0, len(errs))
 
@@ -160,7 +160,7 @@ func TestTestMapDependencies(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	tm, errs := NewTestMap(TEST_DIR)
+	tm, errs := newTestMap(TEST_DIR)
 	assert.NotNil(tm)
 	assert.Equal(0, len(errs))
 
@@ -193,11 +193,11 @@ func TestDependencyGraph(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	tm, errs := NewTestMap(TEST_DIR)
+	tm, errs := newTestMap(TEST_DIR)
 	assert.NotNil(tm)
 	assert.Equal(0, len(errs))
 
-	g, errs := tm.DependencyGraph()
+	g, errs := tm.dependencyGraph()
 	assert.Equal(0, len(errs))
 	if len(errs) > 0 {
 		t.Log(errs)
@@ -228,11 +228,11 @@ func TestDependencyCycle(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	tm, errs := NewTestMap(TEST_DIR)
+	tm, errs := newTestMap(TEST_DIR)
 	assert.NotNil(tm)
 	assert.Equal(0, len(errs))
 
-	g, errs := tm.DependencyGraph()
+	g, errs := tm.dependencyGraph()
 	assert.Equal(0, len(errs))
 	if len(errs) > 0 {
 		t.Log(errs)
@@ -242,11 +242,11 @@ func TestDependencyCycle(t *testing.T) {
 	_, err := g.TopSort()
 	assert.Nil(err)
 
-	tm, errs = NewTestMap(CYCLE_DIR)
+	tm, errs = newTestMap(CYCLE_DIR)
 	assert.NotNil(tm)
 	assert.Equal(0, len(errs))
 
-	g, errs = tm.DependencyGraph()
+	g, errs = tm.dependencyGraph()
 	assert.Equal(0, len(errs))
 	if len(errs) > 0 {
 		t.Log(errs)
