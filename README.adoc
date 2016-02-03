@@ -152,7 +152,48 @@ didn't panic. I'm working on standardizing the OS/161 test output to make
 this easier so that every test prints a SUCCESS or FAILURE message on exit,
 but we still need to grab panics.
 
+commands.go has the building blocks for determining this. Expected output is
+specified using golang templates.  Also, random inputs can be generated in
+this way as well. Some things that still need to be done:
+
+* Master commands template yaml file, which will get updated as the output
+is fixed in os161
+* External output references (i.e. triplehuge referencing huge)
+* Integrating this with Tests and, eventually, submissions.
+
 === Support for GDB backtraces on error
 
 It should be possible to automate the process of hooking up a debugger and
 running BT on panics.
+
+
+=== Targets/Submissions
+
+This needs to be fully designed.  Some considerations:
+
+* Multiple target types, e.g. assignments, performance
+* Grading
+* Integration with TestGroups (which work)
+* Output format
+* Submission metadata
+* Test specification
+* Argument overriding (see commands.go)
+* Short-circuit setting - when to stop the test?  when to skip dependencies?
+
+=== Security
+
+The os161 side is in working condition, though we need still need to modify
+userspace binaries and add secprintf to userspace.  In test161, we need to
+verify output lines when we see the secure 4-tuple. Still to do:
+
+* Key generation
+* Overlay file copying
+* Key substitution
+* Key verification
+
+=== Client & Server Binaries
+
+* Client Local test runner
+* Client sumbission
+* Server daemon
+* Server stats?
