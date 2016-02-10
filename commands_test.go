@@ -6,156 +6,227 @@ import (
 	"testing"
 )
 
-// /testbin/add (output(
-const add_template = "{{$x:= index .Args 0 | atoi}}{{$y := index .Args 1 | atoi}}{{add $x $y}}\n"
-
-// /testbin/factorial (output)
-const fact_template = "{{$n:= index .Args 0 | atoi}}{{factorial $n}}\n"
-
 // A random string input generator.  This generates between 2 and 10
 // strings, each of length between 5 and 10 characters.
 const input_template = "{{$x := randInt 2 10 | ranger}}{{range $index, $element := $x}}{{randString 5 10}}\n{{end}}"
 
-// /testbin/argtest (output)
-var args_template = []string{
-	"argc: {{add 1 .ArgLen}}",
-	"argv[0]: /testbin/argtest",
-	"{{range $index, $element := .Args}}argv[{{add $index 1}}]: {{$element}}\n{{end}}",
-	"argv[{{add 1 .ArgLen}}]: [NULL]",
-}
-
-func TestCommand1(t *testing.T) {
+func TestCommandArgTest(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	// Create the Command Template
-	cc := &CommandTemplate{
-		Name: "/testbin/argtest",
+	// Create a test
+	args := []string{"arg1", "arg2", "arg3", "arg4"}
+	cmdline := "$ /testbin/argtest"
+	for _, a := range args {
+		cmdline += " " + a
+	}
+	test, err := TestFromString(cmdline)
+	assert.Nil(err)
+
+	// Set the commands for argtest
+	var argtest *Command
+	for _, c := range test.Commands {
+		if c.Id() == "/testbin/argtest" {
+			argtest = c
+			break
+		}
 	}
 
-	cc.Output = make([]TemplOutputLine, 0)
-	for _, line := range args_template {
-		cc.Output = append(cc.Output, TemplOutputLine{line, "true", "false"})
+	assert.NotNil(argtest)
+	if argtest == nil {
+		t.FailNow()
 	}
 
 	// Create the command instance
-	args := []string{"arg1", "arg2", "arg3", "arg4"}
-	vars := []string{}
+	err = argtest.instantiate(defaultEnv)
 
-	cmd, err := cc.expand(args, vars)
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 
-	// Log the output
-
-	t.Log(cmd.CommandName)
-	t.Log(cmd.ShortName)
-	t.Log(cmd.Args)
-
-	for _, o := range cmd.ExpectedOutput {
+	for _, o := range argtest.expectedOutput {
 		t.Log(o.Text)
 	}
 
 	// Assertions
+	assert.Equal(3+len(args), len(argtest.expectedOutput))
 
-	assert.Equal("/testbin/argtest", cmd.CommandName)
-	assert.Equal("argtest", cmd.ShortName)
-
-	assert.Equal(3+len(args), len(cmd.ExpectedOutput))
-
-	if len(cmd.ExpectedOutput) == 7 {
-		assert.Equal("argc: 5", cmd.ExpectedOutput[0].Text)
-		assert.Equal("argv[0]: /testbin/argtest", cmd.ExpectedOutput[1].Text)
+	if len(argtest.expectedOutput) == 7 {
+		assert.Equal("argc: 5", argtest.expectedOutput[0].Text)
+		assert.Equal("argv[0]: /testbin/argtest", argtest.expectedOutput[1].Text)
 		for i, arg := range args {
-			assert.Equal(fmt.Sprintf("argv[%d]: %v", i+1, arg), cmd.ExpectedOutput[i+2].Text)
+			assert.Equal(fmt.Sprintf("argv[%d]: %v", i+1, arg), argtest.expectedOutput[i+2].Text)
 		}
 	}
 
 }
 
-func TestCommand2(t *testing.T) {
+func TestCommandAdd(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	// Create the Command Template
-	cc := &CommandTemplate{
-		Name:   "/testbin/add",
-		Output: []TemplOutputLine{TemplOutputLine{add_template, "true", "false"}},
+	// Create a test
+	test, err := TestFromString("$ /testbin/add 70 200")
+	assert.Nil(err)
+
+	// Set the commands for argtest
+	var add *Command
+	for _, c := range test.Commands {
+		if c.Id() == "/testbin/add" {
+			add = c
+			break
+		}
+	}
+
+	assert.NotNil(add)
+	if add == nil {
+		t.FailNow()
 	}
 
 	// Create the command instance
-	args := []string{"70", "200"}
-	vars := []string{}
+	err = add.instantiate(defaultEnv)
 
-	cmd, err := cc.expand(args, vars)
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 
-	// Log the output
-
-	t.Log(cmd.CommandName)
-	t.Log(cmd.ShortName)
-	t.Log(cmd.Args)
-
-	for _, o := range cmd.ExpectedOutput {
+	for _, o := range add.expectedOutput {
 		t.Log(o.Text)
 	}
 
 	// Assertions
-
-	assert.Equal("/testbin/add", cmd.CommandName)
-	assert.Equal("add", cmd.ShortName)
-
-	assert.Equal(1, len(cmd.ExpectedOutput))
-
-	if len(cmd.ExpectedOutput) == 1 {
-		assert.Equal("270", cmd.ExpectedOutput[0].Text)
+	assert.Equal(1, len(add.expectedOutput))
+	if len(add.expectedOutput) == 1 {
+		assert.Equal("270", add.expectedOutput[0].Text)
 	}
+}
+
+func TestCommandFactorial(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// Create a test
+	test, err := TestFromString("$ /testbin/factorial 8")
+	assert.Nil(err)
+
+	// Set the commands for argtest
+	var factorial *Command
+	for _, c := range test.Commands {
+		if c.Id() == "/testbin/factorial" {
+			factorial = c
+			break
+		}
+	}
+
+	assert.NotNil(factorial)
+	if factorial == nil {
+		t.FailNow()
+	}
+
+	// Create the command instance
+	err = factorial.instantiate(defaultEnv)
+
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+
+	for _, o := range factorial.expectedOutput {
+		t.Log(o.Text)
+	}
+
+	// Assertions
+	assert.Equal(1, len(factorial.expectedOutput))
+	if len(factorial.expectedOutput) == 1 {
+		assert.Equal("40320", factorial.expectedOutput[0].Text)
+	}
+}
+
+func addInputTest() (*TestEnvironment, error) {
+	env, err := NewEnvironment("./fixtures/tests/nocycle/", "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the Command Template for (fake) randinput.
+	c := &CommandTemplate{
+		Name:  "randinput",
+		Input: []string{input_template},
+	}
+
+	env.Commands["randinput"] = c
+	return env, nil
 }
 
 func TestCommandInput(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	// Create the Command Template
-	cc := &CommandTemplate{
-		Name:   "/testbin/ranger",
-		Output: []TemplOutputLine{TemplOutputLine{"SUCCESS", "true", "false"}},
-		Input:  []string{input_template},
-	}
+	env, err := addInputTest()
 
-	// Create the command instance
-	args := []string{}
-	vars := []string{}
-
-	cmd, err := cc.expand(args, vars)
+	assert.Nil(err)
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 
-	// Log the output
+	// Create a test
+	test, err := TestFromString("randinput")
+	assert.Nil(err)
 
-	t.Log(cmd.CommandName)
-	t.Log(cmd.ShortName)
-	t.Log(cmd.Args)
+	var randinput *Command
+	for _, c := range test.Commands {
+		if c.Id() == "randinput" {
+			randinput = c
+			break
+		}
+	}
 
-	for _, o := range cmd.ExpectedOutput {
+	assert.NotNil(randinput)
+	if randinput == nil {
+		t.FailNow()
+	}
+
+	// Create the command instance
+	err = randinput.instantiate(env)
+
+	t.Log(randinput.Input.Line)
+
+	for _, o := range randinput.expectedOutput {
 		t.Log(o.Text)
 	}
 
-	// Assertions
-	assert.True(len(cmd.Args) >= 2)
-	assert.True(len(cmd.Args) <= 10)
+	_, id, args := randinput.Input.splitCommand()
 
-	for _, o := range cmd.Args {
+	t.Log(args)
+	t.Log(id)
+
+	// Assertions
+	assert.True(len(args) >= 2)
+	assert.True(len(args) <= 10)
+
+	for _, o := range args {
 		assert.True(len(o) >= 5)
 		assert.True(len(o) <= 10)
 	}
+
+	// Now, check override
+	randinput.Input.Line = "randinput 1"
+	randinput.expectedOutput = nil
+
+	randinput.instantiate(defaultEnv)
+
+	_, id, args = randinput.Input.splitCommand()
+
+	assert.Equal(0, len(randinput.expectedOutput))
+	assert.Equal(1, len(args))
+	if len(args) == 1 {
+		assert.Equal("1", args[0])
+	}
+	assert.Equal("randinput", id)
+	assert.Equal("randinput 1", randinput.Input.Line)
 }
 
 func TestCommandTemplateLoad(t *testing.T) {
@@ -178,10 +249,128 @@ templates:
 
 	assert.Equal(5, len(cmds.Templates))
 	if len(cmds.Templates) == 5 {
-		assert.Equal("sy1", cmds.Templates[0].Name)
-		assert.Equal("sy2", cmds.Templates[1].Name)
-		assert.Equal("sy3", cmds.Templates[2].Name)
-		assert.Equal("sy4", cmds.Templates[3].Name)
-		assert.Equal("sy5", cmds.Templates[4].Name)
+		for i, tmpl := range cmds.Templates {
+			assert.Equal(fmt.Sprintf("sy%v", i+1), tmpl.Name)
+			assert.Equal(1, len(tmpl.Output))
+			if len(tmpl.Output) == 1 {
+				assert.Equal(tmpl.Name+": SUCCESS", tmpl.Output[0].Text)
+				assert.Equal("true", tmpl.Output[0].Trusted)
+				assert.Equal("false", tmpl.Output[0].External)
+			}
+		}
 	}
+}
+
+func addExternalCmd() (*TestEnvironment, error) {
+	env, err := NewEnvironment("./fixtures/tests/nocycle/", "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the Command Template for (fake) randinput.
+	c := &CommandTemplate{
+		Name: "external",
+		Output: []*TemplOutputLine{
+			&TemplOutputLine{
+				Text:     "sy1",
+				Trusted:  "true",
+				External: "true",
+			},
+			&TemplOutputLine{
+				Text:     "sy2",
+				Trusted:  "true",
+				External: "true",
+			},
+		},
+	}
+
+	env.Commands["external"] = c
+	return env, nil
+}
+
+func TestCommandExternal(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	env, err := addExternalCmd()
+	assert.Nil(err)
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+
+	test, err := TestFromString("external")
+	assert.Nil(err)
+
+	var cmd *Command
+	for _, c := range test.Commands {
+		if c.Input.Line == "external" {
+			cmd = c
+			break
+		}
+	}
+
+	assert.NotNil(cmd)
+	if cmd == nil {
+		t.FailNow()
+	}
+
+	// Create the command instance
+	err = cmd.instantiate(env)
+
+	for _, o := range cmd.expectedOutput {
+		t.Log(o.Text)
+	}
+
+	t.Log(cmd.expectedOutput)
+
+	// Assertions
+	assert.Equal(2, len(cmd.expectedOutput))
+	if len(cmd.expectedOutput) != 2 {
+		t.FailNow()
+	}
+
+	assert.Equal("sy1: SUCCESS", cmd.expectedOutput[0].Text)
+	assert.True(cmd.expectedOutput[0].Trusted)
+	assert.Equal("sy1", cmd.expectedOutput[0].KeyName)
+
+	assert.Equal("sy2: SUCCESS", cmd.expectedOutput[1].Text)
+	assert.True(cmd.expectedOutput[1].Trusted)
+	assert.Equal("sy2", cmd.expectedOutput[1].KeyName)
+}
+
+func TestCommandID(t *testing.T) {
+
+	t.Parallel()
+	assert := assert.New(t)
+
+	tests := [][]string{
+		[]string{
+			"/hello/world", "/hello/world",
+		},
+		[]string{
+			"/hello/world ", "/hello/world",
+		},
+		[]string{
+			`/testbin/argtest 1 2 3`, "/testbin/argtest",
+		},
+		[]string{
+			`/bin/space test`, "/bin/space",
+		},
+		[]string{
+			`/bin/space\ test`, `/bin/space\ test`,
+		},
+		[]string{
+			`"/bin/space test" 1 2 3`, `"/bin/space test"`,
+		},
+	}
+
+	for _, test := range tests {
+		line := &InputLine{Line: test[0]}
+		_, base, args := line.splitCommand()
+		assert.Equal(test[1], base)
+		t.Log(base, test[1])
+		t.Log(args)
+	}
+
 }

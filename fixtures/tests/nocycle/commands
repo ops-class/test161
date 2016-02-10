@@ -1,0 +1,20 @@
+---
+templates:
+  - name: sy1
+  - name: sy2
+  - name: sy3
+  - name: sy4
+  - name: sy5
+  - name: /testbin/argtest
+    output:
+      - text: "argc: {{add 1 .ArgLen}}"
+      - text: "argv[0]: /testbin/argtest"
+      - text: "{{range $index, $element := .Args}}argv[{{add $index 1}}]: {{$element}}\n{{end}}"
+      - text: "argv[{{add 1 .ArgLen}}]: [NULL]"
+  - name: /testbin/add
+    output:
+      - text: "{{$x:= index .Args 0 | atoi}}{{$y := index .Args 1 | atoi}}{{add $x $y}}\n"
+  - name: /testbin/factorial
+    output:
+      - text: "{{$n:= index .Args 0 | atoi}}{{factorial $n}}\n"
+

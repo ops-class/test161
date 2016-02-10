@@ -35,6 +35,9 @@ func TestTestMapLoad(t *testing.T) {
 		"threads/tt1.t",
 		"threads/tt2.t",
 		"threads/tt3.t",
+		"sync/all.t",
+		"sync/fail.t",
+		"sync/multi.t",
 		"sync/sy1.t",
 		"sync/sy2.t",
 		"sync/sy3.t",
@@ -152,6 +155,9 @@ var DEP_MAP = map[string][]string{
 	"sync/sy3.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t"},
 	"sync/sy4.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t", "sync/sy3.t"},
 	"sync/sy5.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/multi.t":      []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/all.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/fail.t":       []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
 	"panics/panic.t":    []string{"boot.t"},
 	"panics/deppanic.t": []string{"panics/panic.t"},
 }
@@ -264,10 +270,9 @@ func TestGroupFromConfg(t *testing.T) {
 	// Test config with dependencies
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "fixtures/root",
 		UseDeps: true,
-		TestDir: TEST_DIR,
 		Tests:   []string{"sync/sy1.t"},
+		Env:     defaultEnv,
 	}
 
 	expected := []string{
@@ -319,10 +324,9 @@ func TestGroupConfigInvalid(t *testing.T) {
 	// Test config with dependencies
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures/root",
 		UseDeps: false,
-		TestDir: TEST_DIR,
 		Tests:   tests,
+		Env:     defaultEnv,
 	}
 
 	tg, errs := GroupFromConfig(config)

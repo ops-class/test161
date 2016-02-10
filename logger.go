@@ -35,8 +35,9 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 		t.currentOutput.Buffer.WriteByte(b)
 		if b == '\n' {
 			t.currentOutput.Line = t.currentOutput.Buffer.String()
+			t.outputLineComplete()
 			t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
-			t.currentOutput = OutputLine{}
+			t.currentOutput = &OutputLine{}
 		}
 	}
 }

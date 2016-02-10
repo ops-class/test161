@@ -1,15 +1,15 @@
 ---
-name: Thread Test 3
+name: RW Lock Test
 tags:
- - threads
+ - sync
+ - rwlock
 depends:
- - /boot.t
+ - threads
 stat:
     resolution: 0.01
     window: 100
-monitor:
-    enabled: "false"
 misc:
     prompttimeout: 30.0
 ---
-tt3
+sy3
+sy4

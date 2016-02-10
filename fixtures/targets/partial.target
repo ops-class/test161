@@ -1,0 +1,21 @@
+---
+name: partial
+points: 60
+type: asst
+tests:
+  - id: sync/sy1.t
+    points: 10
+  - id: sync/sy2.t
+    points: 10
+  - id: sync/fail.t
+    points: 40
+    scoring: partial
+    commands:
+      - id: sy1
+        points: 10
+      - id: sy2
+        points: 10
+      - id: sy3
+        points: 10
+      - id: sy4
+        points: 10

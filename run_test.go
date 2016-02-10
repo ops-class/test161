@@ -1,6 +1,7 @@
 package test161
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"os"
@@ -19,6 +20,19 @@ var TEST_DEFAULTS = Test{
 	},
 }
 
+var defaultEnv *TestEnvironment = nil
+
+func init() {
+	// Make sure the default test manager exists first
+	var err error
+	defaultEnv, err = NewEnvironment("./fixtures/tests/nocycle", "./fixtures/targets")
+	if err != nil {
+		panic(fmt.Sprintf("Unable to create default environment: %v", err))
+	}
+	defaultEnv.RootDir = "./fixtures/root"
+	// No key map
+}
+
 func TestMain(m *testing.M) {
 	rand.Seed(time.Now().UTC().UnixNano())
 	os.Exit(m.Run())
@@ -31,7 +45,7 @@ func TestRunBoot(t *testing.T) {
 	test, err := TestFromString("q")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run("./fixtures/root/"))
+	assert.Nil(test.Run(defaultEnv))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -59,7 +73,7 @@ func TestRunShell(t *testing.T) {
 	test, err := TestFromString("$ /bin/true")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run("./fixtures/root/"))
+	assert.Nil(test.Run(defaultEnv))
 
 	assert.Equal(len(test.Commands), 5)
 	if len(test.Commands) == 5 {
@@ -94,7 +108,7 @@ func TestRunPanic(t *testing.T) {
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Enabled = "false"
-	assert.Nil(test.Run("./fixtures/root/"))
+	assert.Nil(test.Run(defaultEnv))
 
 	assert.Equal(len(test.Commands), 2)
 	if len(test.Commands) == 2 {
@@ -133,7 +147,7 @@ commandconf:
 	test.Monitor.User.EnableMin = "false"
 	test.Monitor.Kernel.EnableMin = "false"
 	test.Misc.CommandRetries = 20
-	assert.Nil(test.Run("./fixtures/root/"))
+	assert.Nil(test.Run(defaultEnv))
 
 	assert.Equal(len(test.Commands), 6)
 	if len(test.Commands) == 6 {
@@ -185,7 +199,7 @@ commandconf:
 	test.Misc.RetryCharacters = "false"
 	test.Monitor.ProgressTimeout = 1.0
 	test.Misc.KillOnExit = "false"
-	assert.Nil(test.Run("./fixtures/root/"))
+	assert.Nil(test.Run(defaultEnv))
 
 	assert.NotEqual(len(test.Commands), 6)
 
@@ -210,9 +224,9 @@ func TestRunResults(t *testing.T) {
 	test, err := TestFromString("$ /bin/true")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	err = test.Run("./fixtures/root")
+	err = test.Run(defaultEnv)
 	assert.Nil(err)
-	assert.Equal(T_RES_OK, test.Result)
+	assert.Equal(TEST_RESULT_CORRECT, test.Result)
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
@@ -222,9 +236,9 @@ func TestRunResults(t *testing.T) {
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Enabled = "false"
-	err = test.Run("./fixtures/root")
+	err = test.Run(defaultEnv)
 	assert.Nil(err)
-	assert.Equal(T_RES_FAIL, test.Result)
+	assert.Equal(TEST_RESULT_INCORRECT, test.Result)
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
@@ -242,7 +256,7 @@ q
 `)
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run("./fixtures/root/"))
+	assert.Nil(test.Run(defaultEnv))
 
 	assert.Equal(len(test.Status), 3)
 	if len(test.Status) == 3 {
@@ -252,6 +266,19 @@ q
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}
+
+func TestRunTT3(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("tt3")
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	assert.Nil(test.Run(defaultEnv))
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())

@@ -44,9 +44,13 @@ func runnerFromConfig(t *testing.T, config *GroupConfig, expected []string) Test
 }
 
 func TestRunnerCapacity(t *testing.T) {
-	// Not parallel since we're changing the capacity!
-	//t.Parallel()
+	t.Parallel()
 	assert := assert.New(t)
+
+	// Copy the default environment so we can have our own manager
+	env := defaultEnv.CopyEnvironment()
+	env.manager = newManager()
+	env.RootDir = "./fixtures/root"
 
 	expected := []string{
 		"boot.t", "threads/tt1.t", "threads/tt2.t", "threads/tt3.t",
@@ -55,57 +59,55 @@ func TestRunnerCapacity(t *testing.T) {
 
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures/root",
 		UseDeps: false,
-		TestDir: TEST_DIR,
 		Tests:   expected,
+		Env:     env,
 	}
 
-	for i := 0; i < 4; i++ {
-		switch i {
-		case 0:
-			testManager.Capacity = 0
-		case 1:
-			testManager.Capacity = 1
-		case 2:
-			testManager.Capacity = 3
-		case 3:
-			testManager.Capacity = 5
-		}
+	caps := []uint{0, 1, 3, 5}
 
+	for i := 0; i < 4; i++ {
+		env.manager.Capacity = caps[i]
 		r := runnerFromConfig(t, config, expected)
 
-		testManager.stop() //clear stats
-		testManager.start()
+		env.manager.start()
 
 		done := r.Run()
 		count := 0
 
 		for res := range done {
 			assert.Nil(res.Err)
-			assert.Equal(T_RES_OK, res.Test.Result)
+			assert.Equal(TEST_RESULT_CORRECT, res.Test.Result)
+			if res.Test.Result != TEST_RESULT_CORRECT {
+				t.Log(res.Err)
+				t.Log(res.Test.OutputJSON())
+				t.Log(res.Test.OutputString())
+			}
 			t.Log(fmt.Sprintf("test: %v  status: %v", res.Test.DependencyID, res.Test.Result))
 			count += 1
 		}
 
 		assert.Equal(len(expected), count)
-		assert.Equal(uint(len(expected)), testManager.stats.Finished)
+		assert.Equal(uint(len(expected)), env.manager.stats.Finished)
 
-		if testManager.Capacity > 0 {
-			assert.True(testManager.stats.HighCount <= testManager.Capacity)
+		if env.manager.Capacity > 0 {
+			assert.True(env.manager.stats.HighCount <= env.manager.Capacity)
 		}
+
 		t.Log(fmt.Sprintf("High count: %v High queue: %v Finished: %v",
-			testManager.stats.HighCount, testManager.stats.HighQueued, testManager.stats.Finished))
+			env.manager.stats.HighCount, env.manager.stats.HighQueued, env.manager.stats.Finished))
 
-		testManager.stop()
+		env.manager.stop()
 	}
-
-	testManager.Capacity = 0
 }
 
 func TestRunnerSimple(t *testing.T) {
-	// Also not parallel because we need to start/stop the manager
+	t.Parallel()
 	assert := assert.New(t)
+
+	env := defaultEnv.CopyEnvironment()
+	env.manager = newManager()
+	env.RootDir = "./fixtures/root"
 
 	expected := []string{
 		"threads/tt1.t", "sync/sy1.t",
@@ -114,37 +116,38 @@ func TestRunnerSimple(t *testing.T) {
 	// Test config with dependencies
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures/root",
 		UseDeps: false,
-		TestDir: TEST_DIR,
 		Tests:   expected,
+		Env:     env,
 	}
 
 	r := runnerFromConfig(t, config, expected)
 
-	testManager.start()
+	env.manager.start()
 
 	done := r.Run()
 	count := 0
 
 	for res := range done {
 		assert.Nil(res.Err)
-		assert.Equal(T_RES_OK, res.Test.Result)
-		t.Log(res.Test.OutputString())
-		t.Log(res.Test.OutputJSON())
+		assert.Equal(TEST_RESULT_CORRECT, res.Test.Result)
+		if TEST_RESULT_CORRECT != res.Test.Result {
+			t.Log(res.Err)
+			t.Log(res.Test.OutputJSON())
+			t.Log(res.Test.OutputString())
+		}
 		count += 1
 	}
 
 	assert.Equal(len(expected), count)
-	assert.Equal(uint(len(expected)), testManager.stats.Finished)
+	assert.Equal(uint(len(expected)), env.manager.stats.Finished)
 
 	// Shut it down
-	testManager.stop()
+	env.manager.stop()
 }
 
 func TestRunnerDependency(t *testing.T) {
-	//No parallel here either
-
+	t.Parallel()
 	assert := assert.New(t)
 
 	expected := []string{
@@ -152,17 +155,20 @@ func TestRunnerDependency(t *testing.T) {
 		"sync/sy2.t", "sync/sy3.t", "sync/sy4.t",
 	}
 
+	env := defaultEnv.CopyEnvironment()
+	env.manager = newManager()
+	env.RootDir = "./fixtures/root"
+
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures/root",
 		UseDeps: true,
-		TestDir: TEST_DIR,
 		Tests:   []string{"sync/sy4.t"},
+		Env:     env,
 	}
 
 	r := runnerFromConfig(t, config, expected)
-	testManager.Capacity = 0
-	testManager.start()
+	env.manager.Capacity = 0
+	env.manager.start()
 	done := r.Run()
 
 	results := make([]string, 0)
@@ -170,9 +176,12 @@ func TestRunnerDependency(t *testing.T) {
 
 	for res := range done {
 		assert.Nil(res.Err)
-		assert.Equal(T_RES_OK, res.Test.Result)
-		t.Log(res.Test.OutputString())
-		t.Log(res.Test.OutputJSON())
+		assert.Equal(TEST_RESULT_CORRECT, res.Test.Result)
+		if res.Test.Result != TEST_RESULT_CORRECT {
+			t.Log(res.Err)
+			t.Log(res.Test.OutputJSON())
+			t.Log(res.Test.OutputString())
+		}
 		count += 1
 		results = append(results, res.Test.DependencyID)
 	}
@@ -187,29 +196,31 @@ func TestRunnerDependency(t *testing.T) {
 	assert.Equal(expected[len(expected)-2], results[len(expected)-2])
 	assert.Equal(expected[len(expected)-1], results[len(expected)-1])
 
-	testManager.stop()
+	env.manager.stop()
 }
 
 func TestRunnerAbort(t *testing.T) {
-	//No parallel here either
-
+	t.Parallel()
 	assert := assert.New(t)
 
 	expected := []string{
 		"boot.t", "panics/panic.t", "panics/deppanic.t",
 	}
 
+	env := defaultEnv.CopyEnvironment()
+	env.manager = newManager()
+	env.RootDir = "./fixtures/root"
+
 	config := &GroupConfig{
 		Name:    "Test",
-		RootDir: "./fixtures/root",
 		UseDeps: true,
-		TestDir: TEST_DIR,
 		Tests:   []string{"panics/deppanic.t"},
+		Env:     env,
 	}
 
 	r := runnerFromConfig(t, config, expected)
-	testManager.Capacity = 0
-	testManager.start()
+	env.manager.Capacity = 0
+	env.manager.start()
 	done := r.Run()
 
 	count := 0
@@ -217,28 +228,39 @@ func TestRunnerAbort(t *testing.T) {
 		assert.Nil(res.Err)
 		assert.Equal(expected[count], res.Test.DependencyID)
 
+		var expected TestResult
+
 		switch count {
 		case 0: // boot
-			assert.Equal(T_RES_OK, res.Test.Result)
+			expected = TEST_RESULT_CORRECT
 		case 1: // panic
-			assert.Equal(T_RES_FAIL, res.Test.Result)
+			expected = TEST_RESULT_INCORRECT
 		case 2: // deppanic
-			assert.Equal(T_RES_SKIP, res.Test.Result)
+			expected = TEST_RESULT_SKIP
 		}
+
 		count += 1
 
-		t.Log(res.Test.OutputString())
-		t.Log(res.Test.OutputJSON())
+		assert.Equal(expected, res.Test.Result)
+		if expected != res.Test.Result {
+			t.Log(res.Err)
+			t.Log(res.Test.OutputJSON())
+			t.Log(res.Test.OutputString())
+		}
 	}
 
 	assert.Equal(len(expected), count)
 
-	testManager.stop()
+	env.manager.stop()
 }
 
 func TestRunnersParallel(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
+
+	env := defaultEnv.CopyEnvironment()
+	env.manager = newManager()
+	env.RootDir = "./fixtures/root"
 
 	tests := [][]string{
 		[]string{
@@ -258,19 +280,14 @@ func TestRunnersParallel(t *testing.T) {
 		},
 	}
 
-	testManager.Capacity = 5
-	testManager.stop()
-	testManager.start()
-
 	runners := make([]TestRunner, 0, len(tests))
 
 	for _, group := range tests {
 		config := &GroupConfig{
 			Name:    "Test",
-			RootDir: "./fixtures/root",
 			UseDeps: false,
-			TestDir: TEST_DIR,
 			Tests:   group,
+			Env:     env,
 		}
 		r := runnerFromConfig(t, config, group)
 		runners = append(runners, r)
@@ -278,9 +295,8 @@ func TestRunnersParallel(t *testing.T) {
 
 	syncChan := make(chan int)
 
-	testManager.Capacity = 10
-	testManager.stop()
-	testManager.start()
+	env.manager.Capacity = 10
+	env.manager.start()
 
 	for index, runner := range runners {
 		go func(r TestRunner, i int) {
@@ -289,9 +305,12 @@ func TestRunnersParallel(t *testing.T) {
 
 			for res := range done {
 				assert.Nil(res.Err)
-				assert.Equal(T_RES_OK, res.Test.Result)
-				t.Log(res.Test.OutputString())
-				t.Log(res.Test.OutputJSON())
+				assert.Equal(TEST_RESULT_CORRECT, res.Test.Result)
+				if res.Test.Result != TEST_RESULT_CORRECT {
+					t.Log(res.Err)
+					t.Log(res.Test.OutputJSON())
+					t.Log(res.Test.OutputString())
+				}
 
 				count += 1
 			}
@@ -307,13 +326,13 @@ func TestRunnersParallel(t *testing.T) {
 		<-syncChan
 	}
 
-	testManager.stop()
+	env.manager.stop()
 
-	if testManager.Capacity > 0 {
-		assert.True(testManager.stats.HighCount <= testManager.Capacity)
+	if env.manager.Capacity > 0 {
+		assert.True(env.manager.stats.HighCount <= env.manager.Capacity)
 	}
 
 	t.Log(fmt.Sprintf("High count: %v High queue: %v Finished: %v",
-		testManager.stats.HighCount, testManager.stats.HighQueued, testManager.stats.Finished))
+		env.manager.stats.HighCount, env.manager.stats.HighQueued, env.manager.stats.Finished))
 
 }

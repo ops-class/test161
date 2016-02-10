@@ -158,7 +158,7 @@ func TestFromString(data string) (*Test, error) {
 		return nil, err
 	}
 
-	t.Result = T_RES_IDLE
+	t.Result = TEST_RESULT_NONE
 
 	return t, nil
 }
@@ -317,12 +317,13 @@ func (t *Test) initCommands() (err error) {
 	commandConfStack = append(commandConfStack, KERNEL_COMMAND_CONF)
 
 	// Set the boot command
-	t.Commands = append(t.Commands, Command{
+	t.Commands = append(t.Commands, &Command{
 		Type:          "kernel",
 		PromptPattern: regexp.MustCompile(regexp.QuoteMeta(KERNEL_COMMAND_CONF.Prompt)),
 		Input: InputLine{
 			Line: "boot",
 		},
+		Status: COMMAND_STATUS_NONE,
 	})
 
 	// Set all confs including kernel and shell
@@ -402,12 +403,13 @@ func (t *Test) initCommands() (err error) {
 			if nextConf != nil {
 				promptPattern = regexp.MustCompile(regexp.QuoteMeta(nextConf.Prompt))
 			}
-			t.Commands = append(t.Commands, Command{
+			t.Commands = append(t.Commands, &Command{
 				Type:          commandType,
 				PromptPattern: promptPattern,
 				Input: InputLine{
 					Line: commandLine,
 				},
+				Status: COMMAND_STATUS_NONE,
 			})
 			commandLines = commandLines[1:]
 		}

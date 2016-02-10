@@ -17,24 +17,17 @@ import (
 //
 // Command Templates: Some commands, (e.g. argtest, factorial), have output that
 // depends on the input.  For this reason, output may be specified as a golang
-// template, with various functions provide.  Furthermore, random inputs can also be
-// specifed using a template, which can be overriden in assignment files.
+// template, with various functions provided.  Furthermore, random inputs can also be
+// generated using a template, which can be overriden in assignment files if needed.
 //
-// Command Instances: A command instance is created by executing the input/output
-// templates.
+// Command Instances: The input/expected output for an instance of a command instance
+// is created by executing the templates.
 //
 // Composite Commands: Some commands may execute other commands, i.e. triple*.  For
-// these cases, there is an external property of the output line, which when set to
+// these cases, there is an "external" property of the output line, which when set to
 // "true", specifies that the text property should be used to look up the output from
 // another command.
 //
-
-// templateData gets passed to the command template to create a command instance.
-type templateData struct {
-	Args   []string
-	ArgLen int
-	Vars   []string
-}
 
 // Functions and function map & functions for command template evaluation
 
@@ -94,7 +87,7 @@ func ranger(n int) []int {
 	return res
 }
 
-// All the functions we provide to the command templates.
+// Functions we provide to the command templates.
 var funcMap template.FuncMap = template.FuncMap{
 	"add":        add,
 	"atoi":       atoi,
@@ -104,11 +97,17 @@ var funcMap template.FuncMap = template.FuncMap{
 	"ranger":     ranger,
 }
 
-// Template for commands.  These get expanded depending on the command environment.
+// Data that we provide for command templates.
+type templateData struct {
+	Args   []string
+	ArgLen int
+}
+
+// Template for commands instances.  These get expanded depending on the command environment.
 type CommandTemplate struct {
-	Name   string            `yaml:"name"`
-	Output []TemplOutputLine `yaml:"output"`
-	Input  []string          `yaml:"input"`
+	Name   string             `yaml:"name"`
+	Output []*TemplOutputLine `yaml:"output"`
+	Input  []string           `yaml:"input"`
 }
 
 // An expected line of output, which may either be expanded or not.
@@ -118,45 +117,31 @@ type TemplOutputLine struct {
 	External string `yaml:"external"`
 }
 
-// CommandInstance is the result of evaluating a CommandTemplate
-type CommandInstance struct {
-	CommandName    string
-	ShortName      string
-	Args           []string
-	ExpectedOutput []*InstOutputLine
-}
-
-// Command Instance output line.  The difference here is that we store the name
+// Command instance expected output line.  The difference here is that we store the name
 // of the key that we need to verify the output.
-type InstOutputLine struct {
+type ExpectedOutputLine struct {
 	Text    string
 	Trusted bool
 	KeyName string
 }
 
-type expandedLine struct {
-	line    string
-	origPos int
-}
+// Expand the golang text template using the provided tempate data.
+// We do this on a per-command instance basis, since output can change
+// depending on input.
+func expandLine(t string, templdata interface{}) ([]string, error) {
 
-func expandTemplates(templates []string, templdata interface{}) ([]*expandedLine, error) {
+	res := make([]string, 0)
+	bb := &bytes.Buffer{}
 
-	res := make([]*expandedLine, 0)
-
-	for pos, t := range templates {
-
-		bb := &bytes.Buffer{}
-
-		if tmpl, err := template.New("input").Funcs(funcMap).Parse(t); err != nil {
-			return nil, err
-		} else if tmpl.Execute(bb, templdata); err != nil {
-			return nil, err
-		} else {
-			lines := strings.Split(bb.String(), "\n")
-			for _, l := range lines {
-				if strings.TrimSpace(l) != "" {
-					res = append(res, &expandedLine{l, pos})
-				}
+	if tmpl, err := template.New("CommandInstance").Funcs(funcMap).Parse(t); err != nil {
+		return nil, err
+	} else if tmpl.Execute(bb, templdata); err != nil {
+		return nil, err
+	} else {
+		lines := strings.Split(bb.String(), "\n")
+		for _, l := range lines {
+			if strings.TrimSpace(l) != "" {
+				res = append(res, l)
 			}
 		}
 	}
@@ -164,75 +149,123 @@ func expandTemplates(templates []string, templdata interface{}) ([]*expandedLine
 	return res, nil
 }
 
-func (c *CommandTemplate) expand(args, vars []string) (*CommandInstance, error) {
+// Expand template output lines into the actual expected output. This may be
+// called recursively if the output line references another command.  The
+// 'processed' map takes care of checking for cycles so we don't get stuck.
+func expandOutput(id string, td *templateData, processed map[string]bool, env *TestEnvironment) ([]*ExpectedOutputLine, error) {
 
-	// See if  we need to create some input
-	if len(args) == 0 && len(c.Input) > 0 {
-		if a, err := expandTemplates(c.Input, "No data"); err != nil {
-			return nil, err
+	var tmpl *CommandTemplate
+	var ok bool
+
+	// Check for cycles
+	if _, ok = processed[id]; ok {
+		return nil, errors.New("Cycle detected in command template output.  ID: " + id)
+	}
+	processed[id] = true
+
+	// Get the template
+	tmpl, ok = env.Commands[id]
+	if !ok {
+		return nil, errors.New("Cannot find " + id + "in command map")
+	}
+
+	// expected output
+	expected := make([]*ExpectedOutputLine, 0)
+
+	// Expand each expected output line, possibly referencing external commands
+	for _, origline := range tmpl.Output {
+		if origline.External == "true" {
+			if more, err := expandOutput(origline.Text, td, processed, env); err != nil {
+				return nil, err
+			} else {
+				expected = append(expected, more...)
+			}
 		} else {
-			args = make([]string, 0, len(a))
-			for _, l := range a {
-				args = append(args, l.line)
+			if lines, err := expandLine(origline.Text, td); err != nil {
+				return nil, err
+			} else {
+				for _, expandedline := range lines {
+					expectedline := &ExpectedOutputLine{
+						Text: expandedline,
+					}
+					if origline.Trusted == "true" {
+						expectedline.Trusted = true
+						expectedline.KeyName = id
+					} else {
+						expectedline.Trusted = false
+						expectedline.KeyName = ""
+					}
+					expected = append(expected, expectedline)
+				}
 			}
 		}
 	}
 
-	// template data for the output
-	td := &templateData{args, len(args), vars}
-
-	lines := make([]string, len(c.Output))
-	for i := 0; i < len(c.Output); i++ {
-		lines[i] = c.Output[i].Text
-	}
-
-	output, err := expandTemplates(lines, td)
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := &CommandInstance{}
-
-	// Name
-	cmd.CommandName = c.Name
-	if pos := strings.LastIndex(c.Name, "/"); pos >= 0 {
-		cmd.ShortName = c.Name[pos+1:]
-	} else {
-		cmd.ShortName = c.Name
-	}
-
-	// Args
-	cmd.Args = args
-
-	// Output
-	cmd.ExpectedOutput = make([]*InstOutputLine, 0, len(output))
-	for _, l := range output {
-		expLine := &InstOutputLine{}
-		expLine.Text = l.line
-		if c.Output[l.origPos].Trusted == "true" {
-			expLine.Trusted = true
-		} else {
-			expLine.Trusted = false
-		}
-
-		// If the original output line was external,
-		if c.Output[l.origPos].External == "true" {
-			expLine.KeyName = c.Output[l.origPos].Text
-		} else {
-			expLine.KeyName = cmd.ShortName
-		}
-
-		// TODO: Implement external commands
-
-		cmd.ExpectedOutput = append(cmd.ExpectedOutput, expLine)
-	}
-
-	return cmd, nil
+	return expected, nil
 }
 
-// CommandTemplate Collection.
-// TODO: We should probably create a command template map so we
-//       can look things up.
+func (c *Command) Id() string {
+	_, id, _ := (&c.Input).splitCommand()
+	return id
+}
+
+// Instantiate the command (input, expected output) using the command template.
+// This needs to be must be done prior to executing the command.
+func (c *Command) instantiate(env *TestEnvironment) error {
+	pfx, id, args := (&c.Input).splitCommand()
+	tmpl, ok := env.Commands[id]
+	if !ok {
+		// OK, it's just not a command that has any input/output specification.
+		return nil
+	}
+
+	// Input
+
+	// Check if  we need to create some input. If args haven't already been
+	// specified, and there is an input template, use that to create input.
+	if len(args) == 0 && len(tmpl.Input) > 0 {
+		args = make([]string, 0)
+		for _, line := range tmpl.Input {
+			if temp, err := expandLine(line, "No data"); err != nil {
+				return err
+			} else {
+				args = append(args, temp...)
+			}
+		}
+	}
+
+	// Output
+
+	// template data for the output
+	td := &templateData{args, len(args)}
+	processed := make(map[string]bool)
+
+	if expected, err := expandOutput(id, td, processed, env); err != nil {
+		return err
+	} else {
+		// Piece back together a command line for the command
+		commandLine := ""
+
+		if len(pfx) > 0 {
+			commandLine += pfx + " "
+		}
+
+		commandLine += id
+
+		for _, arg := range args {
+			commandLine += " " + arg
+		}
+
+		c.Input.Line = commandLine
+		c.expectedOutput = expected
+
+		return nil
+	}
+
+}
+
+// CommandTemplate Collection. We just use this for loading and move the
+// references into a map in the global environment.
 type CommandTemplates struct {
 	Templates []*CommandTemplate `yaml:"templates"`
 }
@@ -254,5 +287,40 @@ func CommandTemplatesFromString(text string) (*CommandTemplates, error) {
 		return nil, err
 	}
 
+	for _, t := range cmds.Templates {
+		t.fixDefaults()
+	}
+
 	return cmds, nil
+}
+
+func (t *CommandTemplate) fixDefaults() {
+
+	// Fix poor default value support in go-yaml/golang.
+	//
+	// If we find an empty output line, delete it - these are commands
+	// that do not expect output. If we find a command with no expected
+	// output, add the default expected output.
+
+	if len(t.Output) == 1 && strings.TrimSpace(t.Output[0].Text) == "" {
+		t.Output = nil
+	} else if len(t.Output) == 0 {
+		t.Output = []*TemplOutputLine{
+			&TemplOutputLine{
+				Trusted:  "true",
+				External: "false",
+				Text:     t.Name + ": SUCCESS",
+			},
+		}
+	} else {
+		for _, line := range t.Output {
+			if line.Trusted != "false" {
+				line.Trusted = "true"
+			}
+
+			if line.External != "true" {
+				line.External = "false"
+			}
+		}
+	}
 }

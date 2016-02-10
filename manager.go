@@ -16,7 +16,7 @@ import (
 // binaries, and a channel to communicate the results on.
 type test161Job struct {
 	Test     *Test
-	RootDir  string
+	Env      *TestEnvironment
 	DoneChan chan *Test161JobResult
 }
 
@@ -49,13 +49,21 @@ type ManagerStats struct {
 
 const DEFAULT_MGR_CAPACITY uint = 0
 
-// There's only one manager, and this is it
-var testManager = &manager{
-	SubmitChan: nil,
-	Capacity:   DEFAULT_MGR_CAPACITY,
-	statsCond:  sync.NewCond(&sync.Mutex{}),
-	isRunning:  false,
+func newManager() *manager {
+	m := &manager{
+		SubmitChan: nil,
+		Capacity:   DEFAULT_MGR_CAPACITY,
+		statsCond:  sync.NewCond(&sync.Mutex{}),
+		isRunning:  false,
+	}
+	return m
 }
+
+// The global test manager.  NewEnvironment has a reference to
+// this manager, which should be used by clients of this library.
+// Unit tests use their own manager/environment for runner/assertion
+// isolation.
+var testManager *manager = newManager()
 
 // Clear state and start listening for job requests
 func (m *manager) start() {
@@ -114,7 +122,7 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 	m.statsCond.L.Unlock()
 
 	// Go!
-	err := job.Test.Run(job.RootDir)
+	err := job.Test.Run(job.Env)
 
 	// And... we're done.
 

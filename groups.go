@@ -14,11 +14,10 @@ import (
 
 // GroupConfig specifies how a group of tests should be created and run.
 type GroupConfig struct {
-	Name    string   `json:name`
-	RootDir string   `json:rootdir`
-	UseDeps bool     `json:"usedeps"`
-	TestDir string   `json:"testdir"`
-	Tests   []string `json:"tests"`
+	Name    string           `json:name`
+	UseDeps bool             `json:"usedeps"`
+	Tests   []string         `json:"tests"`
+	Env     *TestEnvironment `json:"-"`
 }
 
 // A group of tests to be run, which is the result of expanding a GroupConfig.
@@ -337,7 +336,7 @@ func (tg *TestGroup) expandTests(tm *testMap) []error {
 			var tests []*Test = nil
 			var err error = nil
 			if strings.HasSuffix(test, ".t") {
-				tests, err = tm.testsFromGlob(test, tg.Config.TestDir)
+				tests, err = tm.testsFromGlob(test, tg.Config.Env.TestDir)
 			} else {
 				if res, ok := tm.Tags[test]; ok {
 					tests = res
@@ -398,7 +397,7 @@ func getDepNodes(g *graph.Graph, id string, ch chan *expandRes) {
 func GroupFromConfig(config *GroupConfig) (*TestGroup, []error) {
 
 	// Get all tests first
-	tm, errs := newTestMap(config.TestDir)
+	tm, errs := newTestMap(config.Env.TestDir)
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -408,7 +407,7 @@ func GroupFromConfig(config *GroupConfig) (*TestGroup, []error) {
 
 	// Convert to abs path since it's expected later
 	var err error
-	config.TestDir, err = filepath.Abs(config.TestDir)
+	config.Env.TestDir, err = filepath.Abs(config.Env.TestDir)
 	if err != nil {
 		return nil, []error{err}
 	}
@@ -455,4 +454,20 @@ func GroupFromConfig(config *GroupConfig) (*TestGroup, []error) {
 	}
 
 	return tg, nil
+}
+
+func (t *TestGroup) TotalPoints() (points uint) {
+	points = 0
+	for _, test := range t.Tests {
+		points += test.PointsAvailable
+	}
+	return
+}
+
+func (t *TestGroup) EarnedPoints() (points uint) {
+	points = 0
+	for _, test := range t.Tests {
+		points += test.PointsEarned
+	}
+	return
 }

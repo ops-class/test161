@@ -25,9 +25,9 @@ func (t *Test) OutputString() string {
 	for i, command := range t.Commands {
 		for j, outputLine := range command.Output {
 			if i == 0 || j != 0 {
-				output += fmt.Sprintf("%.6f\t%s", outputLine.SimTime, outputLine.Line)
+				output += fmt.Sprintf("%.6f\t%s\n", outputLine.SimTime, outputLine.Line)
 			} else {
-				output += fmt.Sprintf("%s", outputLine.Line)
+				output += fmt.Sprintf("%s\n", outputLine.Line)
 			}
 		}
 	}
@@ -57,8 +57,8 @@ func (tg *TestGroup) OutputString() string {
 	var output string
 	output = fmt.Sprintf("\ngroup: id      = %v\n", tg.Id())
 	output += fmt.Sprintf("group: name    = %v\n", tg.Config.Name)
-	output += fmt.Sprintf("group: rootdir = %v\n", tg.Config.RootDir)
-	output += fmt.Sprintf("group: testdir = %v\n", tg.Config.TestDir)
+	output += fmt.Sprintf("group: rootdir = %v\n", tg.Config.Env.RootDir)
+	output += fmt.Sprintf("group: testdir = %v\n", tg.Config.Env.TestDir)
 	output += fmt.Sprintf("group: usedeps = %v\n", tg.Config.UseDeps)
 	output += fmt.Sprintf("group: tests   = %v\n", tg.Config.Tests)
 

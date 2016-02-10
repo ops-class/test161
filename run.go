@@ -7,6 +7,9 @@ package test161
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/kr/pty"
@@ -18,6 +21,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -51,25 +55,32 @@ type Test struct {
 	ConfString string         `json:"confstring"` // Only set during once
 	WallTime   TimeFixedPoint `json:"walltime"`   // Protected by L
 	SimTime    TimeFixedPoint `json:"simtime"`    // Protected by L
-	Commands   []Command      `json:"commands"`   // Protected by L
+	Commands   []*Command     `json:"commands"`   // Protected by L
 	Status     []Status       `json:"status"`     // Protected by L
 	Result     TestResult     `json:"result"`     // Protected by L
 
 	// Dependency data
 	DependencyID string           `json:"depid"`
 	ExpandedDeps map[string]*Test `json:"-"`
+	IsDependency bool             `json:"isdependency"`
+
+	// Grading.  These are set when the test is being run as part of a Target.
+	PointsAvailable uint   `json:"pointsavail"`
+	PointsEarned    uint   `json:"pointsearned"`
+	ScoringMethod   string `json:"scoringmethod"`
 
 	// Unproctected Private fields
-	tempDir     string // Only set once
-	startTime   int64  // Only set once
-	statStarted bool   // Only changed once
+	tempDir     string           // Only set once
+	startTime   int64            // Only set once
+	statStarted bool             // Only changed once
+	env         *TestEnvironment // Set at top of Run
 
 	sys161         *expect.Expect // Protected by L
 	running        bool           // Protected by L
 	progressTime   float64        // Protected by L
 	currentCommand *Command       // Protected by L
 	commandCounter uint           // Protected by L
-	currentOutput  OutputLine     // Protected by L
+	currentOutput  *OutputLine    // Protected by L
 
 	// Fields used by getStats but shared with Run
 	statCond   *sync.Cond // Used by the main loop to wait for stat reception
@@ -81,16 +92,34 @@ type Test struct {
 	statChan chan Stat // Nonblocking write
 }
 
+// Statuses for commands
+const (
+	COMMAND_STATUS_NONE      = "none"      // The command has not yet run
+	COMMAND_STATUS_RUNNING   = "running"   // The command is running
+	COMMAND_STATUS_CORRECT   = "correct"   // The command produced the expected output and did not crash
+	COMMAND_STATUS_INCORRECT = "incorrect" // The command received some partial credit
+)
+
 type Command struct {
 	// Set during init
 	Type          string         `json:"type"`
 	PromptPattern *regexp.Regexp `json:"-"`
 	Input         InputLine      `json:"input"`
 
+	// Set during target init
+	PointsAvailable uint `json:"points_avail"`
+	PointsEarned    uint `json:"points_earned"`
+
+	// Set during run init
+	expectedOutput []*ExpectedOutputLine
+
 	// Set during testing
-	Output       []OutputLine `json:"output"`
-	SummaryStats Stat         `json:"summarystats"`
-	AllStats     []Stat       `json:"stats"`
+	Output       []*OutputLine `json:"output"`
+	SummaryStats Stat          `json:"summarystats"`
+	AllStats     []Stat        `json:"stats"`
+
+	// Set during evaluation
+	Status string `json:"status"`
 }
 
 type InputLine struct {
@@ -104,6 +133,10 @@ type OutputLine struct {
 	SimTime  TimeFixedPoint `json:"simtime"`
 	Buffer   bytes.Buffer   `json:"-"`
 	Line     string         `json:"line"`
+
+	// TODO These don't need to be serialized for production
+	Trusted bool   `json:"trusted"`
+	KeyName string `json:"keyname"`
 }
 
 type Status struct {
@@ -118,11 +151,11 @@ type TimeFixedPoint float64
 type TestResult string
 
 const (
-	T_RES_IDLE       TestResult = "idle"  // Hasn't run (initial status)
-	T_RES_OK         TestResult = "ok"    // Finished without error
-	T_RES_FAIL       TestResult = "fail"  // Finished unexpectedly
-	T_RES_FAIL_ABORT TestResult = "abort" // Aborted - internal error
-	T_RES_SKIP       TestResult = "skip"  // Skipped (dependency not met)
+	TEST_RESULT_NONE      TestResult = "none"      // Hasn't run (initial status)
+	TEST_RESULT_CORRECT   TestResult = "correct"   // Met the output criteria
+	TEST_RESULT_INCORRECT TestResult = "incorrect" // Possibly some partial points, but didn't complete everything successfully
+	TEST_RESULT_ABORT     TestResult = "abort"     // Aborted - internal error
+	TEST_RESULT_SKIP      TestResult = "skip"      // Skipped (dependency not met)
 )
 
 // MarshalJSON prints our TimeFixedPoint type as a fixed point float for JSON.
@@ -136,12 +169,22 @@ func (t *Test) getWallTime() TimeFixedPoint {
 }
 
 // Run a test161 test.
-func (t *Test) Run(root string) (err error) {
+func (t *Test) Run(env *TestEnvironment) (err error) {
 	// Serialize the current command state.
 	t.L = &sync.Mutex{}
 
+	// Save the test environment for other pieces that need it
+	t.env = env
+
 	// We've aborted unless we hear otherwise
-	t.Result = T_RES_FAIL_ABORT
+	t.Result = TEST_RESULT_ABORT
+
+	// Set the instance-specific input and expected output
+	for _, c := range t.Commands {
+		if err = c.instantiate(env); err != nil {
+			return
+		}
+	}
 
 	// Merge in test161 defaults for any missing configuration values
 	err = t.MergeConf(CONF_DEFAULTS)
@@ -160,7 +203,7 @@ func (t *Test) Run(root string) (err error) {
 	t.tempDir = path.Join(tempRoot, "root")
 
 	// Copy root.
-	err = shutil.CopyTree(root, t.tempDir, nil)
+	err = shutil.CopyTree(env.RootDir, t.tempDir, nil)
 	if err != nil {
 		t.addStatus("aborted", "")
 		return err
@@ -223,7 +266,8 @@ func (t *Test) Run(root string) (err error) {
 
 	// Set up the current command to point at boot
 	t.commandCounter = 0
-	t.currentCommand = &t.Commands[t.commandCounter]
+	t.currentCommand = t.Commands[t.commandCounter]
+	t.currentCommand.Status = COMMAND_STATUS_RUNNING
 
 	// Start sys161 and defer close.
 	err = t.start161()
@@ -234,8 +278,16 @@ func (t *Test) Run(root string) (err error) {
 	defer t.stop161()
 	t.addStatus("started", "")
 
+	// Set up the output
+	t.currentOutput = &OutputLine{}
+
+	// Keep track of whether or not all commands are correct so we can return
+	// the correct status code.
+	allCorrect := true
+
 	for int(t.commandCounter) < len(t.Commands) {
 		if t.commandCounter != 0 {
+			t.currentCommand.Status = COMMAND_STATUS_RUNNING
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
 			if err != nil {
 				t.addStatus("expect", "couldn't send a command")
@@ -262,7 +314,16 @@ func (t *Test) Run(root string) (err error) {
 				t.sys161.ExpectEOF()
 			})()
 			t.addStatus("shutdown", "normal shutdown")
-			t.Result = T_RES_OK
+
+			// Update the test result and score
+			if allCorrect {
+				t.Result = TEST_RESULT_CORRECT
+				if t.ScoringMethod == TEST_SCORING_ENTIRE {
+					t.PointsEarned = t.PointsAvailable
+				}
+			} else {
+				t.Result = TEST_RESULT_INCORRECT
+			}
 			return nil
 		}
 		match, expectErr := t.sys161.ExpectRegexp(t.currentCommand.PromptPattern)
@@ -271,11 +332,11 @@ func (t *Test) Run(root string) (err error) {
 		// Handle timeouts, unexpected shutdowns, and other errors
 		if expectErr == expect.ErrTimeout {
 			t.addStatus("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
-			t.Result = T_RES_FAIL
+			t.Result = TEST_RESULT_INCORRECT
 			break
 		} else if expectErr == io.EOF || len(match.Groups) == 0 {
 			t.addStatus("shutdown", "unexpected shutdown")
-			t.Result = T_RES_FAIL
+			t.Result = TEST_RESULT_INCORRECT
 			break
 		} else if expectErr != nil {
 			t.addStatus("expect", "")
@@ -291,11 +352,32 @@ func (t *Test) Run(root string) (err error) {
 		t.L.Lock()
 		if t.currentOutput.WallTime != 0.0 {
 			t.currentOutput.Line = t.currentOutput.Buffer.String()
+			t.outputLineComplete()
 			t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
 		}
-		t.currentOutput = OutputLine{}
+
+		// Evaluate the results of the command that just finished. Do this after
+		// the timeout/prompt logic since no points are awarded if we don't see
+		// the expected prompt.
+		t.currentCommand.evaluate(env.KeyMap)
+
+		// Short-circuit the test if we can
+		if t.currentCommand.Status == COMMAND_STATUS_INCORRECT {
+			allCorrect = false
+			if t.ScoringMethod == "entire" {
+				// No point in continuing, just shut down ungracefully.
+				t.Result = TEST_RESULT_INCORRECT
+				t.addStatus("shutdown", "short-circuit")
+				t.L.Unlock()
+				break
+			}
+		} else if t.ScoringMethod == TEST_SCORING_PARTIAL {
+			t.PointsEarned += t.currentCommand.PointsEarned
+		}
+
+		t.currentOutput = &OutputLine{}
 		t.commandCounter++
-		t.currentCommand = &t.Commands[t.commandCounter]
+		t.currentCommand = t.Commands[t.commandCounter]
 		t.L.Unlock()
 	}
 
@@ -407,4 +489,180 @@ func (t *Test) addStatus(status string, message string) {
 		Message:  message,
 	})
 	t.L.Unlock()
+}
+
+// Split a command line into its base command and args.
+func (l *InputLine) splitCommand() (prefix, base string, args []string) {
+	command := l.Line
+	var pos, start int = 0, 0
+	var inQuote, escape = false, false
+	args = make([]string, 0)
+	prefix = ""
+
+	// Special case: "p <command>"
+	if strings.HasPrefix(command, "p ") {
+		prefix = "p"
+		start, pos = 0, 2
+	}
+
+	// We're looking for the first unescaped space that isn't in quotes,
+	// or the end of the string.
+	for pos < len(command) {
+		if command[pos] == '"' && !escape {
+			inQuote = !inQuote
+		} else if escape || command[pos] == '\\' {
+			escape = !escape
+		} else if !inQuote && command[pos] == ' ' {
+			// We have the command/next arg
+			args = append(args, command[start:pos])
+			start = pos + 1 //skip the space
+		}
+		pos++
+	}
+
+	// Add the last argument
+	if start < len(command) {
+		args = append(args, command[start:len(command)])
+	}
+
+	base = args[0]
+	if len(args) == 1 {
+		args = nil
+	} else {
+		args = args[1:]
+	}
+
+	return
+}
+
+func (l *InputLine) replaceArgs(args []string) {
+	prefix, base, _ := l.splitCommand()
+
+	if len(prefix) > 0 {
+		l.Line = prefix + " "
+	}
+
+	l.Line += base
+
+	for _, a := range args {
+		l.Line += " " + a
+	}
+}
+
+// Partial credit regular expression
+var partialCreditExp *regexp.Regexp = regexp.MustCompile(`^PARTIAL CREDIT ([0-9]+) OF ([0-9]+)$`)
+
+// Evaluate a single command, setting its status and points
+func (c *Command) evaluate(keyMap map[string]string) {
+	c.PointsEarned = 0
+	if len(c.expectedOutput) == 0 {
+		// If we didn't crash and we aren't expecting anything, then
+		// we passed with flying colors.
+		c.PointsEarned = c.PointsAvailable
+		c.Status = COMMAND_STATUS_CORRECT
+		return
+	}
+
+	// We're expecting something. First check if we got exactly what we're
+	// looking for (it's OK if there are extra output lines).
+	expectedIndex, actualIndex := 0, 0
+	for actualIndex < len(c.Output) && expectedIndex < len(c.expectedOutput) {
+		expected := c.expectedOutput[expectedIndex]
+		actual := c.Output[actualIndex]
+
+		if actual.Line == expected.Text {
+			// We only count this as a match if the message is verified or we don't
+			// care about keys.  The latter happens if the command specifically tells
+			// us that, or the keyMap is empty - which happens on the client side.
+			_, hasKey := keyMap[expected.KeyName]
+			if !expected.Trusted || !hasKey || (actual.Trusted && actual.KeyName == expected.KeyName) {
+				expectedIndex++
+			}
+		}
+		actualIndex++
+	}
+
+	// If we've matched all expected lines, the command succeeded and full
+	// points are awarded (if there are any).
+	if expectedIndex == len(c.expectedOutput) {
+		c.Status = COMMAND_STATUS_CORRECT
+		c.PointsEarned = c.PointsAvailable
+	} else {
+		// The result is incorrect, but there still be some partial credit
+		c.Status = COMMAND_STATUS_INCORRECT
+		c.PointsEarned = 0
+
+		totalEarned, totalAvail := 0, 0
+
+		id := c.Id()
+		_, hasKey := keyMap[id]
+
+		for _, line := range c.Output {
+			// Only check trusted lines signed with our key
+			if !hasKey || (line.Trusted && line.KeyName == id) {
+				if res := partialCreditExp.FindStringSubmatch(line.Line); len(res) == 3 {
+					if earned, err := strconv.Atoi(res[1]); err != nil && earned > 0 {
+						if avail, err := strconv.Atoi(res[2]); err != nil && avail > 0 {
+							totalAvail += avail
+							totalEarned += earned
+						}
+					}
+				}
+			}
+		}
+		if totalEarned > 0 && totalAvail > 0 {
+			// Integral points only
+			c.PointsEarned = uint(float32(c.PointsAvailable) * (float32(totalEarned) / float32(totalAvail)))
+		}
+
+		// If they got all of the partial credit, this command was actually correct
+		if c.PointsEarned == c.PointsAvailable {
+			c.Status = COMMAND_STATUS_CORRECT
+		}
+	}
+}
+
+// Regexp corresponding to the kernel's secprintf. The meaning is
+// (id, hash, salt, message).
+var os161Secure *regexp.Regexp = regexp.MustCompile(`^\((.*), ([0-9a-f]*), ([0-9a-f].*), (.*)\)$`)
+
+func (t *Test) outputLineComplete() {
+
+	line := t.currentOutput
+
+	// First, strip off the "\r\r\n"
+	pos := len(line.Line) - 1
+	for pos >= 0 {
+		if line.Line[pos] != '\r' && line.Line[pos] != '\n' {
+			break
+		}
+		pos -= 1
+	}
+
+	if pos == 0 {
+		line.Line = ""
+		return
+	}
+
+	line.Line = line.Line[0 : pos+1]
+
+	// Next, check if this is a secure line
+	if res := os161Secure.FindStringSubmatch(line.Line); len(res) == 5 {
+		// The message has the secprintf form, now verify that we trust this message.
+		//If we do, note the key and only output the payload.
+		id := res[1]
+		hash := res[2]
+		salt := res[3]
+		key := t.env.KeyMap[id] + salt
+
+		mac := hmac.New(sha256.New, []byte(key))
+		mac.Write([]byte(res[4]))
+		expected := strings.ToLower(hex.EncodeToString(mac.Sum(nil)))
+
+		if expected == hash {
+			line.Trusted = true
+			line.KeyName = id
+			line.Line = res[4]
+		}
+	}
 }

@@ -55,10 +55,12 @@ func (r *SimpleRunner) Run() <-chan *Test161JobResult {
 	// Buffered channel for our client.
 	callbackChan := make(chan *Test161JobResult, len(r.group.Tests))
 
+	env := r.group.Config.Env
+
 	// Spawn every job at once (no dependency tracking)
 	for _, test := range r.group.Tests {
-		job := &test161Job{test, r.group.Config.RootDir, resChan}
-		testManager.SubmitChan <- job
+		job := &test161Job{test, env, resChan}
+		env.manager.SubmitChan <- job
 	}
 
 	go func() {
@@ -99,10 +101,10 @@ func waitForDeps(test *Test, depChan, readyChan, abortChan chan *Test) {
 	for len(deps) > 0 {
 		res := <-depChan
 		if _, ok := deps[res.DependencyID]; ok {
-			if res.Result == T_RES_OK {
+			if res.Result == TEST_RESULT_CORRECT {
 				delete(deps, res.DependencyID)
 			} else {
-				test.Result = T_RES_SKIP
+				test.Result = TEST_RESULT_SKIP
 				abortChan <- test
 			}
 		}
@@ -165,6 +167,8 @@ func (r *DependencyRunner) Run() <-chan *Test161JobResult {
 	go func() {
 		//We're done as soon as we recieve the final result from the manager.
 		results := 0
+		env := r.group.Config.Env
+
 		for results < len(r.group.Tests) {
 			select {
 			case res := <-resChan:
@@ -182,8 +186,8 @@ func (r *DependencyRunner) Run() <-chan *Test161JobResult {
 			case test := <-readyChan:
 				// We have a test that can run.
 				delete(waiting, test.DependencyID)
-				job := &test161Job{test, r.group.Config.RootDir, resChan}
-				testManager.SubmitChan <- job
+				job := &test161Job{test, env, resChan}
+				env.manager.SubmitChan <- job
 			}
 		}
 		close(callbackChan)
