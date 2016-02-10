@@ -13,6 +13,7 @@ func TestStatsKernelDeadlock(t *testing.T) {
 	test, err := TestFromString("dl")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.Enabled = "true"
 	test.Monitor.ProgressTimeout = 8.0
 	assert.Nil(test.Run(defaultEnv))
 
@@ -46,6 +47,7 @@ func TestStatsKernelLivelock(t *testing.T) {
 	test, err := TestFromString("ll16")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.Enabled = "true"
 	test.Sys161.CPUs = 1
 	test.Monitor.ProgressTimeout = 8.0
 	assert.Nil(test.Run(defaultEnv))
@@ -80,6 +82,7 @@ func TestStatsUserDeadlock(t *testing.T) {
 	test, err := TestFromString("p /testbin/waiter")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.Enabled = "true"
 	test.Monitor.Kernel.EnableMin = "false"
 	test.Misc.PromptTimeout = 8.0
 	assert.Nil(test.Run(defaultEnv))
@@ -114,6 +117,7 @@ func TestStatsKernelProgress(t *testing.T) {
 	test, err := TestFromString("ll1")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.Enabled = "true"
 	test.Monitor.Kernel.EnableMin = "false"
 	test.Monitor.User.EnableMin = "false"
 	test.Monitor.ProgressTimeout = 2.0
@@ -150,6 +154,7 @@ func TestStatsUserProgress(t *testing.T) {
 	test, err := TestFromString("p /testbin/waiter")
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.Enabled = "true"
 	test.Monitor.Kernel.EnableMin = "false"
 	test.Monitor.User.EnableMin = "false"
 	test.Monitor.ProgressTimeout = 2.0

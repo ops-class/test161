@@ -7,8 +7,6 @@ depends:
 stat:
     resolution: 0.01
     window: 100
-monitor:
-    enabled: "false"
 misc:
     prompttimeout: 30.0
 ---

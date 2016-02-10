@@ -64,7 +64,7 @@ stat:
   resolution: 0.0001
   window: 100
 monitor:
-  enabled: false
+  enabled: true
   window: 20
   kernel:
     enablemin: false
@@ -111,7 +111,7 @@ q
 			Window:     100,
 		},
 		Monitor: MonitorConf{
-			Enabled: "false",
+			Enabled: "true",
 			Window:  20,
 			Kernel: Limits{
 				EnableMin: "false",

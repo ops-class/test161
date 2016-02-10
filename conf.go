@@ -96,7 +96,7 @@ var CONF_DEFAULTS = Test{
 		Window:     1,
 	},
 	Monitor: MonitorConf{
-		Enabled: "true",
+		Enabled: "false",
 		Window:  400,
 		Kernel: Limits{
 			EnableMin: "true",
