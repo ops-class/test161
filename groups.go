@@ -449,7 +449,10 @@ func GroupFromConfig(config *GroupConfig) (*TestGroup, []error) {
 	for i, count := 0, len(tg.Tests); i < count; i++ {
 		res := <-resChan
 		for _, test := range res.Tests {
-			tg.Tests[test.DependencyID] = test
+			if _, ok := tg.Tests[test.DependencyID]; !ok {
+				test.IsDependency = true
+				tg.Tests[test.DependencyID] = test
+			}
 		}
 	}
 
