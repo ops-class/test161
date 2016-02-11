@@ -102,7 +102,7 @@ func runTargetTest(t *testing.T, testPoints map[string]*expectedTestResults, tar
 	env.manager.start()
 
 	r := NewDependencyRunner(tg)
-	done := r.Run()
+	done, _ := r.Run()
 
 	for res := range done {
 		id := res.Test.DependencyID
@@ -117,6 +117,11 @@ func runTargetTest(t *testing.T, testPoints map[string]*expectedTestResults, tar
 			}
 		} else {
 			assert.Equal(exp.points, res.Test.PointsEarned)
+			if exp.points != res.Test.PointsEarned {
+				t.Log(res.Test.OutputJSON())
+				t.FailNow()
+			}
+
 			assert.Equal(string(exp.result), string(res.Test.Result))
 			for _, c := range res.Test.Commands {
 				if cmd, ok2 := exp.cmdPoints[c.Id()]; !ok2 {
@@ -166,7 +171,7 @@ func TestTargetScorePartial(t *testing.T) {
 				points: 10,
 			},
 			"panic": &expectedCmdResults{
-				status: COMMAND_STATUS_RUNNING,
+				status: COMMAND_STATUS_INCORRECT,
 				points: 0,
 			},
 			"sy3": &expectedCmdResults{
@@ -213,7 +218,7 @@ func TestTargetScoreEntire(t *testing.T) {
 				points: 0,
 			},
 			"panic": &expectedCmdResults{
-				status: COMMAND_STATUS_RUNNING,
+				status: COMMAND_STATUS_INCORRECT,
 				points: 0,
 			},
 			"sy3": &expectedCmdResults{

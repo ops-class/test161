@@ -72,7 +72,7 @@ func TestRunnerCapacity(t *testing.T) {
 
 		env.manager.start()
 
-		done := r.Run()
+		done, _ := r.Run()
 		count := 0
 
 		for res := range done {
@@ -125,7 +125,7 @@ func TestRunnerSimple(t *testing.T) {
 
 	env.manager.start()
 
-	done := r.Run()
+	done, _ := r.Run()
 	count := 0
 
 	for res := range done {
@@ -169,7 +169,7 @@ func TestRunnerDependency(t *testing.T) {
 	r := runnerFromConfig(t, config, expected)
 	env.manager.Capacity = 0
 	env.manager.start()
-	done := r.Run()
+	done, _ := r.Run()
 
 	results := make([]string, 0)
 	count := 0
@@ -221,7 +221,7 @@ func TestRunnerAbort(t *testing.T) {
 	r := runnerFromConfig(t, config, expected)
 	env.manager.Capacity = 0
 	env.manager.start()
-	done := r.Run()
+	done, _ := r.Run()
 
 	count := 0
 	for res := range done {
@@ -300,7 +300,7 @@ func TestRunnersParallel(t *testing.T) {
 
 	for index, runner := range runners {
 		go func(r TestRunner, i int) {
-			done := r.Run()
+			done, _ := r.Run()
 			count := 0
 
 			for res := range done {

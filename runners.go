@@ -6,7 +6,7 @@ package test161
 // return as soon as they are able to and let tests run asynchronously.
 type TestRunner interface {
 	Group() *TestGroup
-	Run() <-chan *Test161JobResult
+	Run() (<-chan *Test161JobResult, <-chan *TestUpdateMsg)
 }
 
 // Create a TestRunner from a GroupConfig.  config.UseDeps determines the
@@ -41,7 +41,7 @@ func (r *SimpleRunner) Group() *TestGroup {
 	return r.group
 }
 
-func (r *SimpleRunner) Run() <-chan *Test161JobResult {
+func (r *SimpleRunner) Run() (<-chan *Test161JobResult, <-chan *TestUpdateMsg) {
 
 	// We create 2 channels, one to receive the results from the test
 	// manager and one to transmit the results to the caller.  We
@@ -55,10 +55,18 @@ func (r *SimpleRunner) Run() <-chan *Test161JobResult {
 	// Buffered channel for our client.
 	callbackChan := make(chan *Test161JobResult, len(r.group.Tests))
 
+	// Some slack on the test callback channel.  We never
+	// handle the output directly, we just link all tests to this
+	// so callers can get updates.
+
+	// TODO: What value here?
+	progessCallbackChan := make(chan *TestUpdateMsg, 100)
+
 	env := r.group.Config.Env
 
 	// Spawn every job at once (no dependency tracking)
 	for _, test := range r.group.Tests {
+		test.updateChan = progessCallbackChan
 		job := &test161Job{test, env, resChan}
 		env.manager.SubmitChan <- job
 	}
@@ -74,10 +82,11 @@ func (r *SimpleRunner) Run() <-chan *Test161JobResult {
 			default:
 			}
 		}
+		close(progessCallbackChan)
 		close(callbackChan)
 	}()
 
-	return callbackChan
+	return callbackChan, progessCallbackChan
 }
 
 // This runner has mad respect for dependencies.
@@ -106,6 +115,7 @@ func waitForDeps(test *Test, depChan, readyChan, abortChan chan *Test) {
 			} else {
 				test.Result = TEST_RESULT_SKIP
 				abortChan <- test
+				return
 			}
 		}
 	}
@@ -114,7 +124,7 @@ func waitForDeps(test *Test, depChan, readyChan, abortChan chan *Test) {
 	readyChan <- test
 }
 
-func (r *DependencyRunner) Run() <-chan *Test161JobResult {
+func (r *DependencyRunner) Run() (<-chan *Test161JobResult, <-chan *TestUpdateMsg) {
 
 	// Everything that's still waiting.
 	// We make it big enough that it can hold all the results
@@ -134,7 +144,7 @@ func (r *DependencyRunner) Run() <-chan *Test161JobResult {
 	// A function to broadcast a single test result
 	bcast := func(test *Test) {
 		for _, ch := range waiting {
-			// Non-blocking because it
+			// Non-blocking because it is buffered to hold the max number of tests
 			select {
 			case ch <- test:
 			default:
@@ -154,9 +164,16 @@ func (r *DependencyRunner) Run() <-chan *Test161JobResult {
 		}
 	}
 
+	// Some slack on the test callback channel.  We never
+	// handle the output directly, we just link all tests to this
+	// so callers can get updates.
+	progessCallbackChan := make(chan *TestUpdateMsg, 100)
+
 	// Spawn all the tests and put them in a waiting pattern
 	for id, test := range r.group.Tests {
-		waiting[id] = make(chan *Test)
+		test.updateChan = progessCallbackChan
+		// Buffer this so we eliminate races during setup
+		waiting[id] = make(chan *Test, len(r.group.Tests))
 		go waitForDeps(test, waiting[id], readyChan, abortChan)
 	}
 
@@ -190,8 +207,9 @@ func (r *DependencyRunner) Run() <-chan *Test161JobResult {
 				env.manager.SubmitChan <- job
 			}
 		}
+		close(progessCallbackChan)
 		close(callbackChan)
 	}()
 
-	return callbackChan
+	return callbackChan, progessCallbackChan
 }

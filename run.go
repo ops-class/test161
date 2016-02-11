@@ -74,6 +74,7 @@ type Test struct {
 	startTime   int64            // Only set once
 	statStarted bool             // Only changed once
 	env         *TestEnvironment // Set at top of Run
+	allCorrect  bool
 
 	sys161         *expect.Expect // Protected by L
 	running        bool           // Protected by L
@@ -89,7 +90,20 @@ type Test struct {
 	statRecord bool // Protected by statCond.L
 
 	// Output channels
-	statChan chan Stat // Nonblocking write
+	statChan   chan Stat           // Nonblocking write
+	updateChan chan *TestUpdateMsg // Nonblocking write, may be nil
+}
+
+const (
+	UpdateReasonOutput = iota
+	UpdateReasonScore
+	UpdateReasonCommandDone
+)
+
+type TestUpdateMsg struct {
+	Test   *Test
+	Reason int
+	Data   interface{}
 }
 
 // Statuses for commands
@@ -111,6 +125,7 @@ type Command struct {
 	PointsEarned    uint `json:"points_earned"`
 
 	// Set during run init
+	Panic          string `json:"panic"`
 	expectedOutput []*ExpectedOutputLine
 
 	// Set during testing
@@ -281,9 +296,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	// Set up the output
 	t.currentOutput = &OutputLine{}
 
-	// Keep track of whether or not all commands are correct so we can return
-	// the correct status code.
-	allCorrect := true
+	t.allCorrect = true
 
 	for int(t.commandCounter) < len(t.Commands) {
 		if t.commandCounter != 0 {
@@ -314,30 +327,29 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 				t.sys161.ExpectEOF()
 			})()
 			t.addStatus("shutdown", "normal shutdown")
-
-			// Update the test result and score
-			if allCorrect {
-				t.Result = TEST_RESULT_CORRECT
-				if t.ScoringMethod == TEST_SCORING_ENTIRE {
-					t.PointsEarned = t.PointsAvailable
-				}
-			} else {
-				t.Result = TEST_RESULT_INCORRECT
-			}
-			return nil
+			err = nil
+			break
 		}
 		match, expectErr := t.sys161.ExpectRegexp(t.currentCommand.PromptPattern)
 		statActive, statErr := t.disableStats()
 
+		eof := false
+
 		// Handle timeouts, unexpected shutdowns, and other errors
 		if expectErr == expect.ErrTimeout {
 			t.addStatus("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
-			t.Result = TEST_RESULT_INCORRECT
 			break
 		} else if expectErr == io.EOF || len(match.Groups) == 0 {
-			t.addStatus("shutdown", "unexpected shutdown")
-			t.Result = TEST_RESULT_INCORRECT
-			break
+			// But is it reaaaally unexpected?
+			if t.currentCommand.Panic == PANIC_NO {
+				t.addStatus("shutdown", "unexpected shutdown")
+				t.currentCommand.Status = COMMAND_STATUS_INCORRECT
+				t.allCorrect = false
+				t.currentCommand.PointsEarned = 0
+				break
+			} else {
+				eof = true
+			}
 		} else if expectErr != nil {
 			t.addStatus("expect", "")
 			err = expectErr
@@ -347,42 +359,96 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 			break
 		}
 
-		// Rotate running command to the next command, saving any previous
-		// output as needed.
-		t.L.Lock()
-		if t.currentOutput.WallTime != 0.0 {
-			t.currentOutput.Line = t.currentOutput.Buffer.String()
-			t.outputLineComplete()
-			t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
+		cur := t.finishCurCommand(env, eof)
+
+		if cur.Status == COMMAND_STATUS_INCORRECT {
+			t.allCorrect = false
 		}
 
-		// Evaluate the results of the command that just finished. Do this after
-		// the timeout/prompt logic since no points are awarded if we don't see
-		// the expected prompt.
-		t.currentCommand.evaluate(env.KeyMap)
-
-		// Short-circuit the test if we can
-		if t.currentCommand.Status == COMMAND_STATUS_INCORRECT {
-			allCorrect = false
+		// See if we can short-circuit the test
+		if eof || cur.Panic != PANIC_NO {
+			t.addStatus("shutdown", "expected panic")
+			break
+		} else if cur.Status == COMMAND_STATUS_INCORRECT {
 			if t.ScoringMethod == "entire" {
 				// No point in continuing, just shut down ungracefully.
-				t.Result = TEST_RESULT_INCORRECT
 				t.addStatus("shutdown", "short-circuit")
-				t.L.Unlock()
 				break
 			}
 		} else if t.ScoringMethod == TEST_SCORING_PARTIAL {
-			t.PointsEarned += t.currentCommand.PointsEarned
+			t.PointsEarned += cur.PointsEarned
 		}
-
-		t.currentOutput = &OutputLine{}
-		t.commandCounter++
-		t.currentCommand = t.Commands[t.commandCounter]
-		t.L.Unlock()
 	}
 
-	t.Commands = t.Commands[0 : t.commandCounter+1]
+	if uint(len(t.Commands)) > t.commandCounter {
+		t.Commands = t.Commands[0 : t.commandCounter+1]
+	}
+
+	if err == nil {
+		t.finishAndEvaluate()
+	}
+
 	return err
+}
+
+func (t *Test) finishCurCommand(env *TestEnvironment, eof bool) *Command {
+
+	t.L.Lock()
+	defer t.L.Unlock()
+
+	// Rotate running command to the next command, saving any previous
+	// output as needed.
+	if t.currentOutput.WallTime != 0.0 {
+		t.currentOutput.Line = t.currentOutput.Buffer.String()
+		t.outputLineComplete()
+		t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
+		t.sendUpdateMsg(UpdateReasonOutput)
+	}
+
+	cur := t.currentCommand
+	cur.evaluate(env.KeyMap, eof)
+	t.sendUpdateMsg(UpdateReasonCommandDone)
+
+	// Next line
+	t.currentOutput = &OutputLine{}
+	t.commandCounter++
+	t.currentCommand = t.Commands[t.commandCounter]
+
+	return cur
+}
+
+func (t *Test) finishAndEvaluate() {
+
+	// Test Status
+	if t.allCorrect {
+		t.Result = TEST_RESULT_CORRECT
+		if t.ScoringMethod == TEST_SCORING_ENTIRE {
+			t.PointsEarned = t.PointsAvailable
+			t.sendUpdateMsg(UpdateReasonScore)
+		} else {
+			// The partial points were computed along the way
+		}
+	} else {
+		t.Result = TEST_RESULT_INCORRECT
+	}
+}
+
+func (t *Test) sendUpdateMsg(reason int) {
+	msg := &TestUpdateMsg{
+		Test:   t,
+		Reason: reason,
+	}
+
+	if reason == UpdateReasonOutput {
+		msg.Data = t.currentOutput
+	} else if reason == UpdateReasonCommandDone {
+		msg.Data = t.currentCommand
+	}
+
+	select {
+	case t.updateChan <- msg:
+	default:
+	}
 }
 
 // sendCommand sends a command persistently. All the retry logic to deal with
@@ -553,9 +619,14 @@ func (l *InputLine) replaceArgs(args []string) {
 var partialCreditExp *regexp.Regexp = regexp.MustCompile(`^PARTIAL CREDIT ([0-9]+) OF ([0-9]+)$`)
 
 // Evaluate a single command, setting its status and points
-func (c *Command) evaluate(keyMap map[string]string) {
+func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 	c.PointsEarned = 0
-	if len(c.expectedOutput) == 0 {
+
+	if c.Panic == PANIC_YES && !eof {
+		// Not correct, we should have panicked
+		c.Status = COMMAND_STATUS_INCORRECT
+		return
+	} else if len(c.expectedOutput) == 0 {
 		// If we didn't crash and we aren't expecting anything, then
 		// we passed with flying colors.
 		c.PointsEarned = c.PointsAvailable
@@ -665,4 +736,5 @@ func (t *Test) outputLineComplete() {
 			line.Line = res[4]
 		}
 	}
+
 }

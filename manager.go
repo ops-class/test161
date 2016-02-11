@@ -163,6 +163,14 @@ func StopManager() {
 	testManager.stop()
 }
 
+func SetManagerCapacity(capacity uint) {
+	testManager.Capacity = capacity
+}
+
+func ManagerCapacity() uint {
+	return testManager.Capacity
+}
+
 // Return a copy of the current shared test manager stats
 func GetManagerStats() *ManagerStats {
 	// Lock so we at least get a consistent view of the stats

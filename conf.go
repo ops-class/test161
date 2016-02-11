@@ -324,6 +324,7 @@ func (t *Test) initCommands() (err error) {
 			Line: "boot",
 		},
 		Status: COMMAND_STATUS_NONE,
+		Panic:  PANIC_NO,
 	})
 
 	// Set all confs including kernel and shell
@@ -410,6 +411,7 @@ func (t *Test) initCommands() (err error) {
 					Line: commandLine,
 				},
 				Status: COMMAND_STATUS_NONE,
+				Panic:  PANIC_NO,
 			})
 			commandLines = commandLines[1:]
 		}

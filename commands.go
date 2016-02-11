@@ -103,11 +103,18 @@ type templateData struct {
 	ArgLen int
 }
 
+const (
+	PANIC_NO    = "no"
+	PANIC_MAYBE = "maybe"
+	PANIC_YES   = "yes"
+)
+
 // Template for commands instances.  These get expanded depending on the command environment.
 type CommandTemplate struct {
 	Name   string             `yaml:"name"`
 	Output []*TemplOutputLine `yaml:"output"`
 	Input  []string           `yaml:"input"`
+	Panic  string             `yaml:"panics"`
 }
 
 // An expected line of output, which may either be expanded or not.
@@ -219,6 +226,8 @@ func (c *Command) instantiate(env *TestEnvironment) error {
 		return nil
 	}
 
+	c.Panic = tmpl.Panic
+
 	// Input
 
 	// Check if  we need to create some input. If args haven't already been
@@ -301,6 +310,11 @@ func (t *CommandTemplate) fixDefaults() {
 	// If we find an empty output line, delete it - these are commands
 	// that do not expect output. If we find a command with no expected
 	// output, add the default expected output.
+
+	// Default for panic is to not allow it, i.e. must return to prompt
+	if t.Panic != PANIC_MAYBE && t.Panic != PANIC_YES {
+		t.Panic = PANIC_NO
+	}
 
 	if len(t.Output) == 1 && strings.TrimSpace(t.Output[0].Text) == "" {
 		t.Output = nil
