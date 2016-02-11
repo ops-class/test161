@@ -67,7 +67,7 @@ func getRunArgs() error {
 	runFlags.BoolVar(&runCommandVars.sequential, "sequential", false, "")
 	runFlags.BoolVar(&runCommandVars.sequential, "s", false, "")
 	runFlags.BoolVar(&runCommandVars.deps, "dependencies", false, "")
-	runFlags.BoolVar(&runCommandVars.deps, "", false, "")
+	runFlags.BoolVar(&runCommandVars.deps, "d", false, "")
 	runFlags.StringVar(&runCommandVars.verbose, "verbose", "loud", "")
 	runFlags.StringVar(&runCommandVars.verbose, "v", "loud", "")
 	runFlags.BoolVar(&runCommandVars.isTag, "tag", false, "")
@@ -180,10 +180,17 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 		}
 	}
 
-	fmt.Printf("\nTotal Correct  : %v/%v\n", totals[0], len(tg.Tests))
-	fmt.Printf("Total Incorrect: %v/%v\n", totals[1], len(tg.Tests))
-	fmt.Printf("Total Aborted  : %v/%v\n", totals[2], len(tg.Tests))
-	fmt.Printf("Total Skipped  : %v/%v\n", totals[3], len(tg.Tests))
+	desc := []string{"Total Correct", "Total Incorrect",
+		"Total Aborted", "Total Skipped",
+	}
+
+	fmt.Println()
+
+	for i := 0; i < len(desc); i++ {
+		if i == 0 || totals[i] > 0 {
+			fmt.Printf("%-15v: %v/%v\n", desc[i], totals[i], len(tg.Tests))
+		}
+	}
 
 	if totalAvail > 0 {
 		fmt.Printf("\nTotal Score :  %v/%v\n", totalPoints, totalAvail)
@@ -254,6 +261,8 @@ func printDryRun(tg *test161.TestGroup) {
 	sort.Sort(testsByID(deps))
 	sort.Sort(testsByID(tests))
 
+	fmt.Println()
+
 	if len(deps) > 0 {
 		for _, test := range deps {
 			fmt.Printf("%-30v (dependency)\n", test.DependencyID)
@@ -266,4 +275,7 @@ func printDryRun(tg *test161.TestGroup) {
 			fmt.Println(test.DependencyID)
 		}
 	}
+
+	fmt.Println()
+
 }
