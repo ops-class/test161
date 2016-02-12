@@ -7,6 +7,57 @@ https://en.wikipedia.org/wiki/R3000[MIPS R3000] simulator. You are probably
 not interested in `test161` unless you are a student taking or an instructor
 teaching a course that uses OS/161.
 
+== Installing Go
+
+Many Linux distributions package fairly out-of-date versions of Go. Instead,
+we encourage you to install the https://github.com/moovweb/gvm[Go Version Manager (GVM)]:
+
+[source,bash]
+----
+sudo apt-get install -y curl bison # Install requirement
+bash < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer)
+source $HOME/.gvm/scripts/gvm
+----
+
+At this point you are ready to start using GVM. We are currently building and
+testing `test161` with Go version `go1.6beta2`. However, because the Go
+compiler is now written in Go, installing versions of Go past 1.5 require
+install Go version 1.4 first.
+
+[source,bash]
+----
+gvm install go1.4
+gvm use 1.4
+gvm install go1.6beta2
+gvm use 1.6beta2
+----
+
+Once you have Go installed you should set your `GOPATH` and `PATH` environment
+variables appropriately as https://golang.org/doc/code.html#GOPATH[described
+here.] For students using the https://www.ops-class.org[`ops-class.org`]
+https://github.com/ops-class/vagrant[Vagrant virtual machine], this should be
+safe:
+
+[source,bash]
+----
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOPATH/bin
+----
+
+Add these settings to your `.bashrc` or equivalent file.
+
+== Installing `test161`
+
+Once you have Go installed, upgrading or installing `test161` is simple:
+
+[source,bash]
+----
+go get -u github.com/ops-class/test161/
+go install github.com/ops-class/test161/test161
+----
+
+== Configuration
+
 == Usage
 
 `test161` requires a set of arguments. The following can be provided either
