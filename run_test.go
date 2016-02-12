@@ -3,6 +3,7 @@ package test161
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	//"gopkg.in/mgo.v2"
 	"math/rand"
 	"os"
 	"strings"
@@ -283,3 +284,50 @@ func TestRunTT3(t *testing.T) {
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
 }
+
+/*
+func TestRunBootMongo(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("q")
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	assert.Nil(test.Run(defaultEnv))
+
+	const (
+		MongoDBHosts = "localhost:27017"
+		AuthDatabase = "test"
+		AuthUserName = "testUser"
+		AuthPassword = "test1234"
+		TestDatabase = "test"
+	)
+
+	// We need this object to establish a session to our MongoDB.
+	mongoDBDialInfo := &mgo.DialInfo{
+		Addrs:    []string{MongoDBHosts},
+		Timeout:  60 * time.Second,
+		Database: AuthDatabase,
+		Username: AuthUserName,
+		Password: AuthPassword,
+	}
+
+	// Create a session which maintains a pool of socket connections
+	// to our MongoDB.
+	mongoSession, err := mgo.DialWithInfo(mongoDBDialInfo)
+	if err != nil {
+		t.Logf("CreateSession: %s\n", err)
+		t.FailNow()
+	}
+
+	defer mongoSession.Close()
+
+	c := mongoSession.DB("test").C("tests")
+	err = c.Insert(test)
+
+	if err != nil {
+		t.Logf("Insert: %s\n", err)
+		t.FailNow()
+	}
+}
+*/

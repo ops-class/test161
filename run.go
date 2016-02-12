@@ -15,6 +15,8 @@ import (
 	"github.com/kr/pty"
 	"github.com/ops-class/test161/expect"
 	"github.com/termie/go-shutil"
+	// "gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 	"io"
 	"io/ioutil"
 	"os"
@@ -28,6 +30,9 @@ import (
 )
 
 type Test struct {
+
+	// Mongo ID
+	ID bson.ObjectId `yaml:"-" json:"id" bson:"_id,omitempty"`
 
 	// Input
 
@@ -45,10 +50,10 @@ type Test struct {
 	Misc        MiscConf      `yaml:"misc" json:"misc"`
 
 	// Actual test commands to run
-	Content string `fm:"content" yaml:"-" json:"-"`
+	Content string `fm:"content" yaml:"-" json:"-" bson:"-"`
 
 	// Big lock that protects most fields shared between Run and getStats
-	L *sync.Mutex `json:"-"`
+	L *sync.Mutex `json:"-" bson:"-"`
 
 	// Output
 
@@ -61,7 +66,7 @@ type Test struct {
 
 	// Dependency data
 	DependencyID string           `json:"depid"`
-	ExpandedDeps map[string]*Test `json:"-"`
+	ExpandedDeps map[string]*Test `json:"-" bson:"-"`
 	IsDependency bool             `json:"isdependency"`
 
 	// Grading.  These are set when the test is being run as part of a Target.
@@ -117,12 +122,12 @@ const (
 type Command struct {
 	// Set during init
 	Type          string         `json:"type"`
-	PromptPattern *regexp.Regexp `json:"-"`
+	PromptPattern *regexp.Regexp `json:"-" bson:"-"`
 	Input         InputLine      `json:"input"`
 
 	// Set during target init
-	PointsAvailable uint `json:"points_avail"`
-	PointsEarned    uint `json:"points_earned"`
+	PointsAvailable uint `json:"points_avail" bson:"points_avail"`
+	PointsEarned    uint `json:"points_earned" bson:"points_earned"`
 
 	// Set during run init
 	Panic          string `json:"panic"`
@@ -146,12 +151,10 @@ type InputLine struct {
 type OutputLine struct {
 	WallTime TimeFixedPoint `json:"walltime"`
 	SimTime  TimeFixedPoint `json:"simtime"`
-	Buffer   bytes.Buffer   `json:"-"`
+	Buffer   bytes.Buffer   `json:"-" bson"-"`
 	Line     string         `json:"line"`
-
-	// TODO These don't need to be serialized for production
-	Trusted bool   `json:"trusted"`
-	KeyName string `json:"keyname"`
+	Trusted  bool           `json:"trusted"`
+	KeyName  string         `json:"keyname"`
 }
 
 type Status struct {
@@ -167,6 +170,7 @@ type TestResult string
 
 const (
 	TEST_RESULT_NONE      TestResult = "none"      // Hasn't run (initial status)
+	TEST_RESULT_RUNNING   TestResult = "running"   // Running
 	TEST_RESULT_CORRECT   TestResult = "correct"   // Met the output criteria
 	TEST_RESULT_INCORRECT TestResult = "incorrect" // Possibly some partial points, but didn't complete everything successfully
 	TEST_RESULT_ABORT     TestResult = "abort"     // Aborted - internal error
@@ -191,12 +195,13 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	// Save the test environment for other pieces that need it
 	t.env = env
 
-	// We've aborted unless we hear otherwise
-	t.Result = TEST_RESULT_ABORT
+	t.Result = TEST_RESULT_RUNNING
 
 	// Set the instance-specific input and expected output
 	for _, c := range t.Commands {
 		if err = c.instantiate(env); err != nil {
+			t.addStatus("aborted", "")
+			t.Result = TEST_RESULT_ABORT
 			return
 		}
 	}
@@ -205,6 +210,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	err = t.MergeConf(CONF_DEFAULTS)
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 
@@ -212,6 +218,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	tempRoot, err := ioutil.TempDir(t.Misc.TempDir, "test161")
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 	defer os.RemoveAll(tempRoot)
@@ -221,6 +228,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	err = shutil.CopyTree(env.RootDir, t.tempDir, nil)
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 
@@ -229,6 +237,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	_, err = os.Stat(kernelTarget)
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 
@@ -237,15 +246,18 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	t.ConfString, err = t.PrintConf()
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 	err = ioutil.WriteFile(confTarget, []byte(t.ConfString), 0440)
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 	if _, err := os.Stat(confTarget); os.IsNotExist(err) {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 
@@ -256,6 +268,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		err = create.Run()
 		if err != nil {
 			t.addStatus("aborted", "")
+			t.Result = TEST_RESULT_ABORT
 			return err
 		}
 	}
@@ -265,6 +278,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		err = create.Run()
 		if err != nil {
 			t.addStatus("aborted", "")
+			t.Result = TEST_RESULT_ABORT
 			return err
 		}
 	}
@@ -288,6 +302,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	err = t.start161()
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 	defer t.stop161()
@@ -386,6 +401,8 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	if err == nil {
 		t.finishAndEvaluate()
+	} else {
+		t.Result = TEST_RESULT_ABORT
 	}
 
 	return err

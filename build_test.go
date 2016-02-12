@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+/*
 func TestBuildGitOnly(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
@@ -27,38 +28,35 @@ func TestBuildGitOnly(t *testing.T) {
 	t.Log(e)
 	t.Log(o)
 }
+*/
 
 func TestBuildFull(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	conf, err := NewBuildConf("", "", "")
-	assert.Nil(err)
-	assert.NotNil(conf)
-	if conf == nil {
-		return
-	}
-
-	defer conf.CleanUp()
-
+	conf := &BuildConf{}
 	conf.Repo = "git@gitlab.ops-class.org:staff/sol3.git"
 	conf.CommitID = "HEAD"
-	conf.Config = "SOL3"
+	conf.KConfig = "SOL3"
+	conf.CacheDir = "/home/shaseley/cache"
+	conf.RequiredCommit = "29b635f4b8393fda987244b45ab0e32a61ea5dcb"
 
-	o, e := conf.getSources()
-	assert.Nil(e)
-	t.Log(e)
-	t.Log(o)
-	if e != nil {
-		return
+	test, err := conf.ToBuildTest()
+	assert.Nil(err)
+	assert.NotNil(test)
+
+	if test == nil {
+		t.Log(err)
+		t.FailNow()
 	}
 
-	o, e = conf.buildOS161()
-	assert.Nil(e)
-	t.Log(e)
-	t.Log(o)
+	_, err = test.Run()
+	assert.Nil(err)
+
+	t.Log(test.OutputJSON())
 }
 
+/*
 type confDetail struct {
 	repo   string
 	commit string
@@ -93,3 +91,4 @@ func TestBuildFailures(t *testing.T) {
 		conf.CleanUp()
 	}
 }
+*/

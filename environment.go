@@ -16,7 +16,9 @@ type TestEnvironment struct {
 
 	manager *manager
 
-	// These do depend on the TestGroup/Target
+	CacheDir string
+
+	// These depend on the TestGroup/Target
 	KeyMap  map[string]string
 	RootDir string
 }

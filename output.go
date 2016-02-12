@@ -55,8 +55,7 @@ func (tg *TestGroup) OutputJSON() (string, error) {
 
 func (tg *TestGroup) OutputString() string {
 	var output string
-	output = fmt.Sprintf("\ngroup: id      = %v\n", tg.Id())
-	output += fmt.Sprintf("group: name    = %v\n", tg.Config.Name)
+	output += fmt.Sprintf("\ngroup: name    = %v\n", tg.Config.Name)
 	output += fmt.Sprintf("group: rootdir = %v\n", tg.Config.Env.RootDir)
 	output += fmt.Sprintf("group: testdir = %v\n", tg.Config.Env.TestDir)
 	output += fmt.Sprintf("group: usedeps = %v\n", tg.Config.UseDeps)
@@ -68,4 +67,12 @@ func (tg *TestGroup) OutputString() string {
 	}
 
 	return output
+}
+
+func (t *BuildTest) OutputJSON() (string, error) {
+	outputBytes, err := json.MarshalIndent(t, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(outputBytes), nil
 }

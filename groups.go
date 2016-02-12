@@ -1,7 +1,6 @@
 package test161
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/bmatcuk/doublestar"
@@ -9,7 +8,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 // GroupConfig specifies how a group of tests should be created and run.
@@ -17,55 +15,19 @@ type GroupConfig struct {
 	Name    string           `json:name`
 	UseDeps bool             `json:"usedeps"`
 	Tests   []string         `json:"tests"`
-	Env     *TestEnvironment `json:"-"`
+	Env     *TestEnvironment `json:"-" "bson:"-"`
 }
 
 // A group of tests to be run, which is the result of expanding a GroupConfig.
 type TestGroup struct {
-	id     uint64
 	Tests  map[string]*Test
 	Config *GroupConfig
-}
-
-// Since we don't allow id to be accessed directly, we have a special
-// type for JSON output that exports the ID.
-type jsonTestGroup struct {
-	Id     uint64           `json:"id"`
-	Config *GroupConfig     `json:"config"`
-	Tests  map[string]*Test `json:"tests"`
-}
-
-// Group ID counter and protection
-var idLock = &sync.Mutex{}
-var curID uint64 = 1
-
-// Id retrieves the protected group id
-func (t *TestGroup) Id() uint64 {
-	return t.id
-}
-
-// Custom JSON marshaling to deal with our read-only id
-func (tg *TestGroup) MarshalJSON() ([]byte, error) {
-	return json.Marshal(jsonTestGroup{tg.Id(), tg.Config, tg.Tests})
-}
-
-// Increments the global counter and returns the previous value.
-func incrementId() (res uint64) {
-	idLock.Lock()
-	res = curID
-	curID += 1
-	if curID == 0 {
-		curID = 1
-	}
-	idLock.Unlock()
-	return
 }
 
 // EmptyGroup creates an empty TestGroup that can be used to add groups from
 // strings.
 func EmptyGroup() *TestGroup {
 	tg := &TestGroup{}
-	tg.id = incrementId()
 	tg.Tests = make(map[string]*Test)
 	return tg
 }
