@@ -32,19 +32,12 @@ gvm install go1.6beta2
 gvm use 1.6beta2
 ----
 
-Once you have Go installed you should set your `GOPATH` and `PATH` environment
-variables appropriately as https://golang.org/doc/code.html#GOPATH[described
-here.] For students using the https://www.ops-class.org[`ops-class.org`]
-https://github.com/ops-class/vagrant[Vagrant virtual machine], this should be
-safe:
+=== `GOPATH`
 
-[source,bash]
-----
-export GOPATH=$HOME/go
-export PATH=$PATH:$GOPATH/bin
-----
-
-Add these settings to your `.bashrc` or equivalent file.
+Note that `gvm` will set your `GOPATH` and `PATH` variables properly to allow
+you to run Go binaries that you install. However, if you are interested in
+writing Go code you should set a more accessible `GOPATH` as described as https://golang.org/doc/code.html#GOPATH[described
+here.]
 
 == Installing `test161`
 
