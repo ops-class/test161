@@ -276,16 +276,3 @@ q
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
 }
-
-func TestRunTT3(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-
-	test, err := TestFromString("tt3")
-	assert.Nil(err)
-	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run(defaultEnv))
-
-	t.Log(test.OutputJSON())
-	t.Log(test.OutputString())
-}

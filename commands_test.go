@@ -272,12 +272,12 @@ func addExternalCmd() (*TestEnvironment, error) {
 		Name: "external",
 		Output: []*TemplOutputLine{
 			&TemplOutputLine{
-				Text:     "sy1",
+				Text:     "sem1",
 				Trusted:  "true",
 				External: "true",
 			},
 			&TemplOutputLine{
-				Text:     "sy2",
+				Text:     "lt1",
 				Trusted:  "true",
 				External: "true",
 			},
@@ -330,13 +330,13 @@ func TestCommandExternal(t *testing.T) {
 		t.FailNow()
 	}
 
-	assert.Equal("sy1: SUCCESS", cmd.expectedOutput[0].Text)
+	assert.Equal("sem1: SUCCESS", cmd.expectedOutput[0].Text)
 	assert.True(cmd.expectedOutput[0].Trusted)
-	assert.Equal("sy1", cmd.expectedOutput[0].KeyName)
+	assert.Equal("sem1", cmd.expectedOutput[0].KeyName)
 
-	assert.Equal("sy2: SUCCESS", cmd.expectedOutput[1].Text)
+	assert.Equal("lt1: SUCCESS", cmd.expectedOutput[1].Text)
 	assert.True(cmd.expectedOutput[1].Trusted)
-	assert.Equal("sy2", cmd.expectedOutput[1].KeyName)
+	assert.Equal("lt1", cmd.expectedOutput[1].KeyName)
 }
 
 func TestCommandID(t *testing.T) {

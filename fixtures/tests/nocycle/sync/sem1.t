@@ -1,16 +1,14 @@
 ---
-name: CV Test 2
+name: semaphore_test_1
 tags:
  - sync
- - cv
+ - sem
 depends:
- - threads
- - locks
- - sy3.t
+ - /**/tt*.t
 stat:
     resolution: 0.01
     window: 100
 misc:
     prompttimeout: 30.0
 ---
-sy4
+sem1

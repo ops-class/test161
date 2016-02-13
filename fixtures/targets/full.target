@@ -2,11 +2,11 @@
 name: full
 points: 60
 type: asst
-kconfig: SOL3
+kconfig: SOL1
 tests:
-  - id: sync/sy1.t
+  - id: sync/sem1.t
     points: 10
-  - id: sync/sy2.t
+  - id: sync/lt1.t
     points: 10
   - id: sync/multi.t
     points: 40

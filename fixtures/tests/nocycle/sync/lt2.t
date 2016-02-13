@@ -1,15 +1,14 @@
 ---
-name: CV Test
+name: lock_test_2
 tags:
  - sync
- - cv
+ - locks
 depends:
  - threads
- - locks
 stat:
     resolution: 0.01
     window: 100
 misc:
     prompttimeout: 30.0
 ---
-sy3
+lt2

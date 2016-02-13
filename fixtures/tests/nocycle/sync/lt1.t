@@ -1,7 +1,8 @@
 ---
-name: Test All Sync
+name: lock_test_1
 tags:
  - sync
+ - locks
 depends:
  - threads
 stat:
@@ -10,7 +11,4 @@ stat:
 misc:
     prompttimeout: 30.0
 ---
-sem1
 lt1
-cvt1
-cvt2

@@ -1,0 +1,21 @@
+---
+name: asst1
+version: 1
+points: 50
+type: asst
+kconfig: SOL1
+tests:
+  - id: sync/lt1.t
+    points: 10
+  - id: sync/lt2.t
+    points: 5
+  - id: sync/lt3.t
+    points: 5
+  - id: sync/cvt1.t
+    points: 10
+  - id: sync/cvt2.t
+    points: 10
+  - id: sync/cvt3.t
+    points: 5
+  - id: sync/cvt4.t
+    points: 5

@@ -14,9 +14,9 @@ func TestSubmissionRun(t *testing.T) {
 	var err error
 
 	req := &SubmissionRequest{
-		Target:     "full",
+		Target:     "asst1",
 		Users:      []string{"foo@bar.com"},
-		Repository: "git@gitlab.ops-class.org:staff/sol3.git",
+		Repository: "git@gitlab.ops-class.org:staff/sol1.git",
 		CommitID:   "HEAD",
 	}
 
@@ -43,7 +43,7 @@ func TestSubmissionRun(t *testing.T) {
 
 	err = s.Run()
 	assert.Nil(err)
-	assert.Equal(uint(60), s.Score)
+	assert.Equal(uint(50), s.Score)
 
 	env.manager.stop()
 }

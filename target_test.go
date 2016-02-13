@@ -14,17 +14,17 @@ name: asst1
 points: 90
 type: asst
 tests:
-  - id: sync/sy1.t
+  - id: sync/sem1.t
     points: 20
-  - id: sync/sy2.t
+  - id: sync/lt1.t
     points: 30
   - id: sync/multi.t
     points: 40
     scoring: partial
     commands:
-      - id: sy3
+      - id: sem1
         points: 25
-      - id: sy4
+      - id: lt1
         points: 15
 `
 	target, err := TargetFromString(text)
@@ -36,11 +36,11 @@ tests:
 	assert.Equal(TARGET_ASST, target.Type)
 	assert.Equal(3, len(target.Tests))
 	if len(target.Tests) == 3 {
-		assert.Equal("sync/sy1.t", target.Tests[0].Id)
+		assert.Equal("sync/sem1.t", target.Tests[0].Id)
 		assert.Equal(TEST_SCORING_ENTIRE, target.Tests[0].Scoring)
 		assert.Equal(uint(20), target.Tests[0].Points)
 
-		assert.Equal("sync/sy2.t", target.Tests[1].Id)
+		assert.Equal("sync/lt1.t", target.Tests[1].Id)
 		assert.Equal(TEST_SCORING_ENTIRE, target.Tests[1].Scoring)
 		assert.Equal(uint(30), target.Tests[1].Points)
 
@@ -145,28 +145,24 @@ func TestTargetScorePartial(t *testing.T) {
 	// t.Parallel()
 	testPoints := make(map[string]*expectedTestResults)
 
-	// sy1
-	testPoints["sync/sy1.t"] = &expectedTestResults{
+	// sem1
+	testPoints["sync/sem1.t"] = &expectedTestResults{
 		points: 10,
 		result: TEST_RESULT_CORRECT,
 	}
 
-	// sy2
-	testPoints["sync/sy2.t"] = &expectedTestResults{
+	// lt1
+	testPoints["sync/lt1.t"] = &expectedTestResults{
 		points: 10,
 		result: TEST_RESULT_CORRECT,
 	}
 
 	// fail
 	testPoints["sync/fail.t"] = &expectedTestResults{
-		points: 20,
+		points: 10,
 		result: TEST_RESULT_INCORRECT,
 		cmdPoints: map[string]*expectedCmdResults{
-			"sy1": &expectedCmdResults{
-				status: COMMAND_STATUS_CORRECT,
-				points: 10,
-			},
-			"sy2": &expectedCmdResults{
+			"sem1": &expectedCmdResults{
 				status: COMMAND_STATUS_CORRECT,
 				points: 10,
 			},
@@ -174,11 +170,11 @@ func TestTargetScorePartial(t *testing.T) {
 				status: COMMAND_STATUS_INCORRECT,
 				points: 0,
 			},
-			"sy3": &expectedCmdResults{
+			"lt1": &expectedCmdResults{
 				status: COMMAND_STATUS_NONE,
 				points: 0,
 			},
-			"sy4": &expectedCmdResults{
+			"cvt1": &expectedCmdResults{
 				status: COMMAND_STATUS_NONE,
 				points: 0,
 			},
@@ -192,14 +188,14 @@ func TestTargetScoreEntire(t *testing.T) {
 	// t.Parallel()
 	testPoints := make(map[string]*expectedTestResults)
 
-	// sy1
-	testPoints["sync/sy1.t"] = &expectedTestResults{
+	// sem1
+	testPoints["sync/sem1.t"] = &expectedTestResults{
 		points: 10,
 		result: TEST_RESULT_CORRECT,
 	}
 
-	// sy2
-	testPoints["sync/sy2.t"] = &expectedTestResults{
+	// lt1
+	testPoints["sync/lt1.t"] = &expectedTestResults{
 		points: 10,
 		result: TEST_RESULT_CORRECT,
 	}
@@ -209,11 +205,7 @@ func TestTargetScoreEntire(t *testing.T) {
 		points: 0,
 		result: TEST_RESULT_INCORRECT,
 		cmdPoints: map[string]*expectedCmdResults{
-			"sy1": &expectedCmdResults{
-				status: COMMAND_STATUS_CORRECT,
-				points: 0,
-			},
-			"sy2": &expectedCmdResults{
+			"sem1": &expectedCmdResults{
 				status: COMMAND_STATUS_CORRECT,
 				points: 0,
 			},
@@ -221,11 +213,11 @@ func TestTargetScoreEntire(t *testing.T) {
 				status: COMMAND_STATUS_INCORRECT,
 				points: 0,
 			},
-			"sy3": &expectedCmdResults{
+			"lt1": &expectedCmdResults{
 				status: COMMAND_STATUS_NONE,
 				points: 0,
 			},
-			"sy4": &expectedCmdResults{
+			"cvt1": &expectedCmdResults{
 				status: COMMAND_STATUS_NONE,
 				points: 0,
 			},
@@ -239,14 +231,14 @@ func TestTargetScoreFull(t *testing.T) {
 	t.Parallel()
 	testPoints := make(map[string]*expectedTestResults)
 
-	// sy1
-	testPoints["sync/sy1.t"] = &expectedTestResults{
+	// sem1
+	testPoints["sync/sem1.t"] = &expectedTestResults{
 		points: 10,
 		result: TEST_RESULT_CORRECT,
 	}
 
-	// sy2
-	testPoints["sync/sy2.t"] = &expectedTestResults{
+	// lt1
+	testPoints["sync/lt1.t"] = &expectedTestResults{
 		points: 10,
 		result: TEST_RESULT_CORRECT,
 	}
@@ -256,11 +248,11 @@ func TestTargetScoreFull(t *testing.T) {
 		points: 40,
 		result: TEST_RESULT_CORRECT,
 		cmdPoints: map[string]*expectedCmdResults{
-			"sy3": &expectedCmdResults{
+			"sem1": &expectedCmdResults{
 				status: COMMAND_STATUS_CORRECT,
 				points: 0,
 			},
-			"sy4": &expectedCmdResults{
+			"lt1": &expectedCmdResults{
 				status: COMMAND_STATUS_CORRECT,
 				points: 0,
 			},

@@ -355,6 +355,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 				t.sys161.ExpectEOF()
 			})()
 			t.addStatus("shutdown", "normal shutdown")
+			t.finishCurCommand(env, false)
 			err = nil
 			break
 		}
@@ -446,11 +447,12 @@ func (t *Test) finishCurCommand(env *TestEnvironment, eof bool) *Command {
 			MSG_FIELD_STATUS|MSG_FIELD_SCORE)
 	}
 
-	// Next line
-	t.currentOutput = &OutputLine{}
-	t.commandCounter++
-	t.currentCommand = t.Commands[t.commandCounter]
-
+	// Next line, but not for quit command
+	if int(t.commandCounter) < len(t.Commands)-1 {
+		t.currentOutput = &OutputLine{}
+		t.commandCounter++
+		t.currentCommand = t.Commands[t.commandCounter]
+	}
 	return cur
 }
 
@@ -720,11 +722,11 @@ func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 		if totalEarned > 0 && totalAvail > 0 {
 			// Integral points only
 			c.PointsEarned = uint(float32(c.PointsAvailable) * (float32(totalEarned) / float32(totalAvail)))
-		}
 
-		// If they got all of the partial credit, this command was actually correct
-		if c.PointsEarned == c.PointsAvailable {
-			c.Status = COMMAND_STATUS_CORRECT
+			// If they got all of the partial credit, this command was actually correct
+			if c.PointsEarned == c.PointsAvailable && c.PointsEarned > 0 {
+				c.Status = COMMAND_STATUS_CORRECT
+			}
 		}
 	}
 }
