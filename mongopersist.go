@@ -4,63 +4,45 @@ import (
 	"fmt"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"time"
 )
 
 type MongoPersistence struct {
-	dialInfo *mgo.DialInfo
-	session  *mgo.Session
+	session *mgo.Session
+	dbName  string
 }
-
-const MONGODB_DB = "test161"
-
-const (
-	MongoDBHosts = "localhost:27017"
-	AuthDatabase = MONGODB_DB
-	AuthUserName = ""
-	AuthPassword = ""
-	TestDatabase = MONGODB_DB
-)
 
 const (
 	COLLECTION_SUBMISSIONS = "submissions"
 	COLLECTION_TESTS       = "tests"
 )
 
-func NewMongoPersistence() (PersistenceManager, error) {
+func NewMongoPersistence(dial *mgo.DialInfo) (PersistenceManager, error) {
 	var err error
 
 	m := &MongoPersistence{}
 
-	m.dialInfo = &mgo.DialInfo{
-		Addrs:    []string{MongoDBHosts},
-		Timeout:  60 * time.Second,
-		Database: AuthDatabase,
-		Username: AuthUserName,
-		Password: AuthPassword,
-	}
-
-	if m.session, err = mgo.DialWithInfo(m.dialInfo); err != nil {
+	if m.session, err = mgo.DialWithInfo(dial); err != nil {
 		return nil, fmt.Errorf("Mongo Create Session: %s\n", err)
 	}
+	m.dbName = dial.Database
 
 	return m, nil
 }
 
-func insertDocument(s *mgo.Session, collection string, data interface{}) error {
-	c := s.DB(MONGODB_DB).C(collection)
+func (m *MongoPersistence) insertDocument(s *mgo.Session, collection string, data interface{}) error {
+	c := s.DB(m.dbName).C(collection)
 	err := c.Insert(data)
 	return err
 }
 
-func updateDocumentByID(s *mgo.Session, collection string, id, data interface{}) error {
-	c := s.DB(MONGODB_DB).C(collection)
+func (m *MongoPersistence) updateDocumentByID(s *mgo.Session, collection string, id, data interface{}) error {
+	c := s.DB(m.dbName).C(collection)
 	err := c.UpdateId(id, data)
 	return err
 }
 
-func updateDocument(s *mgo.Session, collection string, selector, data interface{}) error {
-	c := s.DB(MONGODB_DB).C(collection)
+func (m *MongoPersistence) updateDocument(s *mgo.Session, collection string, selector, data interface{}) error {
+	c := s.DB(m.dbName).C(collection)
 	err := c.Update(selector, data)
 	return err
 }
@@ -94,9 +76,9 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 		test := t.(*Test)
 		switch msg {
 		case MSG_PERSIST_CREATE:
-			err = insertDocument(session, COLLECTION_TESTS, test)
+			err = m.insertDocument(session, COLLECTION_TESTS, test)
 		case MSG_PERSIST_COMPLETE:
-			err = updateDocumentByID(session, COLLECTION_TESTS, test.ID, test)
+			err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, test)
 		case MSG_PERSIST_UPDATE:
 			changes := bson.M{}
 			if what&MSG_FIELD_SCORE == MSG_FIELD_SCORE {
@@ -108,7 +90,7 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 			}
 
 			if len(changes) > 0 {
-				err = updateDocumentByID(session, COLLECTION_TESTS, test.ID, bson.M{"$set": changes})
+				err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, bson.M{"$set": changes})
 			}
 		}
 	case *Command:
@@ -133,33 +115,33 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 				changes["commands.$.status"] = cmd.Status
 			}
 
-			err = updateDocument(session, COLLECTION_TESTS, selector, bson.M{"$set": changes})
+			err = m.updateDocument(session, COLLECTION_TESTS, selector, bson.M{"$set": changes})
 
 		}
 	case *Submission:
 		submission := t.(*Submission)
 		switch msg {
 		case MSG_PERSIST_CREATE:
-			err = insertDocument(session, COLLECTION_SUBMISSIONS, submission)
+			err = m.insertDocument(session, COLLECTION_SUBMISSIONS, submission)
 		case MSG_PERSIST_COMPLETE:
 			fallthrough
 		case MSG_PERSIST_UPDATE:
-			err = updateDocumentByID(session, COLLECTION_SUBMISSIONS, submission.ID, submission)
+			err = m.updateDocumentByID(session, COLLECTION_SUBMISSIONS, submission.ID, submission)
 		}
 	case *BuildTest:
 		test := t.(*BuildTest)
 		switch msg {
 		case MSG_PERSIST_CREATE:
-			err = insertDocument(session, COLLECTION_TESTS, test)
+			err = m.insertDocument(session, COLLECTION_TESTS, test)
 		case MSG_PERSIST_COMPLETE:
-			err = updateDocumentByID(session, COLLECTION_TESTS, test.ID, test)
+			err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, test)
 		case MSG_PERSIST_UPDATE:
 			changes := bson.M{}
 			if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
 				changes["result"] = test.Result
 			}
 			if len(changes) > 0 {
-				err = updateDocumentByID(session, COLLECTION_TESTS, test.ID, bson.M{"$set": changes})
+				err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, bson.M{"$set": changes})
 			}
 		}
 	case *BuildCommand:
@@ -180,7 +162,7 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 				changes["commands.$.status"] = cmd.Status
 			}
 
-			err = updateDocument(session, COLLECTION_TESTS, selector, bson.M{"$set": changes})
+			err = m.updateDocument(session, COLLECTION_TESTS, selector, bson.M{"$set": changes})
 
 		}
 	}

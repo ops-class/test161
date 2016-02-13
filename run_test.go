@@ -1,9 +1,9 @@
 package test161
 
 import (
+	"flag"
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/mgo.v2"
 	"math/rand"
 	"os"
 	"strings"
@@ -22,6 +22,7 @@ var TEST_DEFAULTS = Test{
 }
 
 var defaultEnv *TestEnvironment = nil
+var testFlagDB = false
 
 func init() {
 	// Make sure the default test manager exists first
@@ -31,6 +32,10 @@ func init() {
 		panic(fmt.Sprintf("Unable to create default environment: %v", err))
 	}
 	defaultEnv.RootDir = "./fixtures/root"
+
+	// Command line flags
+	flag.BoolVar(&testFlagDB, "db", false, "Run tests that rely on mongodb")
+
 	// No key map, cache, etc.
 }
 
@@ -283,75 +288,4 @@ func TestRunTT3(t *testing.T) {
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
-}
-
-func TestRunBootMongo(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-
-	test, err := TestFromString("q")
-	assert.Nil(err)
-	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run(defaultEnv))
-
-	const (
-		MongoDBHosts = "localhost:27017"
-		AuthDatabase = "test"
-		AuthUserName = "testUser"
-		AuthPassword = "test1234"
-		TestDatabase = "test"
-	)
-
-	// We need this object to establish a session to our MongoDB.
-	mongoDBDialInfo := &mgo.DialInfo{
-		Addrs:    []string{MongoDBHosts},
-		Timeout:  60 * time.Second,
-		Database: AuthDatabase,
-		Username: AuthUserName,
-		Password: AuthPassword,
-	}
-
-	// Create a session which maintains a pool of socket connections
-	// to our MongoDB.
-	mongoSession, err := mgo.DialWithInfo(mongoDBDialInfo)
-	if err != nil {
-		t.Logf("CreateSession: %s\n", err)
-		t.FailNow()
-	}
-
-	defer mongoSession.Close()
-
-	c := mongoSession.DB("test").C("tests")
-	err = c.Insert(test)
-
-	if err != nil {
-		t.Logf("Insert: %s\n", err)
-		t.FailNow()
-	}
-}
-
-func TestRunBootMongo2(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-
-	mongo, err := NewMongoPersistence()
-	assert.Nil(err)
-	assert.NotNil(mongo)
-
-	if err != nil {
-		t.FailNow()
-	}
-	defer mongo.Close()
-
-	test, err := TestFromString("q")
-	assert.Nil(err)
-	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-
-	env := defaultEnv.CopyEnvironment()
-	env.Persistence = mongo
-	env.RootDir = defaultEnv.RootDir
-
-	env.Persistence.Notify(test, MSG_PERSIST_CREATE, 0)
-
-	assert.Nil(test.Run(env))
 }

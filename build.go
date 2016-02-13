@@ -112,6 +112,20 @@ func (t *BuildTest) RootDir() string {
 	return t.rootDir
 }
 
+func makeLines(rawoutput []byte) []*OutputLine {
+	lines := strings.Split(string(rawoutput), "\n")
+	output := make([]*OutputLine, len(lines))
+
+	for i, l := range lines {
+		output[i] = &OutputLine{
+			Line:     l,
+			SimTime:  TimeFixedPoint(i),
+			WallTime: TimeFixedPoint(i),
+		}
+	}
+	return output
+}
+
 func (cmd *BuildCommand) Run(env *TestEnvironment) error {
 	tokens := strings.Split(cmd.Input.Line, " ")
 	if len(tokens) < 1 {
@@ -137,17 +151,19 @@ func (cmd *BuildCommand) Run(env *TestEnvironment) error {
 	c.Dir = cmd.startDir
 
 	output, err := c.CombinedOutput()
+
 	if err != nil {
-		lines := strings.Split(string(output), "\n")
-		for i, l := range lines {
-			cmd.Output = append(cmd.Output, &OutputLine{
-				Line:     l,
-				SimTime:  TimeFixedPoint(i),
-				WallTime: TimeFixedPoint(i),
-			})
-		}
-		return err
+		cmd.Output = append(cmd.Output, makeLines(output)...)
 	} else {
+		if cmd.handler != nil {
+			cmd.Output = makeLines(output)
+			err = cmd.handler(cmd.test, cmd)
+			if err == nil {
+				// Clean up output
+				cmd.Output = cmd.Output[0:1]
+			}
+		}
+
 		// Success
 		cmd.Output = append(cmd.Output, &OutputLine{
 			Line:     "OK",
@@ -223,25 +239,21 @@ func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 
 		err = c.Run(env)
 
-		// Start by assuming correct
-		c.Status = COMMAND_STATUS_CORRECT
-
 		if err != nil {
 			c.Status = COMMAND_STATUS_INCORRECT
 			t.Result = TEST_RESULT_INCORRECT
 		} else {
-			if c.handler != nil {
-				err = c.handler(t, c)
-				if err != nil {
-					c.Status = COMMAND_STATUS_INCORRECT
-					t.Result = TEST_RESULT_INCORRECT
-				}
-			}
+			c.Status = COMMAND_STATUS_CORRECT
 		}
+
 		if env.Persistence != nil {
 			env.Persistence.Notify(c, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS|MSG_FIELD_OUTPUT)
 		}
+
 		if err != nil {
+			if t.isTempDir {
+				os.RemoveAll(t.dir)
+			}
 			return nil, err
 		}
 	}

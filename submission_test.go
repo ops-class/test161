@@ -5,8 +5,13 @@ import (
 	"testing"
 )
 
-func TestSubmissionObject(t *testing.T) {
+func TestSubmissionRun(t *testing.T) {
+
+	t.Parallel()
+
 	assert := assert.New(t)
+
+	var err error
 
 	req := &SubmissionRequest{
 		Target:     "full",
@@ -16,12 +21,17 @@ func TestSubmissionObject(t *testing.T) {
 	}
 
 	env := defaultEnv.CopyEnvironment()
-	mongo, err := NewMongoPersistence()
-	assert.Nil(err)
-	assert.NotNil(mongo)
 
-	env.Persistence = mongo
-	defer mongo.Close()
+	if testFlagDB {
+		mongo, err := NewMongoPersistence(mongoTestDialInfo)
+		assert.Nil(err)
+		assert.NotNil(mongo)
+		if err != nil {
+			t.FailNow()
+		}
+		env.Persistence = mongo
+		defer mongo.Close()
+	}
 
 	env.manager = newManager()
 
@@ -30,7 +40,10 @@ func TestSubmissionObject(t *testing.T) {
 	assert.NotNil(s)
 
 	env.manager.start()
+
 	err = s.Run()
 	assert.Nil(err)
 	assert.Equal(uint(60), s.Score)
+
+	env.manager.stop()
 }

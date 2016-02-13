@@ -5,41 +5,17 @@ import (
 	"testing"
 )
 
-/*
-func TestBuildGitOnly(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-
-	conf, err := NewBuildConf("", "", "")
-	assert.Nil(err)
-	assert.NotNil(conf)
-	if conf == nil {
-		return
-	}
-
-	defer conf.CleanUp()
-
-	conf.Repo = "git@gitlab.ops-class.org:staff/sol3.git"
-	conf.CommitID = "1b17c415eec4eb3889f177bb99ed714f706352a7"
-	conf.Config = "SOL3"
-
-	o, e := conf.getSources()
-	assert.Nil(e)
-	t.Log(e)
-	t.Log(o)
-}
-*/
-
 func TestBuildFull(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	conf := &BuildConf{}
-	conf.Repo = "git@gitlab.ops-class.org:staff/sol3.git"
-	conf.CommitID = "HEAD"
-	conf.KConfig = "SOL3"
-	conf.CacheDir = "/home/shaseley/cache"
-	conf.RequiredCommit = "29b635f4b8393fda987244b45ab0e32a61ea5dcb"
+	conf := &BuildConf{
+		Repo:           "https://github.com/ops-class/os161.git",
+		CommitID:       "e9e9b91904d5b098e1c69cd4ed23dfd65f6f212d",
+		KConfig:        "DUMBVM",
+		CacheDir:       "",
+		RequiredCommit: "db6d3d219d53a292b96e8529649757bb257e8785",
+	}
 
 	test, err := conf.ToBuildTest()
 	assert.Nil(err)
@@ -56,11 +32,11 @@ func TestBuildFull(t *testing.T) {
 	t.Log(test.OutputJSON())
 }
 
-/*
 type confDetail struct {
-	repo   string
-	commit string
-	config string
+	repo      string
+	commit    string
+	config    string
+	reqCommit string
 }
 
 func TestBuildFailures(t *testing.T) {
@@ -68,27 +44,26 @@ func TestBuildFailures(t *testing.T) {
 	assert := assert.New(t)
 
 	configs := []confDetail{
-		confDetail{"git@gitlab.ops-class.org:staff/sol3.git", "HEAD", ""},
-		confDetail{"git@gitlab.ops-class.org:staff/sol3.git", "aaaaaaaaaaa111111112222", "SOL3"},
-		confDetail{"git@gitlab.ops-classss.org:staff/sol3.git", "HEAD", "SOL3"},
-		confDetail{"git@gitlab.ops-class.org:staff/sol50.git", "aaaaaaaaaaa111111112222", "SOL3"},
+		confDetail{"https://notgithub.com/ops-class/os161111.git", "HEAD", "DUMBVM", ""},
+		confDetail{"https://github.com/ops-class/os161.git", "aaaaaaaaaaa111111112222", "FOO", ""},
+		confDetail{"https://github.com/ops-class/os161.git", "HEAD", "FOO", ""},
+		confDetail{"https://github.com/ops-class/os161.git", "HEAD", "DUMBVM", "notavalidcommitit"},
 	}
 
 	for _, c := range configs {
-		conf, err := NewBuildConf(c.repo, c.commit, c.config)
-		assert.Nil(err)
-		if conf == nil {
-			t.Log(c)
-			t.FailNow()
+
+		conf := &BuildConf{
+			Repo:           c.repo,
+			CommitID:       c.commit,
+			KConfig:        c.config,
+			RequiredCommit: c.reqCommit,
 		}
 
-		o, e := conf.GitAndBuild()
-		assert.NotNil(e)
-		if e == nil {
-			t.Log(c)
-		}
-		t.Log(o)
-		conf.CleanUp()
+		test, err := conf.ToBuildTest()
+		assert.NotNil(test)
+
+		res, err := test.Run(defaultEnv)
+		assert.NotNil(err)
+		assert.Nil(res)
 	}
 }
-*/
