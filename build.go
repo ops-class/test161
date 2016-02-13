@@ -39,7 +39,8 @@ type BuildTest struct {
 
 	startTime TimeFixedPoint
 	dir       string // The base (temp) directory for the build.
-	wasCached bool   // Was the based directory cached
+	wasCached bool   // Was the base directory cached
+	isTempDir bool   // Is the build directory a temp dir that should be removed?
 	srcDir    string // Directory for the os161 source code (dir/src)
 	rootDir   string // Directory for compilation output (dir/root)
 
@@ -164,6 +165,7 @@ func (cmd *BuildCommand) Run(env *TestEnvironment) error {
 
 type BuildResults struct {
 	RootDir string
+	TempDir string
 	KeyMap  map[string]string
 }
 
@@ -187,11 +189,13 @@ func (t *BuildTest) initDirs() (err error) {
 		}
 	}
 
-	// Use a temp directory instead
+	t.isTempDir = false
 	if len(buildDir) == 0 {
+		// Use a temp directory instead
 		if buildDir, err = ioutil.TempDir("", "os161"); err != nil {
 			return
 		}
+		t.isTempDir = true
 	}
 
 	t.dir = buildDir
@@ -244,10 +248,16 @@ func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 
 	t.Result = TEST_RESULT_CORRECT
 
+	// TODO: KeyMap
 	res := &BuildResults{
 		RootDir: t.rootDir,
 		KeyMap:  nil,
 	}
+
+	if t.isTempDir {
+		res.TempDir = t.dir
+	}
+
 	return res, nil
 }
 

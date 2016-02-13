@@ -3,6 +3,7 @@ package test161
 import (
 	"errors"
 	"gopkg.in/mgo.v2/bson"
+	"os"
 	"time"
 )
 
@@ -174,6 +175,11 @@ func (s *Submission) Run() error {
 		// Build output
 		s.Env.RootDir = res.RootDir
 		s.Env.KeyMap = res.KeyMap
+
+		// Clean up temp build directory
+		if len(res.TempDir) > 0 {
+			defer os.RemoveAll(res.TempDir)
+		}
 	}
 
 	// Build succeeded, update things accordingly
