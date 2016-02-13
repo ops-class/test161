@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/ericaro/frontmatter"
 	"github.com/imdario/mergo"
-	"gopkg.in/mgo.v2/bson"
+	"github.com/satori/go.uuid"
 	"io/ioutil"
 	"math/rand"
 	"reflect"
@@ -154,7 +154,7 @@ func TestFromString(data string) (*Test, error) {
 	// Check for empty commands and expand syntatic sugar before getting
 	// started. Doing this first makes the main loop and retry logic simpler.
 
-	t.ID = bson.NewObjectId()
+	t.ID = uuid.NewV4().String()
 	err = t.initCommands()
 	if err != nil {
 		return nil, err
@@ -321,7 +321,7 @@ func (t *Test) initCommands() (err error) {
 	// Set the boot command
 	t.Commands = append(t.Commands, &Command{
 		Type:          "kernel",
-		ID:            bson.NewObjectId(),
+		ID:            uuid.NewV4().String(),
 		test:          t,
 		PromptPattern: regexp.MustCompile(regexp.QuoteMeta(KERNEL_COMMAND_CONF.Prompt)),
 		Input: InputLine{
@@ -410,7 +410,7 @@ func (t *Test) initCommands() (err error) {
 			}
 			t.Commands = append(t.Commands, &Command{
 				Type:          commandType,
-				ID:            bson.NewObjectId(),
+				ID:            uuid.NewV4().String(),
 				test:          t,
 				PromptPattern: promptPattern,
 				Input: InputLine{

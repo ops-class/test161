@@ -15,8 +15,6 @@ import (
 	"github.com/kr/pty"
 	"github.com/ops-class/test161/expect"
 	"github.com/termie/go-shutil"
-	// "gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 	"io"
 	"io/ioutil"
 	"os"
@@ -32,7 +30,7 @@ import (
 type Test struct {
 
 	// Mongo ID
-	ID bson.ObjectId `yaml:"-" json:"id" bson:"_id,omitempty"`
+	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
 	// Input
 
@@ -121,7 +119,7 @@ const (
 
 type Command struct {
 	// Mongo ID
-	ID bson.ObjectId `yaml:"-" json:"id" bson:"_id,omitempty"`
+	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
 	// Set during init
 	Type          string         `json:"type"`

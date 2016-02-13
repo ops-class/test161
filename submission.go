@@ -2,7 +2,7 @@ package test161
 
 import (
 	"errors"
-	"gopkg.in/mgo.v2/bson"
+	"github.com/satori/go.uuid"
 	"os"
 	"time"
 )
@@ -28,24 +28,24 @@ const (
 type Submission struct {
 
 	// Configuration
-	ID         bson.ObjectId `bson:"_id,omitempty"`
-	Users      []string      `bson:"users"`
-	Repository string        `bson:"repository"`
-	CommitID   string        `bson:"commit_id"`
+	ID         string   `bson:"_id,omitempty"`
+	Users      []string `bson:"users"`
+	Repository string   `bson:"repository"`
+	CommitID   string   `bson:"commit_id"`
 
 	// Target details
-	TargetID        bson.ObjectId `bson:"-"` //TODO: Use this?
-	TargetName      string        `bson:"target_name"`
-	TargetVersion   uint          `bson:"target_version"`
-	PointsAvailable uint          `bson:"max_score"`
-	TargetType      string        `bson:"target_type"`
+	TargetID        string `bson:"-"` //TODO: Use this?
+	TargetName      string `bson:"target_name"`
+	TargetVersion   uint   `bson:"target_version"`
+	PointsAvailable uint   `bson:"max_score"`
+	TargetType      string `bson:"target_type"`
 
 	// Results
-	Status      string          `bson:"status"`
-	Score       uint            `bson:"score"`
-	Performance float64         `bson:"performance"`
-	TestIDs     []bson.ObjectId `bson:"tests"`
-	Message     string          `bson:"message"`
+	Status      string   `bson:"status"`
+	Score       uint     `bson:"score"`
+	Performance float64  `bson:"performance"`
+	TestIDs     []string `bson:"tests"`
+	Message     string   `bson:"message"`
 
 	SubmissionTime time.Time `bson:"submission_time"`
 	CompletionTime time.Time `bson:"completion_time"`
@@ -109,7 +109,7 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 	}
 
 	s := &Submission{
-		ID:              bson.NewObjectId(),
+		ID:              uuid.NewV4().String(),
 		Users:           request.Users,
 		Repository:      request.Repository,
 		CommitID:        request.CommitID,
@@ -121,7 +121,7 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 		Status:      SUBMISSION_SUBMITTED,
 		Score:       uint(0),
 		Performance: float64(0.0),
-		TestIDs:     []bson.ObjectId{buildTest.ID},
+		TestIDs:     []string{buildTest.ID},
 		Message:     "",
 
 		SubmissionTime: time.Now(),

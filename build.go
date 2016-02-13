@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"gopkg.in/mgo.v2/bson"
+	"github.com/satori/go.uuid"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -18,7 +18,7 @@ import (
 type BuildTest struct {
 
 	// Mongo ID
-	ID bson.ObjectId `yaml:"-" json:"id" bson:"_id,omitempty"`
+	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
 	// Metadata
 	Name        string `yaml:"name" json:"name"`
@@ -49,7 +49,7 @@ type BuildTest struct {
 
 // A variant of a Test Command for builds
 type BuildCommand struct {
-	ID bson.ObjectId `yaml:"-" json:"id" bson:"_id,omitempty"`
+	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
 	Type  string    `json:"type"`
 	Input InputLine `json:"input"`
@@ -83,7 +83,7 @@ type BuildConf struct {
 func (b *BuildConf) ToBuildTest() (*BuildTest, error) {
 
 	t := &BuildTest{
-		ID:              bson.NewObjectId(),
+		ID:              uuid.NewV4().String(),
 		Name:            "build",
 		Description:     "Clone Git repository and build kernel",
 		Commands:        make([]*BuildCommand, 0),
@@ -330,7 +330,7 @@ func (t *BuildTest) addCommand(cmdLine string, dir string) *BuildCommand {
 		Status:   COMMAND_STATUS_NONE,
 		startDir: dir,
 		handler:  nil,
-		ID:       bson.NewObjectId(),
+		ID:       uuid.NewV4().String(),
 	}
 	cmd.Input.Line = cmdLine
 	cmd.startDir = dir
