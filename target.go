@@ -33,7 +33,7 @@ type Target struct {
 	Type             string        `yaml:"type"`
 	Points           uint          `yaml:"points"` // Total points for the target (asst)
 	Overlay          string        `yaml:"overlay"`
-	KernelConfig     string        `yaml:"kconfig"`
+	KConfig          string        `yaml:"kconfig"`
 	RequiredCommit   string        `yaml:"required_commit"`
 	RequiresUserland bool          `yaml:"userland"`
 	Tests            []*TargetTest `yaml:"tests"`

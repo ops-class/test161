@@ -1,20 +1,19 @@
 package test161
 
 const (
-	MSG_SUBMISSION_CREATE = iota
-	MSG_SUBMISSION_SCORE
-	MSG_SUBMISSION_STATUS
+	MSG_PERSIST_CREATE     = iota // The object has been created
+	MSG_PERSIST_UPDATE            // Generic update message.
+	MSG_PERSIST_CMD_UPDATE        //
+	MSG_PERSIST_OUTPUT            // Added an output line (command types only)
+	MSG_PERSIST_COMPLETE          // We won't update the object any more
 )
 
+// Inidividual field updates
 const (
-	MSG_TEST_STATUS = iota
-	MSG_TEST_SCORE
-)
-
-const (
-	MSG_COMMAND_STATUS = iota
-	MSG_COMMAND_SCORE
-	MSG_COMMAND_OUTPUT
+	MSG_FIELD_SCORE = 1 << iota
+	MSG_FIELD_STATUS
+	MSG_FIELD_TESTS
+	MSG_FIELD_OUTPUT
 )
 
 // Each Submission has at most one PersistenceManager, and it is pinged when a
@@ -24,32 +23,16 @@ const (
 // make an asynchronous call synchronous when it might be needed. So, be kind
 // ye PersistenceManagers.
 type PersistenceManager interface {
-	SubmissionChanged(s *Submission, msg int) error
-	TestChanged(t *Test, msg int) error
-	CommandChanged(t *Test, c *Command, l *OutputLine) error
-	BuildTestChanged(t *BuildTest, msg int) error
-	BuildCommandChanged(t *BuildTest, c *BuildCommand, l *OutputLine) error
+	Close()
+	Notify(entity interface{}, msg, what int) error
 }
 
-type MongoPersistence struct {
+type DoNothingPersistence struct {
 }
 
-func (m *MongoPersistence) SubmissionChanged(s *Submission, msg int) error {
-	return nil
+func (d *DoNothingPersistence) Close() {
 }
 
-func (m *MongoPersistence) TestChanged(t *Test, msg int) error {
-	return nil
-}
-
-func (m *MongoPersistence) CommandChanged(t *Test, c *Command, l *OutputLine) error {
-	return nil
-}
-
-func (m *MongoPersistence) BuildTestChanged(t *BuildTest, msg int) error {
-	return nil
-}
-
-func (m *MongoPersistence) BuildCommandChanged(t *BuildTest, c *BuildCommand, l *OutputLine) error {
+func (d *DoNothingPersistence) Notify(entity interface{}, msg, what int) error {
 	return nil
 }

@@ -16,7 +16,8 @@ type TestEnvironment struct {
 
 	manager *manager
 
-	CacheDir string
+	CacheDir    string
+	Persistence PersistenceManager
 
 	// These depend on the TestGroup/Target
 	KeyMap  map[string]string
@@ -28,12 +29,13 @@ type TestEnvironment struct {
 // be initialized to default values.
 func (env *TestEnvironment) CopyEnvironment() *TestEnvironment {
 	copy := &TestEnvironment{
-		TestDir:  env.TestDir,
-		Commands: env.Commands,
-		Targets:  env.Targets,
-		manager:  env.manager,
-		KeyMap:   make(map[string]string),
-		RootDir:  "",
+		TestDir:     env.TestDir,
+		Commands:    env.Commands,
+		Targets:     env.Targets,
+		manager:     env.manager,
+		Persistence: env.Persistence,
+		KeyMap:      make(map[string]string),
+		RootDir:     "",
 	}
 	return copy
 }

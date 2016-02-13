@@ -70,9 +70,9 @@ type Test struct {
 	IsDependency bool             `json:"isdependency"`
 
 	// Grading.  These are set when the test is being run as part of a Target.
-	PointsAvailable uint   `json:"pointsavail"`
-	PointsEarned    uint   `json:"pointsearned"`
-	ScoringMethod   string `json:"scoringmethod"`
+	PointsAvailable uint   `json:"points_avail" bson:"points_avail"`
+	PointsEarned    uint   `json:"points_earned" bson:"points_earned"`
+	ScoringMethod   string `json:"scoring_method" bson:"scoring_method"`
 
 	// Unproctected Private fields
 	tempDir     string           // Only set once
@@ -120,6 +120,9 @@ const (
 )
 
 type Command struct {
+	// Mongo ID
+	ID bson.ObjectId `yaml:"-" json:"id" bson:"_id,omitempty"`
+
 	// Set during init
 	Type          string         `json:"type"`
 	PromptPattern *regexp.Regexp `json:"-" bson:"-"`
@@ -140,6 +143,9 @@ type Command struct {
 
 	// Set during evaluation
 	Status string `json:"status"`
+
+	// Backwards pointer to the Test
+	test *Test
 }
 
 type InputLine struct {
@@ -151,7 +157,7 @@ type InputLine struct {
 type OutputLine struct {
 	WallTime TimeFixedPoint `json:"walltime"`
 	SimTime  TimeFixedPoint `json:"simtime"`
-	Buffer   bytes.Buffer   `json:"-" bson"-"`
+	Buffer   bytes.Buffer   `json:"-" bson:"-"`
 	Line     string         `json:"line"`
 	Trusted  bool           `json:"trusted"`
 	KeyName  string         `json:"keyname"`
@@ -195,7 +201,16 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	// Save the test environment for other pieces that need it
 	t.env = env
 
+	defer func() {
+		if env.Persistence != nil {
+			env.Persistence.Notify(t, MSG_PERSIST_COMPLETE, 0)
+		}
+	}()
+
 	t.Result = TEST_RESULT_RUNNING
+	if env.Persistence != nil {
+		env.Persistence.Notify(t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
+	}
 
 	// Set the instance-specific input and expected output
 	for _, c := range t.Commands {
@@ -419,12 +434,19 @@ func (t *Test) finishCurCommand(env *TestEnvironment, eof bool) *Command {
 		t.currentOutput.Line = t.currentOutput.Buffer.String()
 		t.outputLineComplete()
 		t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
-		t.sendUpdateMsg(UpdateReasonOutput)
+
+		if env.Persistence != nil {
+			env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
+		}
 	}
 
 	cur := t.currentCommand
 	cur.evaluate(env.KeyMap, eof)
-	t.sendUpdateMsg(UpdateReasonCommandDone)
+
+	if env.Persistence != nil {
+		env.Persistence.Notify(cur, MSG_PERSIST_UPDATE,
+			MSG_FIELD_STATUS|MSG_FIELD_SCORE)
+	}
 
 	// Next line
 	t.currentOutput = &OutputLine{}
@@ -441,7 +463,6 @@ func (t *Test) finishAndEvaluate() {
 		t.Result = TEST_RESULT_CORRECT
 		if t.ScoringMethod == TEST_SCORING_ENTIRE {
 			t.PointsEarned = t.PointsAvailable
-			t.sendUpdateMsg(UpdateReasonScore)
 		} else {
 			// The partial points were computed along the way
 		}

@@ -2,6 +2,7 @@
 name: full
 points: 60
 type: asst
+kconfig: SOL3
 tests:
   - id: sync/sy1.t
     points: 10

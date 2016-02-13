@@ -3,7 +3,7 @@ package test161
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	//"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2"
 	"math/rand"
 	"os"
 	"strings"
@@ -31,7 +31,7 @@ func init() {
 		panic(fmt.Sprintf("Unable to create default environment: %v", err))
 	}
 	defaultEnv.RootDir = "./fixtures/root"
-	// No key map
+	// No key map, cache, etc.
 }
 
 func TestMain(m *testing.M) {
@@ -285,7 +285,6 @@ func TestRunTT3(t *testing.T) {
 	t.Log(test.OutputString())
 }
 
-/*
 func TestRunBootMongo(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
@@ -330,4 +329,29 @@ func TestRunBootMongo(t *testing.T) {
 		t.FailNow()
 	}
 }
-*/
+
+func TestRunBootMongo2(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	mongo, err := NewMongoPersistence()
+	assert.Nil(err)
+	assert.NotNil(mongo)
+
+	if err != nil {
+		t.FailNow()
+	}
+	defer mongo.Close()
+
+	test, err := TestFromString("q")
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+
+	env := defaultEnv.CopyEnvironment()
+	env.Persistence = mongo
+	env.RootDir = defaultEnv.RootDir
+
+	env.Persistence.Notify(test, MSG_PERSIST_CREATE, 0)
+
+	assert.Nil(test.Run(env))
+}

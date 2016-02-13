@@ -50,6 +50,8 @@ type BuildTest struct {
 
 // A variant of a Test Command for builds
 type BuildCommand struct {
+	ID bson.ObjectId `yaml:"-" json:"id" bson:"_id,omitempty"`
+
 	Type  string    `json:"type"`
 	Input InputLine `json:"input"`
 
@@ -63,17 +65,19 @@ type BuildCommand struct {
 	// Set during evaluation
 	Status string `json:"status"`
 
+	test     *BuildTest
 	startDir string                                // The directory to run this command in
 	handler  func(*BuildTest, *BuildCommand) error // Invoke after command exits to determine success
 }
 
 // BuildConf specifies the configuration for building os161.
 type BuildConf struct {
-	Repo           string // The git repository to clone
-	CommitID       string // The git commit id (HEAD, hash, etc.) to check out
-	KConfig        string // The os161 kernel config file for the build
-	RequiredCommit string // A commit required to be in git log
-	CacheDir       string
+	Repo             string // The git repository to clone
+	CommitID         string // The git commit id (HEAD, hash, etc.) to check out
+	KConfig          string // The os161 kernel config file for the build
+	RequiredCommit   string // A commit required to be in git log
+	CacheDir         string // Cache for previous builds
+	RequiresUserland bool   // Does userland need to be built?
 }
 
 // Use the BuildConf to create a sequence of commands that will build an os161 kernel
@@ -249,8 +253,11 @@ func (t *BuildTest) addBuildCommands() error {
 	compDir := path.Join(path.Join(t.srcDir, "kern/compile"), t.conf.KConfig)
 
 	t.addCommand("./configure --ostree="+t.rootDir, t.srcDir)
-	t.addCommand("bmake", t.srcDir)
-	t.addCommand("bmake install", t.srcDir)
+
+	if t.conf.RequiresUserland {
+		t.addCommand("bmake", t.srcDir)
+		t.addCommand("bmake install", t.srcDir)
+	}
 	t.addCommand("./config "+t.conf.KConfig, confDir)
 	t.addCommand("bmake", compDir)
 	t.addCommand("bmake depend", compDir)
@@ -261,13 +268,17 @@ func (t *BuildTest) addBuildCommands() error {
 
 func (t *BuildTest) addCommand(cmdLine string, dir string) *BuildCommand {
 	cmd := &BuildCommand{
-		Type:   "build",
-		Output: []*OutputLine{},
-		Status: COMMAND_STATUS_NONE,
+		Type:     "build",
+		Output:   []*OutputLine{},
+		Status:   COMMAND_STATUS_NONE,
+		startDir: dir,
+		handler:  nil,
+		ID:       bson.NewObjectId(),
 	}
 	cmd.Input.Line = cmdLine
 	cmd.startDir = dir
 	cmd.handler = nil
+	cmd.test = t
 
 	t.Commands = append(t.Commands, cmd)
 
