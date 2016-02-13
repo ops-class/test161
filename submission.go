@@ -131,6 +131,7 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 	}
 
 	if env.Persistence != nil {
+		env.Persistence.Notify(buildTest, MSG_PERSIST_CREATE, 0)
 		env.Persistence.Notify(s, MSG_PERSIST_CREATE, 0)
 	}
 
@@ -165,7 +166,7 @@ func (s *Submission) Run() error {
 		}
 
 		var res *BuildResults
-		res, err = s.BuildTest.Run()
+		res, err = s.BuildTest.Run(s.Env)
 		if err != nil {
 			return err
 		}
@@ -220,5 +221,4 @@ func (s *Submission) Run() error {
 	err = s.Env.Persistence.Notify(s, MSG_PERSIST_COMPLETE, 0)
 
 	return err
-
 }

@@ -44,8 +44,6 @@ type BuildTest struct {
 	rootDir   string // Directory for compilation output (dir/root)
 
 	conf *BuildConf
-
-	updateChan chan *TestUpdateMsg // Nonblocking write, may be nil
 }
 
 // A variant of a Test Command for builds
@@ -113,10 +111,25 @@ func (t *BuildTest) RootDir() string {
 	return t.rootDir
 }
 
-func (cmd *BuildCommand) Run() error {
+func (cmd *BuildCommand) Run(env *TestEnvironment) error {
 	tokens := strings.Split(cmd.Input.Line, " ")
 	if len(tokens) < 1 {
 		return errors.New("BuildCommand: Empty command")
+	}
+
+	cmd.Output = make([]*OutputLine, 0)
+
+	// Add a line indicating what the build process is doing
+	cmd.Output = append(cmd.Output, &OutputLine{
+		Line:     "Exec: " + cmd.Input.Line,
+		SimTime:  TimeFixedPoint(1),
+		WallTime: TimeFixedPoint(1),
+	})
+
+	cmd.Status = COMMAND_STATUS_RUNNING
+
+	if env.Persistence != nil {
+		env.Persistence.Notify(cmd, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT|MSG_FIELD_STATUS)
 	}
 
 	c := exec.Command(tokens[0], tokens[1:]...)
@@ -124,20 +137,29 @@ func (cmd *BuildCommand) Run() error {
 
 	output, err := c.CombinedOutput()
 	if err != nil {
-		return err
-	}
-
-	lines := strings.Split(string(output), "\n")
-	cmd.Output = make([]*OutputLine, len(lines))
-	for i, l := range lines {
-		cmd.Output[i] = &OutputLine{
-			Line:     l,
-			SimTime:  TimeFixedPoint(i),
-			WallTime: TimeFixedPoint(i),
+		lines := strings.Split(string(output), "\n")
+		for i, l := range lines {
+			cmd.Output = append(cmd.Output, &OutputLine{
+				Line:     l,
+				SimTime:  TimeFixedPoint(i),
+				WallTime: TimeFixedPoint(i),
+			})
 		}
+		return err
+	} else {
+		// Success
+		cmd.Output = append(cmd.Output, &OutputLine{
+			Line:     "OK",
+			SimTime:  TimeFixedPoint(2),
+			WallTime: TimeFixedPoint(2),
+		})
 	}
 
-	return nil
+	if env.Persistence != nil {
+		env.Persistence.Notify(cmd, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
+	}
+
+	return err
 }
 
 type BuildResults struct {
@@ -181,29 +203,42 @@ func (t *BuildTest) initDirs() (err error) {
 	return
 }
 
-func (t *BuildTest) Run() (*BuildResults, error) {
+func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 	var err error
 
 	t.Result = TEST_RESULT_RUNNING
 
-	for _, c := range t.Commands {
-		c.Status = COMMAND_STATUS_RUNNING
+	if env.Persistence != nil {
+		env.Persistence.Notify(t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
+		defer func() {
+			env.Persistence.Notify(t, MSG_PERSIST_COMPLETE, 0)
+		}()
+	}
 
-		if err = c.Run(); err != nil {
+	for _, c := range t.Commands {
+
+		err = c.Run(env)
+
+		// Start by assuming correct
+		c.Status = COMMAND_STATUS_CORRECT
+
+		if err != nil {
 			c.Status = COMMAND_STATUS_INCORRECT
 			t.Result = TEST_RESULT_INCORRECT
-			return nil, err
 		} else {
 			if c.handler != nil {
 				err = c.handler(t, c)
 				if err != nil {
 					c.Status = COMMAND_STATUS_INCORRECT
 					t.Result = TEST_RESULT_INCORRECT
-					return nil, err
 				}
 			}
-			c.Status = COMMAND_STATUS_CORRECT
-			// TODO: Broadcast
+		}
+		if env.Persistence != nil {
+			env.Persistence.Notify(c, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS|MSG_FIELD_OUTPUT)
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 

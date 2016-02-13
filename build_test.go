@@ -50,7 +50,7 @@ func TestBuildFull(t *testing.T) {
 		t.FailNow()
 	}
 
-	_, err = test.Run()
+	_, err = test.Run(defaultEnv)
 	assert.Nil(err)
 
 	t.Log(test.OutputJSON())
