@@ -36,13 +36,16 @@ func TestTestMapLoad(t *testing.T) {
 		"threads/tt2.t",
 		"threads/tt3.t",
 		"sync/all.t",
+		"sync/cvt1.t",
+		"sync/cvt2.t",
+		"sync/cvt3.t",
+		"sync/cvt4.t",
 		"sync/fail.t",
+		"sync/lt1.t",
+		"sync/lt2.t",
+		"sync/lt3.t",
 		"sync/multi.t",
-		"sync/sy1.t",
-		"sync/sy2.t",
-		"sync/sy3.t",
-		"sync/sy4.t",
-		"sync/sy5.t",
+		"sync/sem1.t",
 		"sync/semu1.t",
 	}
 
@@ -55,7 +58,7 @@ func TestTestMapLoad(t *testing.T) {
 
 	expected = []string{
 		"boot", "threads", "sync",
-		"sem", "locks", "rwlock", "cv",
+		"sem", "locks", "cv",
 	}
 
 	assert.Equal(len(expected), len(tm.Tags))
@@ -78,13 +81,12 @@ func TestTestMapGlobs(t *testing.T) {
 	assert.Equal(0, len(errs))
 
 	// Glob
-	tests, err := tm.testsFromGlob("**/sy*.t", abs)
+	tests, err := tm.testsFromGlob("**/cv*.t", abs)
 	expected := []string{
-		"sync/sy1.t",
-		"sync/sy2.t",
-		"sync/sy3.t",
-		"sync/sy4.t",
-		"sync/sy5.t",
+		"sync/cvt1.t",
+		"sync/cvt2.t",
+		"sync/cvt3.t",
+		"sync/cvt4.t",
 	}
 
 	assert.Nil(err)
@@ -131,8 +133,10 @@ func TestTestMapTags(t *testing.T) {
 	assert.Equal(expected, actual)
 
 	expected = []string{
-		"sync/sy3.t",
-		"sync/sy4.t",
+		"sync/cvt1.t",
+		"sync/cvt2.t",
+		"sync/cvt3.t",
+		"sync/cvt4.t",
 	}
 	tests, ok = tm.Tags["cv"]
 	assert.True(ok)
@@ -145,19 +149,25 @@ func TestTestMapTags(t *testing.T) {
 }
 
 var DEP_MAP = map[string][]string{
-	"boot.t":            []string{},
-	"threads/tt1.t":     []string{"boot.t"},
-	"threads/tt2.t":     []string{"boot.t"},
-	"threads/tt3.t":     []string{"boot.t"},
-	"sync/semu1.t":      []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/sy1.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/sy2.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/sy3.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t"},
-	"sync/sy4.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/sy2.t", "sync/sy3.t"},
-	"sync/sy5.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/multi.t":      []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/all.t":        []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
-	"sync/fail.t":       []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"boot.t":        []string{},
+	"threads/tt1.t": []string{"boot.t"},
+	"threads/tt2.t": []string{"boot.t"},
+	"threads/tt3.t": []string{"boot.t"},
+
+	"sync/semu1.t": []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/sem1.t":  []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/lt1.t":   []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/lt2.t":   []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/lt3.t":   []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/cvt1.t":  []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/lt1.t", "sync/lt2.t", "sync/lt3.t"},
+	"sync/cvt2.t":  []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/lt1.t", "sync/lt2.t", "sync/lt3.t"},
+	"sync/cvt3.t":  []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/lt1.t", "sync/lt2.t", "sync/lt3.t"},
+	"sync/cvt4.t":  []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t", "sync/lt1.t", "sync/lt2.t", "sync/lt3.t"},
+
+	"sync/multi.t": []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/all.t":   []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+	"sync/fail.t":  []string{"threads/tt1.t", "threads/tt2.t", "threads/tt2.t"},
+
 	"panics/panic.t":    []string{"boot.t"},
 	"panics/deppanic.t": []string{"panics/panic.t"},
 }
@@ -189,6 +199,10 @@ func TestTestMapDependencies(t *testing.T) {
 			for _, id := range v {
 				dep, ok := test.ExpandedDeps[id]
 				assert.True(ok)
+				if !ok {
+					t.Log(id)
+					t.FailNow()
+				}
 				assert.Equal(id, dep.DependencyID)
 			}
 		}
@@ -224,6 +238,10 @@ func TestDependencyGraph(t *testing.T) {
 			for _, id := range v {
 				depNode, ok := node.EdgesOut[id]
 				assert.True(ok)
+				if !ok {
+					t.Log(id)
+					t.FailNow()
+				}
 				assert.Equal(id, depNode.Name)
 			}
 		}
@@ -271,13 +289,14 @@ func TestGroupFromConfg(t *testing.T) {
 	config := &GroupConfig{
 		Name:    "Test",
 		UseDeps: true,
-		Tests:   []string{"sync/sy1.t"},
+		Tests:   []string{"sync/cvt1.t"},
 		Env:     defaultEnv,
 	}
 
 	expected := []string{
 		"boot.t", "threads/tt1.t", "threads/tt2.t",
-		"threads/tt3.t", "sync/sy1.t",
+		"threads/tt3.t", "sync/lt1.t", "sync/lt2.t", "sync/lt3.t",
+		"sync/cvt1.t",
 	}
 
 	tg, errs := GroupFromConfig(config)

@@ -54,7 +54,7 @@ func TestRunnerCapacity(t *testing.T) {
 
 	expected := []string{
 		"boot.t", "threads/tt1.t", "threads/tt2.t", "threads/tt3.t",
-		"sync/sy1.t", "sync/sy2.t", "sync/semu1.t",
+		"sync/lt1.t", "sync/cvt1.t", "sync/semu1.t",
 	}
 
 	config := &GroupConfig{
@@ -110,7 +110,7 @@ func TestRunnerSimple(t *testing.T) {
 	env.RootDir = "./fixtures/root"
 
 	expected := []string{
-		"threads/tt1.t", "sync/sy1.t",
+		"threads/tt1.t", "sync/lt1.t",
 	}
 
 	// Test config with dependencies
@@ -152,7 +152,7 @@ func TestRunnerDependency(t *testing.T) {
 
 	expected := []string{
 		"boot.t", "threads/tt1.t", "threads/tt2.t", "threads/tt3.t",
-		"sync/sy2.t", "sync/sy3.t", "sync/sy4.t",
+		"sync/lt1.t", "sync/lt2.t", "sync/lt3.t", "sync/cvt1.t",
 	}
 
 	env := defaultEnv.CopyEnvironment()
@@ -162,7 +162,7 @@ func TestRunnerDependency(t *testing.T) {
 	config := &GroupConfig{
 		Name:    "Test",
 		UseDeps: true,
-		Tests:   []string{"sync/sy4.t"},
+		Tests:   []string{"sync/cvt1.t"},
 		Env:     env,
 	}
 
@@ -188,12 +188,48 @@ func TestRunnerDependency(t *testing.T) {
 
 	assert.Equal(len(expected), count)
 
-	// Boot has to be first, and since sy4 depends on sy3 depends on threads,
-	// sy4 needs to be last and sy3 needs to be second to last.  Finally,
-	// sy3 depends on locks (sy2), so that is third from the end.
+	if len(expected) != count {
+		t.FailNow()
+	}
+
+	// Boot has to be first, and since cvt1 depends on locks depends on threads,
+	// cvt1 needs to be last and lt1 - lt3 needs to be before this.
 	assert.Equal(expected[0], results[0])
-	assert.Equal(expected[len(expected)-3], results[len(expected)-3])
-	assert.Equal(expected[len(expected)-2], results[len(expected)-2])
+
+	threads := []bool{false, false, false}
+	locks := []bool{false, false, false}
+
+	// Check locks, they should be 1-3
+	for i := 1; i <= 3; i++ {
+		switch results[i] {
+		case "threads/tt1.t":
+			assert.False(threads[0])
+			threads[0] = true
+		case "threads/tt2.t":
+			assert.False(threads[1])
+			threads[1] = true
+		case "threads/tt3.t":
+			assert.False(threads[2])
+			threads[2] = true
+
+		}
+	}
+	// Check locks, they should be 4-6
+	for i := 4; i <= 6; i++ {
+		switch results[i] {
+		case "sync/lt1.t":
+			assert.False(locks[0])
+			locks[0] = true
+		case "sync/lt2.t":
+			assert.False(locks[1])
+			locks[1] = true
+		case "sync/lt3.t":
+			assert.False(locks[2])
+			locks[2] = true
+		}
+	}
+
+	// Now, check CV
 	assert.Equal(expected[len(expected)-1], results[len(expected)-1])
 
 	env.manager.stop()
@@ -264,19 +300,19 @@ func TestRunnersParallel(t *testing.T) {
 
 	tests := [][]string{
 		[]string{
-			"boot.t", "sync/sy2.t", "sync/sy3.t", "threads/tt1.t",
+			"boot.t", "sync/lt1.t", "sync/lt2.t", "threads/tt1.t",
 		},
 		[]string{
-			"boot.t", "threads/tt1.t", "threads/tt3.t", "sync/sy1.t", "sync/sy2.t",
+			"boot.t", "threads/tt1.t", "threads/tt3.t", "sync/lt1.t", "sync/sem1.t",
 		},
 		[]string{
-			"boot.t", "threads/tt1.t", "threads/tt3.t", "sync/sy1.t", "sync/sy2.t",
+			"boot.t", "threads/tt1.t", "threads/tt3.t", "sync/lt2.t", "sync/lt1.t", "sync/sem1.t",
 		},
 		[]string{
-			"boot.t", "threads/tt1.t", "threads/tt3.t", "sync/sy1.t", "sync/sy2.t", "sync/sy3.t", "sync/sy4.t",
+			"boot.t", "threads/tt1.t", "threads/tt3.t", "sync/lt1.t", "sync/cvt1.t", "sync/cvt2.t", "sync/cvt3.t",
 		},
 		[]string{
-			"boot.t", "threads/tt1.t", "threads/tt3.t", "sync/sy1.t", "sync/sy2.t", "sync/sy4.t", "sync/semu1.t",
+			"boot.t", "threads/tt1.t", "threads/tt3.t", "sync/lt1.t", "sync/cvt2.t", "sync/cvt1.t", "sync/semu1.t",
 		},
 	}
 

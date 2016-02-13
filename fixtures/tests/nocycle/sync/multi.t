@@ -1,8 +1,7 @@
 ---
-name: RW Lock Test
+name: multi_test_1
 tags:
  - sync
- - rwlock
 depends:
  - threads
 stat:
@@ -11,5 +10,5 @@ stat:
 misc:
     prompttimeout: 30.0
 ---
-sy3
-sy4
+sem1
+lt1

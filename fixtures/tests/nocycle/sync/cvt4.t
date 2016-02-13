@@ -1,16 +1,15 @@
 ---
-name: Test All Sync
+name: cv_test_4
 tags:
  - sync
+ - cv
 depends:
  - threads
+ - locks
 stat:
     resolution: 0.01
     window: 100
 misc:
     prompttimeout: 30.0
 ---
-sem1
-lt1
-cvt1
-cvt2
+cvt4

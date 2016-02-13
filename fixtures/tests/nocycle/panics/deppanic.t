@@ -1,14 +1,11 @@
 ---
-name: Lock Test
-tags:
- - sync
- - locks
+name: Waiting for Panic!
 depends:
- - threads
+- panic.t
 stat:
     resolution: 0.01
     window: 100
 misc:
     prompttimeout: 30.0
 ---
-sy2
+q

@@ -1,10 +1,25 @@
 ---
 templates:
-  - name: sy1
-  - name: sy2
-  - name: sy3
-  - name: sy4
-  - name: sy5
+  - name: sem1
+  - name: lt1
+  - name: lt2
+    panics: yes
+    output:
+      - text: "lt2: Should panic..."
+  - name: lt3
+    panics: yes
+    output:
+      - text: "lt3: Should panic..."
+  - name: cvt1
+  - name: cvt2
+  - name: cvt3
+    panics: yes
+    output:
+      - text: "cvt3: Should panic..."
+  - name: cvt4
+    panics: yes
+    output:
+      - text: "cvt4: Should panic..."
   - name: /testbin/argtest
     output:
       - text: "argc: {{add 1 .ArgLen}}"

@@ -11,4 +11,4 @@ stat:
 misc:
     prompttimeout: 30.0
 ---
-sy1
+semu1

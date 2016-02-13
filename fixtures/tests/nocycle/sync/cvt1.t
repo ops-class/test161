@@ -1,14 +1,15 @@
 ---
-name: RW Lock Test
+name: cv_test_1
 tags:
  - sync
- - rwlock
+ - cv
 depends:
  - threads
+ - locks
 stat:
     resolution: 0.01
     window: 100
 misc:
     prompttimeout: 30.0
 ---
-sy5
+cvt1

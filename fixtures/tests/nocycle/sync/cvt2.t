@@ -1,14 +1,15 @@
 ---
-name: Semaphore Test
+name: cv_test_2
 tags:
  - sync
- - sem
+ - cv
 depends:
- - /**/tt*.t
+ - threads
+ - locks
 stat:
     resolution: 0.01
     window: 100
 misc:
     prompttimeout: 30.0
 ---
-sy1
+cvt2

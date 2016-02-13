@@ -30,7 +30,7 @@ type Stat struct {
 	WallLength TimeFixedPoint `json:"walllength"`
 
 	// Read from stat line
-	Nsec   uint64 `json:"-"`
+	Nsec   uint64 `json:"-" bson:"-"`
 	Kinsns uint32 `json:"kinsns"`
 	Uinsns uint32 `json:"uinsns"`
 	Udud   uint32 `json:"udud"`

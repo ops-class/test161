@@ -1,16 +1,11 @@
 ---
-name: CV Test 2
-tags:
- - sync
- - cv
+name: Panic!
 depends:
- - threads
- - locks
- - sy3.t
+- boot
 stat:
     resolution: 0.01
     window: 100
 misc:
     prompttimeout: 30.0
 ---
-sy4
+panic

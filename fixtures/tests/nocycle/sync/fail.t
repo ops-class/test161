@@ -2,7 +2,6 @@
 name: Test a failure
 tags:
  - sync
- - rwlock
 depends:
  - threads
 stat:
@@ -11,8 +10,7 @@ stat:
 misc:
     prompttimeout: 30.0
 ---
-sy1
-sy2
+sem1
 panic
-sy3
-sy4
+lt1
+cvt1

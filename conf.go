@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/ericaro/frontmatter"
 	"github.com/imdario/mergo"
+	"github.com/satori/go.uuid"
 	"io/ioutil"
 	"math/rand"
 	"reflect"
@@ -28,7 +29,7 @@ type Sys161Conf struct {
 	RAM    string   `yaml:"ram" json:"ram"`
 	Disk1  DiskConf `yaml:"disk1" json:"disk1"`
 	Disk2  DiskConf `yaml:"disk2" json:"disk2"`
-	Random uint32   `yaml:"-" json:"randomseed"`
+	Random uint32   `yaml:"-" json:"randomseed" bson:"randomseed"`
 }
 
 type DiskConf struct {
@@ -61,7 +62,7 @@ type MiscConf struct {
 	CommandRetries   uint    `yaml:"commandretries" json:"commandretries"`
 	PromptTimeout    float32 `yaml:"prompttimeout" json:"prompttimeout"`
 	CharacterTimeout uint    `yaml:"charactertimeout" json:"charactertimeout"`
-	TempDir          string  `yaml:"tempdir" json:"-"`
+	TempDir          string  `yaml:"tempdir" json:"-" bson:"-"`
 	RetryCharacters  string  `yaml:"retrycharacters" json:"retrycharacters"`
 	KillOnExit       string  `yaml:"killonexit" json:"killonexit"`
 }
@@ -153,6 +154,7 @@ func TestFromString(data string) (*Test, error) {
 	// Check for empty commands and expand syntatic sugar before getting
 	// started. Doing this first makes the main loop and retry logic simpler.
 
+	t.ID = uuid.NewV4().String()
 	err = t.initCommands()
 	if err != nil {
 		return nil, err
@@ -319,6 +321,8 @@ func (t *Test) initCommands() (err error) {
 	// Set the boot command
 	t.Commands = append(t.Commands, &Command{
 		Type:          "kernel",
+		ID:            uuid.NewV4().String(),
+		test:          t,
 		PromptPattern: regexp.MustCompile(regexp.QuoteMeta(KERNEL_COMMAND_CONF.Prompt)),
 		Input: InputLine{
 			Line: "boot",
@@ -406,6 +410,8 @@ func (t *Test) initCommands() (err error) {
 			}
 			t.Commands = append(t.Commands, &Command{
 				Type:          commandType,
+				ID:            uuid.NewV4().String(),
+				test:          t,
 				PromptPattern: promptPattern,
 				Input: InputLine{
 					Line: commandLine,

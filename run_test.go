@@ -1,6 +1,7 @@
 package test161
 
 import (
+	"flag"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
@@ -21,6 +22,7 @@ var TEST_DEFAULTS = Test{
 }
 
 var defaultEnv *TestEnvironment = nil
+var testFlagDB = false
 
 func init() {
 	// Make sure the default test manager exists first
@@ -30,7 +32,11 @@ func init() {
 		panic(fmt.Sprintf("Unable to create default environment: %v", err))
 	}
 	defaultEnv.RootDir = "./fixtures/root"
-	// No key map
+
+	// Command line flags
+	flag.BoolVar(&testFlagDB, "db", false, "Run tests that rely on mongodb")
+
+	// No key map, cache, etc.
 }
 
 func TestMain(m *testing.M) {
@@ -266,19 +272,6 @@ q
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
-
-	t.Log(test.OutputJSON())
-	t.Log(test.OutputString())
-}
-
-func TestRunTT3(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-
-	test, err := TestFromString("tt3")
-	assert.Nil(err)
-	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run(defaultEnv))
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())

@@ -29,6 +29,9 @@ import (
 
 type Test struct {
 
+	// Mongo ID
+	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
+
 	// Input
 
 	// Metadata
@@ -45,10 +48,10 @@ type Test struct {
 	Misc        MiscConf      `yaml:"misc" json:"misc"`
 
 	// Actual test commands to run
-	Content string `fm:"content" yaml:"-" json:"-"`
+	Content string `fm:"content" yaml:"-" json:"-" bson:"-"`
 
 	// Big lock that protects most fields shared between Run and getStats
-	L *sync.Mutex `json:"-"`
+	L *sync.Mutex `json:"-" bson:"-"`
 
 	// Output
 
@@ -61,13 +64,13 @@ type Test struct {
 
 	// Dependency data
 	DependencyID string           `json:"depid"`
-	ExpandedDeps map[string]*Test `json:"-"`
+	ExpandedDeps map[string]*Test `json:"-" bson:"-"`
 	IsDependency bool             `json:"isdependency"`
 
 	// Grading.  These are set when the test is being run as part of a Target.
-	PointsAvailable uint   `json:"pointsavail"`
-	PointsEarned    uint   `json:"pointsearned"`
-	ScoringMethod   string `json:"scoringmethod"`
+	PointsAvailable uint   `json:"points_avail" bson:"points_avail"`
+	PointsEarned    uint   `json:"points_earned" bson:"points_earned"`
+	ScoringMethod   string `json:"scoring_method" bson:"scoring_method"`
 
 	// Unproctected Private fields
 	tempDir     string           // Only set once
@@ -115,14 +118,17 @@ const (
 )
 
 type Command struct {
+	// Mongo ID
+	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
+
 	// Set during init
 	Type          string         `json:"type"`
-	PromptPattern *regexp.Regexp `json:"-"`
+	PromptPattern *regexp.Regexp `json:"-" bson:"-"`
 	Input         InputLine      `json:"input"`
 
 	// Set during target init
-	PointsAvailable uint `json:"points_avail"`
-	PointsEarned    uint `json:"points_earned"`
+	PointsAvailable uint `json:"points_avail" bson:"points_avail"`
+	PointsEarned    uint `json:"points_earned" bson:"points_earned"`
 
 	// Set during run init
 	Panic          string `json:"panic"`
@@ -135,6 +141,9 @@ type Command struct {
 
 	// Set during evaluation
 	Status string `json:"status"`
+
+	// Backwards pointer to the Test
+	test *Test
 }
 
 type InputLine struct {
@@ -146,12 +155,10 @@ type InputLine struct {
 type OutputLine struct {
 	WallTime TimeFixedPoint `json:"walltime"`
 	SimTime  TimeFixedPoint `json:"simtime"`
-	Buffer   bytes.Buffer   `json:"-"`
+	Buffer   bytes.Buffer   `json:"-" bson:"-"`
 	Line     string         `json:"line"`
-
-	// TODO These don't need to be serialized for production
-	Trusted bool   `json:"trusted"`
-	KeyName string `json:"keyname"`
+	Trusted  bool           `json:"trusted"`
+	KeyName  string         `json:"keyname"`
 }
 
 type Status struct {
@@ -167,6 +174,7 @@ type TestResult string
 
 const (
 	TEST_RESULT_NONE      TestResult = "none"      // Hasn't run (initial status)
+	TEST_RESULT_RUNNING   TestResult = "running"   // Running
 	TEST_RESULT_CORRECT   TestResult = "correct"   // Met the output criteria
 	TEST_RESULT_INCORRECT TestResult = "incorrect" // Possibly some partial points, but didn't complete everything successfully
 	TEST_RESULT_ABORT     TestResult = "abort"     // Aborted - internal error
@@ -191,12 +199,22 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	// Save the test environment for other pieces that need it
 	t.env = env
 
-	// We've aborted unless we hear otherwise
-	t.Result = TEST_RESULT_ABORT
+	defer func() {
+		if env.Persistence != nil {
+			env.Persistence.Notify(t, MSG_PERSIST_COMPLETE, 0)
+		}
+	}()
+
+	t.Result = TEST_RESULT_RUNNING
+	if env.Persistence != nil {
+		env.Persistence.Notify(t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
+	}
 
 	// Set the instance-specific input and expected output
 	for _, c := range t.Commands {
 		if err = c.instantiate(env); err != nil {
+			t.addStatus("aborted", "")
+			t.Result = TEST_RESULT_ABORT
 			return
 		}
 	}
@@ -205,6 +223,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	err = t.MergeConf(CONF_DEFAULTS)
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 
@@ -212,6 +231,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	tempRoot, err := ioutil.TempDir(t.Misc.TempDir, "test161")
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 	defer os.RemoveAll(tempRoot)
@@ -221,6 +241,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	err = shutil.CopyTree(env.RootDir, t.tempDir, nil)
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 
@@ -229,6 +250,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	_, err = os.Stat(kernelTarget)
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 
@@ -237,15 +259,18 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	t.ConfString, err = t.PrintConf()
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 	err = ioutil.WriteFile(confTarget, []byte(t.ConfString), 0440)
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 	if _, err := os.Stat(confTarget); os.IsNotExist(err) {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 
@@ -256,6 +281,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		err = create.Run()
 		if err != nil {
 			t.addStatus("aborted", "")
+			t.Result = TEST_RESULT_ABORT
 			return err
 		}
 	}
@@ -265,6 +291,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		err = create.Run()
 		if err != nil {
 			t.addStatus("aborted", "")
+			t.Result = TEST_RESULT_ABORT
 			return err
 		}
 	}
@@ -288,6 +315,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	err = t.start161()
 	if err != nil {
 		t.addStatus("aborted", "")
+		t.Result = TEST_RESULT_ABORT
 		return err
 	}
 	defer t.stop161()
@@ -327,6 +355,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 				t.sys161.ExpectEOF()
 			})()
 			t.addStatus("shutdown", "normal shutdown")
+			t.finishCurCommand(env, false)
 			err = nil
 			break
 		}
@@ -386,6 +415,8 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	if err == nil {
 		t.finishAndEvaluate()
+	} else {
+		t.Result = TEST_RESULT_ABORT
 	}
 
 	return err
@@ -402,18 +433,26 @@ func (t *Test) finishCurCommand(env *TestEnvironment, eof bool) *Command {
 		t.currentOutput.Line = t.currentOutput.Buffer.String()
 		t.outputLineComplete()
 		t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
-		t.sendUpdateMsg(UpdateReasonOutput)
+
+		if env.Persistence != nil {
+			env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
+		}
 	}
 
 	cur := t.currentCommand
 	cur.evaluate(env.KeyMap, eof)
-	t.sendUpdateMsg(UpdateReasonCommandDone)
 
-	// Next line
-	t.currentOutput = &OutputLine{}
-	t.commandCounter++
-	t.currentCommand = t.Commands[t.commandCounter]
+	if env.Persistence != nil {
+		env.Persistence.Notify(cur, MSG_PERSIST_UPDATE,
+			MSG_FIELD_STATUS|MSG_FIELD_SCORE)
+	}
 
+	// Next line, but not for quit command
+	if int(t.commandCounter) < len(t.Commands)-1 {
+		t.currentOutput = &OutputLine{}
+		t.commandCounter++
+		t.currentCommand = t.Commands[t.commandCounter]
+	}
 	return cur
 }
 
@@ -424,7 +463,6 @@ func (t *Test) finishAndEvaluate() {
 		t.Result = TEST_RESULT_CORRECT
 		if t.ScoringMethod == TEST_SCORING_ENTIRE {
 			t.PointsEarned = t.PointsAvailable
-			t.sendUpdateMsg(UpdateReasonScore)
 		} else {
 			// The partial points were computed along the way
 		}
@@ -684,11 +722,11 @@ func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 		if totalEarned > 0 && totalAvail > 0 {
 			// Integral points only
 			c.PointsEarned = uint(float32(c.PointsAvailable) * (float32(totalEarned) / float32(totalAvail)))
-		}
 
-		// If they got all of the partial credit, this command was actually correct
-		if c.PointsEarned == c.PointsAvailable {
-			c.Status = COMMAND_STATUS_CORRECT
+			// If they got all of the partial credit, this command was actually correct
+			if c.PointsEarned == c.PointsAvailable && c.PointsEarned > 0 {
+				c.Status = COMMAND_STATUS_CORRECT
+			}
 		}
 	}
 }

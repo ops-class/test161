@@ -2,20 +2,19 @@
 name: partial
 points: 60
 type: asst
+kconfig: SOL1
 tests:
-  - id: sync/sy1.t
+  - id: sync/sem1.t
     points: 10
-  - id: sync/sy2.t
+  - id: sync/lt1.t
     points: 10
   - id: sync/fail.t
     points: 40
     scoring: partial
     commands:
-      - id: sy1
+      - id: sem1
         points: 10
-      - id: sy2
+      - id: lt1
         points: 10
-      - id: sy3
-        points: 10
-      - id: sy4
-        points: 10
+      - id: cvt1
+        points: 20
