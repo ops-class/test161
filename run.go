@@ -328,7 +328,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	// Broadcast current command
 	if env.Persistence != nil {
-		env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, 0)
+		env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 	}
 
 	for int(t.commandCounter) < len(t.Commands) {
@@ -337,7 +337,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 			// Broadcast current command
 			if env.Persistence != nil {
-				env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, 0)
+				env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 			}
 
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
