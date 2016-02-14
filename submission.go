@@ -4,12 +4,13 @@ import (
 	"errors"
 	"github.com/satori/go.uuid"
 	"os"
+	"sync"
 	"time"
 )
 
 type SubmissionUserInfo struct {
-	EmailAddress string `yaml:"email"`
-	Token        string `yaml:"token"`
+	Email string `yaml:"email"`
+	Token string `yaml:"token"`
 }
 
 // SubmissionRequests are created by clients and used to generate Submissions.
@@ -61,19 +62,79 @@ type Submission struct {
 	Tests     *TestGroup `bson:"-"`
 }
 
+type TargetResult struct {
+	TargetName   string    `bson:"target_name"`
+	Status       string    `bson:"status"`
+	Score        uint      `bson:"score"`
+	MaxScore     uint      `bson:"max_score"`
+	Performance  float64   `bson:"performance"`
+	Started      time.Time `bson:"started"`
+	Completed    time.Time `bson:"completed"`
+	SubmissionID string    `bson:"submission_id"`
+}
+
+type Student struct {
+	ID             string          `bson:"_id"`
+	Email          string          `bson:"email"`
+	Token          string          `bson:"token"`
+	LastSubmission *TargetResult   `bson:"last_submission"`
+	TargetResults  []*TargetResult `bson:"target_results"`
+}
+
+// Keep track of pending submissions.  Keep this out of the database in case there are
+// communication issues so that we don't need to manually reset things in the DB.
+var userLock = &sync.Mutex{}
+var pendingSubmissions = make(map[string]bool)
+
+// Check users against users database and lock their user record.
+func (req *SubmissionRequest) validateAndLockUsers(env *TestEnvironment) ([]*Student, error) {
+
+	userLock.Lock()
+	defer userLock.Unlock()
+
+	allStudents := make([]*Student, 0)
+
+	for _, user := range req.Users {
+		request := map[string]interface{}{
+			"email": user.Email,
+			"token": user.Token,
+		}
+
+		students := []*Student{}
+		if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, &students); err != nil {
+			return nil, err
+		}
+
+		if len(students) != 1 || students[0].Email != user.Email || students[0].Token != user.Token {
+			return nil, errors.New("Unable to authenticate student: " + user.Email)
+		} else if pending, _ := pendingSubmissions[students[0].ID]; pending {
+			return nil, errors.New("A pending submission already exists for " + students[0].Email)
+		}
+		allStudents = append(allStudents, students[0])
+	}
+
+	// Mark everyone as having a pending submission
+	//for _, student := range allStudents {
+	//	pendingSubmissions[student].ID = true
+	//}
+	return allStudents, nil
+}
+
 func (req *SubmissionRequest) validate(env *TestEnvironment) error {
 
 	if _, ok := env.Targets[req.Target]; !ok {
 		return errors.New("Invalid target: " + req.Target)
 	}
 
-	// TODO: Check for closed targets
-
 	if len(req.Users) == 0 {
 		return errors.New("No usernames specified")
 	}
 
-	// TODO: Check users against users database, duplicate user, etc.
+	if env.Persistence != nil && env.Persistence.CanRetrieve() {
+		if _, err := req.validateAndLockUsers(env); err != nil {
+			return err
+		}
+	}
 
 	if len(req.Repository) == 0 || len(req.CommitID) == 0 {
 		return errors.New("Must specify a Git repository and commit id")
@@ -137,7 +198,7 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 
 	s.Users = make([]string, 0, len(request.Users))
 	for _, u := range request.Users {
-		s.Users = append(s.Users, u.EmailAddress)
+		s.Users = append(s.Users, u.Email)
 	}
 
 	if env.Persistence != nil {

@@ -1,6 +1,7 @@
 package test161
 
 import (
+	"errors"
 	"fmt"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -14,6 +15,7 @@ type MongoPersistence struct {
 const (
 	COLLECTION_SUBMISSIONS = "submissions"
 	COLLECTION_TESTS       = "tests"
+	COLLECTION_STUDENTS    = "students"
 )
 
 func NewMongoPersistence(dial *mgo.DialInfo) (PersistenceManager, error) {
@@ -71,101 +73,137 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 
 	switch t.(type) {
 	default:
-		err = fmt.Errorf("Unexpected type in Notify(): %T", t)
+		{
+			err = fmt.Errorf("Unexpected type in Notify(): %T", t)
+		}
 	case *Test:
-		test := t.(*Test)
-		switch msg {
-		case MSG_PERSIST_CREATE:
-			err = m.insertDocument(session, COLLECTION_TESTS, test)
-		case MSG_PERSIST_COMPLETE:
-			err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, test)
-		case MSG_PERSIST_UPDATE:
-			changes := bson.M{}
-			if what&MSG_FIELD_SCORE == MSG_FIELD_SCORE {
-				changes["points_earned"] = test.PointsEarned
-			}
+		{
+			test := t.(*Test)
+			switch msg {
+			case MSG_PERSIST_CREATE:
+				err = m.insertDocument(session, COLLECTION_TESTS, test)
+			case MSG_PERSIST_COMPLETE:
+				err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, test)
+			case MSG_PERSIST_UPDATE:
+				changes := bson.M{}
+				if what&MSG_FIELD_SCORE == MSG_FIELD_SCORE {
+					changes["points_earned"] = test.PointsEarned
+				}
 
-			if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
-				changes["result"] = test.Result
-			}
+				if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
+					changes["result"] = test.Result
+				}
 
-			if len(changes) > 0 {
-				err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, bson.M{"$set": changes})
+				if len(changes) > 0 {
+					err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, bson.M{"$set": changes})
+				}
 			}
 		}
 	case *Command:
-		cmd := t.(*Command)
-		switch msg {
-		case MSG_PERSIST_UPDATE:
-			selector := bson.M{
-				"_id":          cmd.test.ID,
-				"commands._id": cmd.ID,
+		{
+			cmd := t.(*Command)
+			switch msg {
+			case MSG_PERSIST_UPDATE:
+				selector := bson.M{
+					"_id":          cmd.test.ID,
+					"commands._id": cmd.ID,
+				}
+				changes := bson.M{}
+
+				if what&MSG_FIELD_OUTPUT == MSG_FIELD_OUTPUT {
+					changes["commands.$.output"] = cmd.Output
+				}
+
+				if what&MSG_FIELD_SCORE == MSG_FIELD_SCORE {
+					changes["commands.$.points_earned"] = cmd.PointsEarned
+				}
+
+				if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
+					changes["commands.$.status"] = cmd.Status
+				}
+
+				err = m.updateDocument(session, COLLECTION_TESTS, selector, bson.M{"$set": changes})
+
 			}
-			changes := bson.M{}
-
-			if what&MSG_FIELD_OUTPUT == MSG_FIELD_OUTPUT {
-				changes["commands.$.output"] = cmd.Output
-			}
-
-			if what&MSG_FIELD_SCORE == MSG_FIELD_SCORE {
-				changes["commands.$.points_earned"] = cmd.PointsEarned
-			}
-
-			if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
-				changes["commands.$.status"] = cmd.Status
-			}
-
-			err = m.updateDocument(session, COLLECTION_TESTS, selector, bson.M{"$set": changes})
-
 		}
 	case *Submission:
-		submission := t.(*Submission)
-		switch msg {
-		case MSG_PERSIST_CREATE:
-			err = m.insertDocument(session, COLLECTION_SUBMISSIONS, submission)
-		case MSG_PERSIST_COMPLETE:
-			fallthrough
-		case MSG_PERSIST_UPDATE:
-			err = m.updateDocumentByID(session, COLLECTION_SUBMISSIONS, submission.ID, submission)
+		{
+			submission := t.(*Submission)
+			switch msg {
+			case MSG_PERSIST_CREATE:
+				err = m.insertDocument(session, COLLECTION_SUBMISSIONS, submission)
+			case MSG_PERSIST_COMPLETE:
+				fallthrough
+			case MSG_PERSIST_UPDATE:
+				err = m.updateDocumentByID(session, COLLECTION_SUBMISSIONS, submission.ID, submission)
+			}
 		}
 	case *BuildTest:
-		test := t.(*BuildTest)
-		switch msg {
-		case MSG_PERSIST_CREATE:
-			err = m.insertDocument(session, COLLECTION_TESTS, test)
-		case MSG_PERSIST_COMPLETE:
-			err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, test)
-		case MSG_PERSIST_UPDATE:
-			changes := bson.M{}
-			if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
-				changes["result"] = test.Result
-			}
-			if len(changes) > 0 {
-				err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, bson.M{"$set": changes})
+		{
+			test := t.(*BuildTest)
+			switch msg {
+			case MSG_PERSIST_CREATE:
+				err = m.insertDocument(session, COLLECTION_TESTS, test)
+			case MSG_PERSIST_COMPLETE:
+				err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, test)
+			case MSG_PERSIST_UPDATE:
+				changes := bson.M{}
+				if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
+					changes["result"] = test.Result
+				}
+				if len(changes) > 0 {
+					err = m.updateDocumentByID(session, COLLECTION_TESTS, test.ID, bson.M{"$set": changes})
+				}
 			}
 		}
 	case *BuildCommand:
-		cmd := t.(*BuildCommand)
-		switch msg {
-		case MSG_PERSIST_UPDATE:
-			selector := bson.M{
-				"_id":          cmd.test.ID,
-				"commands._id": cmd.ID,
+		{
+			cmd := t.(*BuildCommand)
+			switch msg {
+			case MSG_PERSIST_UPDATE:
+				selector := bson.M{
+					"_id":          cmd.test.ID,
+					"commands._id": cmd.ID,
+				}
+				changes := bson.M{}
+
+				if what&MSG_FIELD_OUTPUT == MSG_FIELD_OUTPUT {
+					changes["commands.$.output"] = cmd.Output
+				}
+
+				if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
+					changes["commands.$.status"] = cmd.Status
+				}
+
+				err = m.updateDocument(session, COLLECTION_TESTS, selector, bson.M{"$set": changes})
+
 			}
-			changes := bson.M{}
-
-			if what&MSG_FIELD_OUTPUT == MSG_FIELD_OUTPUT {
-				changes["commands.$.output"] = cmd.Output
+		}
+	case *Student:
+		{
+			student := t.(*Student)
+			switch msg {
+			case MSG_PERSIST_UPDATE:
+				err = m.updateDocumentByID(session, COLLECTION_STUDENTS, student.ID, student)
 			}
-
-			if what&MSG_FIELD_STATUS == MSG_FIELD_STATUS {
-				changes["commands.$.status"] = cmd.Status
-			}
-
-			err = m.updateDocument(session, COLLECTION_TESTS, selector, bson.M{"$set": changes})
-
 		}
 	}
-
 	return
+}
+func (m *MongoPersistence) CanRetrieve() bool {
+	return true
+}
+
+func (m *MongoPersistence) Retrieve(what int, who map[string]interface{}, res interface{}) error {
+	session := m.session.Copy()
+	defer session.Close()
+
+	switch what {
+	case PERSIST_TYPE_STUDENTS:
+		c := session.DB(m.dbName).C(COLLECTION_STUDENTS)
+		return c.Find(bson.M(who)).All(res)
+
+	default:
+		return errors.New("Persistence: Invalid data type")
+	}
 }

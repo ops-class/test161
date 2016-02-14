@@ -17,7 +17,7 @@ var TEST_DEFAULTS = Test{
 		Window:     100,
 	},
 	Misc: MiscConf{
-		PromptTimeout: 30.0,
+		PromptTimeout: 40.0,
 	},
 }
 
@@ -272,6 +272,19 @@ q
 		assert.Equal(test.Status[2].Status, "shutdown")
 		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
 	}
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}
+
+func TestRunTT3(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("tt3")
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	assert.Nil(test.Run(defaultEnv))
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())
