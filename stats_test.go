@@ -147,6 +147,43 @@ func TestStatsKernelProgress(t *testing.T) {
 	t.Log(test.OutputString())
 }
 
+func TestStatsKernelProgressOK(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("tt3")
+	assert.Nil(err)
+	assert.Nil(test.MergeConf(TEST_DEFAULTS))
+	test.Monitor.Enabled = "true"
+	test.Monitor.Kernel.EnableMin = "false"
+	test.Monitor.User.EnableMin = "false"
+	test.Monitor.ProgressTimeout = 1.0
+	test.Misc.PromptTimeout = 120.0
+	assert.Nil(test.Run(defaultEnv))
+
+	assert.Equal(len(test.Commands), 3)
+	if len(test.Commands) == 3 {
+		assert.Equal(test.Commands[0].Type, "kernel")
+		assert.Equal(test.Commands[0].Input.Line, "boot")
+		assert.Equal(test.Commands[1].Type, "kernel")
+		assert.Equal(test.Commands[1].Input.Line, "tt3")
+		assert.Equal(test.Commands[2].Type, "kernel")
+		assert.Equal(test.Commands[2].Input.Line, "q")
+	}
+
+	assert.Equal(len(test.Status), 2)
+	if len(test.Status) == 2 {
+		assert.Equal(test.Status[0].Status, "started")
+		assert.Equal(test.Status[1].Status, "shutdown")
+		assert.True(strings.HasPrefix(test.Status[1].Message, "normal"))
+	}
+
+	assert.True(test.SimTime < 100.0)
+
+	t.Log(test.OutputJSON())
+	t.Log(test.OutputString())
+}
+
 func TestStatsUserProgress(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
