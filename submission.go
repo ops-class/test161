@@ -7,14 +7,19 @@ import (
 	"time"
 )
 
+type SubmissionUserInfo struct {
+	EmailAddress string `yaml:"email"`
+	Token        string `yaml:"token"`
+}
+
 // SubmissionRequests are created by clients and used to generate Submissions.
 // A SubmissionRequest represents the data required to run a test161 target
 // for evaluation by the test161 server.
 type SubmissionRequest struct {
-	Target     string   // Name of the target
-	Users      []string // Email addresses of users
-	Repository string   // Git repository to clone
-	CommitID   string   // Git commit id to checkout after cloning
+	Target     string                // Name of the target
+	Users      []*SubmissionUserInfo // Email addresses of users
+	Repository string                // Git repository to clone
+	CommitID   string                // Git commit id to checkout after cloning
 }
 
 const (
@@ -28,10 +33,10 @@ const (
 type Submission struct {
 
 	// Configuration
-	ID         string   `bson:"_id,omitempty"`
-	Users      []string `bson:"users"`
-	Repository string   `bson:"repository"`
-	CommitID   string   `bson:"commit_id"`
+	ID         string                `bson:"_id,omitempty"`
+	Users      []*SubmissionUserInfo `bson:"users"`
+	Repository string                `bson:"repository"`
+	CommitID   string                `bson:"commit_id"`
 
 	// Target details
 	TargetID        string `bson:"-"` //TODO: Use this?
@@ -68,7 +73,7 @@ func (req *SubmissionRequest) validate(env *TestEnvironment) error {
 		return errors.New("No usernames specified")
 	}
 
-	// TODO: Check users against users database
+	// TODO: Check users against users database, duplicate user, etc.
 
 	if len(req.Repository) == 0 || len(req.CommitID) == 0 {
 		return errors.New("Must specify a Git repository and commit id")
