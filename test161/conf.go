@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/ops-class/test161"
 	yaml "gopkg.in/yaml.v2"
 	"io/ioutil"
 )
@@ -8,13 +9,13 @@ import (
 const CONF_FILE = ".test161.conf"
 
 type ClientConf struct {
-	Repo      string   `yaml:"repo"`
-	Token     string   `yaml:"token"`
-	Server    string   `yaml:"server"`
-	Ids       []string `yaml:"ids"`
-	RootDir   string   `yaml:"rootdir"`
-	TargetDir string   `yaml:"targetdir"`
-	TestDir   string   `yaml:"testdir"`
+	Repository string                        `yaml:"repository"`
+	Token      string                        `yaml:"token"`
+	Server     string                        `yaml:"server"`
+	Users      []*test161.SubmissionUserInfo `yaml:"users"`
+	RootDir    string                        `yaml:"rootdir"`
+	TargetDir  string                        `yaml:"targetdir"`
+	TestDir    string                        `yaml:"testdir"`
 }
 
 func ClientConfFromFile(file string) (*ClientConf, error) {

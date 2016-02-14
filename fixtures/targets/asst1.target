@@ -3,7 +3,7 @@ name: asst1
 version: 1
 points: 50
 type: asst
-kconfig: SOL1
+kconfig: ASST1
 tests:
   - id: sync/lt1.t
     points: 10
