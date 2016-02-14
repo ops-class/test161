@@ -367,6 +367,9 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		// Handle timeouts, unexpected shutdowns, and other errors
 		if expectErr == expect.ErrTimeout {
 			t.addStatus("timeout", fmt.Sprintf("no prompt for %v s", t.Misc.PromptTimeout))
+			t.currentCommand.Status = COMMAND_STATUS_INCORRECT
+			t.allCorrect = false
+			t.currentCommand.PointsEarned = 0
 			break
 		} else if expectErr == io.EOF || len(match.Groups) == 0 {
 			// But is it reaaaally unexpected?

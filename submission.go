@@ -33,10 +33,10 @@ const (
 type Submission struct {
 
 	// Configuration
-	ID         string                `bson:"_id,omitempty"`
-	Users      []*SubmissionUserInfo `bson:"users"`
-	Repository string                `bson:"repository"`
-	CommitID   string                `bson:"commit_id"`
+	ID         string   `bson:"_id,omitempty"`
+	Users      []string `bson:"users"`
+	Repository string   `bson:"repository"`
+	CommitID   string   `bson:"commit_id"`
 
 	// Target details
 	TargetID        string `bson:"-"` //TODO: Use this?
@@ -115,7 +115,6 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 
 	s := &Submission{
 		ID:              uuid.NewV4().String(),
-		Users:           request.Users,
 		Repository:      request.Repository,
 		CommitID:        request.CommitID,
 		TargetName:      target.Name,
@@ -134,6 +133,11 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 		Env:       env,
 		BuildTest: buildTest,
 		Tests:     tg,
+	}
+
+	s.Users = make([]string, 0, len(request.Users))
+	for _, u := range request.Users {
+		s.Users = append(s.Users, u.EmailAddress)
 	}
 
 	if env.Persistence != nil {
@@ -174,6 +178,8 @@ func (s *Submission) Run() error {
 		var res *BuildResults
 		res, err = s.BuildTest.Run(s.Env)
 		if err != nil {
+			s.Status = SUBMISSION_ABORTED
+			s.Env.Persistence.Notify(s, MSG_PERSIST_COMPLETE, 0)
 			return err
 		}
 
