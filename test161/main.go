@@ -90,10 +90,6 @@ func help() {
 	`)
 }
 
-func doSubmit() {
-	fmt.Println("test161 submit is not yet implemented")
-}
-
 func main() {
 	// Arg parsing
 	if len(os.Args) == 1 {

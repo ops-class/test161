@@ -2,7 +2,7 @@
 name: full
 points: 60
 type: asst
-kconfig: SOL1
+kconfig: ASST1
 tests:
   - id: sync/sem1.t
     points: 10

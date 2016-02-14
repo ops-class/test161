@@ -105,34 +105,18 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 		test161.SetManagerCapacity(0)
 	}
 
-	test161.StartManager()
-	done, updates := r.Run()
-
-	exitSync := make(chan int)
-
 	// Print the output lines
 	if runCommandVars.verbose == VERBOSE_LOUD {
-		go func() {
-			for update := range updates {
-				if update.Reason == test161.UpdateReasonOutput {
-					line := update.Data.(*test161.OutputLine)
-					output := fmt.Sprintf("%.6f\t%s", line.SimTime, line.Line)
-					fmt.Println(output)
-				}
-			}
-			exitSync <- 1
-		}()
+		env.Persistence = &ConsolePersistence{}
 	}
+
+	test161.StartManager()
+	done, _ := r.Run()
 
 	// Collect the results
 	complete := make([]*test161.Test161JobResult, 0)
 	for res := range done {
 		complete = append(complete, res)
-	}
-
-	// Wait for output to stop printing
-	if runCommandVars.verbose == VERBOSE_LOUD {
-		<-exitSync
 	}
 
 	test161.StopManager()
