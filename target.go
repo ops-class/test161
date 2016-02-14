@@ -31,12 +31,13 @@ type Target struct {
 	Name             string        `yaml:"name"`
 	Version          uint          `yaml:"version"`
 	Type             string        `yaml:"type"`
-	Points           uint          `yaml:"points"` // Total points for the target (asst)
+	Points           uint          `yaml:"points"`
 	Overlay          string        `yaml:"overlay"`
 	KConfig          string        `yaml:"kconfig"`
 	RequiredCommit   string        `yaml:"required_commit"`
 	RequiresUserland bool          `yaml:"userland"`
 	Tests            []*TargetTest `yaml:"tests"`
+	fileHash         string
 }
 
 type TargetTest struct {
@@ -51,6 +52,19 @@ type TargetCommand struct {
 	Index  int      `yaml:"index"`  // Index > 0 => match to index in test
 	Points uint     `yaml:"points"` // Points for this command
 	Args   []string `yaml:"args"`   // Argument overrides
+}
+
+// TargetListItem is the target detail we send to remote clients about a target
+type TargetListItem struct {
+	Name    string
+	Version uint
+	File    string
+	Hash    string
+}
+
+// TargetList is the JSON blob sent to clients
+type TargetList struct {
+	Targets []*TargetListItem
 }
 
 func NewTarget() *Target {

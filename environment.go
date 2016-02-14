@@ -87,3 +87,18 @@ func NewEnvironment(testDir, targetDir string) (*TestEnvironment, error) {
 
 	return env, nil
 }
+
+func (env *TestEnvironment) TargetList() *TargetList {
+	list := &TargetList{}
+	list.Targets = make([]*TargetListItem, 0, len(env.Targets))
+
+	for _, t := range env.Targets {
+		list.Targets = append(list.Targets, &TargetListItem{
+			Name:    t.Name,
+			Version: t.Version,
+			File:    "",
+			Hash:    "",
+		})
+	}
+	return list
+}
