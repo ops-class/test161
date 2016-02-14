@@ -39,15 +39,10 @@ func getRemoteTargets() (*test161.TargetList, []error) {
 		return nil, []error{errors.New("server field missing in .test161.conf")}
 	}
 
-	endpoint := conf.Server
-	if !strings.HasPrefix(endpoint, "/") {
-		endpoint += "/"
-	}
-	endpoint += "targets"
-
+	endpoint := conf.Server + "/api-v1/targets"
 	request := gorequest.New()
 
-	fmt.Println("Contacting", endpoint)
+	fmt.Println("\nContacting", conf.Server)
 
 	_, body, errs := request.Get(endpoint).End()
 	if errs != nil {
