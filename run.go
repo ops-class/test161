@@ -326,9 +326,20 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	t.allCorrect = true
 
+	// Broadcast current command
+	if env.Persistence != nil {
+		env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, 0)
+	}
+
 	for int(t.commandCounter) < len(t.Commands) {
 		if t.commandCounter != 0 {
 			t.currentCommand.Status = COMMAND_STATUS_RUNNING
+
+			// Broadcast current command
+			if env.Persistence != nil {
+				env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, 0)
+			}
+
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
 			if err != nil {
 				t.addStatus("expect", "couldn't send a command")

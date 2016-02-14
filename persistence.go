@@ -1,11 +1,10 @@
 package test161
 
 const (
-	MSG_PERSIST_CREATE     = iota // The object has been created
-	MSG_PERSIST_UPDATE            // Generic update message.
-	MSG_PERSIST_CMD_UPDATE        //
-	MSG_PERSIST_OUTPUT            // Added an output line (command types only)
-	MSG_PERSIST_COMPLETE          // We won't update the object any more
+	MSG_PERSIST_CREATE   = iota // The object has been created
+	MSG_PERSIST_UPDATE          // Generic update message.
+	MSG_PERSIST_OUTPUT          // Added an output line (command types only)
+	MSG_PERSIST_COMPLETE        // We won't update the object any more
 )
 
 // Inidividual field updates
