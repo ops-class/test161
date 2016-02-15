@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ops-class/test161"
 	"github.com/parnurzeal/gorequest"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -118,8 +119,12 @@ func doSubmit() {
 		if len(errs) > 0 {
 			printRunErrors(errs)
 		} else {
-			fmt.Println(resp)
-			fmt.Println(body)
+			if resp.StatusCode == http.StatusCreated {
+				fmt.Println("\nYour submission has been created and is being processed by the test161 server\n")
+			} else {
+				printRunError(fmt.Errorf("\nThe server could not process your request: %v. \nData: %v\n",
+					resp.Status, body))
+			}
 		}
 	}
 }

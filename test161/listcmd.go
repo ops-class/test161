@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ops-class/test161"
 	"github.com/parnurzeal/gorequest"
+	"net/http"
 	"os"
 	"strings"
 )
@@ -44,9 +45,13 @@ func getRemoteTargets() (*test161.TargetList, []error) {
 
 	fmt.Println("\nContacting", conf.Server)
 
-	_, body, errs := request.Get(endpoint).End()
+	resp, body, errs := request.Get(endpoint).End()
 	if errs != nil {
 		return nil, errs
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, []error{fmt.Errorf("Unable to retrieve remote targets: %v", resp.Status)}
 	}
 
 	targets := &test161.TargetList{}
