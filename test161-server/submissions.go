@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/ops-class/test161"
 	"gopkg.in/mgo.v2"
 	yaml "gopkg.in/yaml.v2"
@@ -30,6 +31,7 @@ type SubmissionServerConfig struct {
 	DBUser     string `yaml:"dbuser"`
 	DBPassword string `yaml:"dbpw"`
 	DBTimeout  uint   `yaml:"dbtimeout"`
+	APIPort    uint   `yaml:"api_port"`
 }
 
 const CONF_FILE = ".test161-server.conf"
@@ -44,7 +46,10 @@ var defaultConfig = &SubmissionServerConfig{
 	DBUser:     "",
 	DBPassword: "",
 	DBTimeout:  10,
+	APIPort:    4000,
 }
+
+var logger = log.New(os.Stderr, "test161-server: ", log.LstdFlags)
 
 type SubmissionServer struct {
 	conf *SubmissionServerConfig
@@ -68,18 +73,19 @@ func NewSubmissionServer() (test161Server, error) {
 	return s, nil
 }
 
+const JsonHeader = "application/json; charset=UTF-8"
+
 // listTargets return all targets available to submit to
 func listTargets(w http.ResponseWriter, r *http.Request) {
 
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Header().Set("Content-Type", JsonHeader)
 	w.WriteHeader(http.StatusOK)
 
 	list := serverEnv.TargetList()
 
 	if err := json.NewEncoder(w).Encode(list); err != nil {
-		panic(err)
+		logger.Println("Error encoding target list:", err)
 	}
-	return
 }
 
 // createSubmission accepts POST requests
@@ -87,39 +93,43 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 
 	var request test161.SubmissionRequest
 
-	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1048576))
-
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1*1024*1024))
 	if err != nil {
-		panic(err)
+		logger.Println("Error reading web request:", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	if err := r.Body.Close(); err != nil {
-		panic(err)
+		logger.Println("Error closing submission request body:", err)
+		w.WriteHeader(http.StatusBadRequest)
 	}
 
 	if err := json.Unmarshal(body, &request); err != nil {
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(422) // unprocessable entity
+		w.Header().Set("Content-Type", JsonHeader)
+		w.WriteHeader(http.StatusBadRequest)
 
-		log.Printf("Error unmarshalling submission request.\nError: %v\nRequest: ", err, string(body))
-
+		logger.Printf("Error unmarshalling submission request. Error: %v\nRequest: ", err, string(body))
 		if err := json.NewEncoder(w).Encode(err); err != nil {
-			log.Println("Error encoding error:", err)
-			return
+			logger.Println("Encoding error:", err)
 		}
 		return
 	}
 
-	// TODO: Target verification.  We should only allow certain targets in certain
-	// windows of time.
-
-	// Make sure we can create the submission
+	// Make sure we can create the submission.  This checks for everything but run errors.
 	submission, errs := test161.NewSubmission(&request, serverEnv)
 	if len(errs) > 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode(errs); err != nil {
-			log.Println("Error encoding error:", err)
-			return
+		w.Header().Set("Content-Type", JsonHeader)
+		w.WriteHeader(422) // unprocessable entity
+
+		// Marhalling a slice of arrays doesn't work, so we'll send back strings.
+		errorStrings := []string{}
+		for _, e := range errs {
+			errorStrings = append(errorStrings, fmt.Sprintf("%v", e))
+		}
+
+		if err := json.NewEncoder(w).Encode(errorStrings); err != nil {
+			logger.Println("Encoding error:", err)
 		}
 		return
 	}
@@ -127,11 +137,15 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 
 	// Run it!
-	go submission.Run()
+	go func() {
+		if runerr := submission.Run(); err != nil {
+			logger.Println("Error running submission:", runerr)
+		}
+	}()
 }
 
 func apiUsage(w http.ResponseWriter, r *http.Request) {
-
+	fmt.Fprintf(w, `<html><body>See <a href="https://github.com/ops-class/test161">the ops-class test161 GitHub page </a> for API and usage</body></html>`)
 }
 
 func loadServerConfig() (*SubmissionServerConfig, error) {
@@ -153,7 +167,7 @@ func loadServerConfig() (*SubmissionServerConfig, error) {
 
 	// Use defaults
 	if file == "" {
-		log.Println("Using default server configuration")
+		logger.Println("Using default server configuration")
 		// TODO: Spit out the default config
 		return defaultConfig, nil
 	}
@@ -206,7 +220,7 @@ func (s *SubmissionServer) setUpEnvironment() error {
 func (s *SubmissionServer) Start() {
 	test161.SetManagerCapacity(s.conf.MaxTests)
 	test161.StartManager()
-	log.Fatal(http.ListenAndServe(":4000", NewRouter()))
+	logger.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", s.conf.APIPort), NewRouter()))
 }
 
 func (s *SubmissionServer) Stop() {

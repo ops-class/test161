@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/gorilla/mux"
-	"log"
 	"net/http"
 	"time"
 )
@@ -62,7 +61,7 @@ func Logger(inner http.Handler, name string) http.Handler {
 
 		inner.ServeHTTP(w, r)
 
-		log.Printf(
+		logger.Printf(
 			"%s\t%s\t%s\t%s",
 			r.Method,
 			r.RequestURI,
