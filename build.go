@@ -143,9 +143,8 @@ func (cmd *BuildCommand) Run(env *TestEnvironment) error {
 
 	cmd.Status = COMMAND_STATUS_RUNNING
 
-	if env.Persistence != nil {
-		env.Persistence.Notify(cmd, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT|MSG_FIELD_STATUS)
-	}
+	env.notifyAndLogErr("Build Command Status", cmd,
+		MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT|MSG_FIELD_STATUS)
 
 	c := exec.Command(tokens[0], tokens[1:]...)
 	c.Dir = cmd.startDir
@@ -172,9 +171,7 @@ func (cmd *BuildCommand) Run(env *TestEnvironment) error {
 		})
 	}
 
-	if env.Persistence != nil {
-		env.Persistence.Notify(cmd, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
-	}
+	env.notifyAndLogErr("Build Command Output", cmd, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
 
 	return err
 }
@@ -227,13 +224,11 @@ func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 	var err error
 
 	t.Result = TEST_RESULT_RUNNING
+	env.notifyAndLogErr("Build Test Running", t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 
-	if env.Persistence != nil {
-		env.Persistence.Notify(t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
-		defer func() {
-			env.Persistence.Notify(t, MSG_PERSIST_COMPLETE, 0)
-		}()
-	}
+	defer func() {
+		env.notifyAndLogErr("Build Test Complete", t, MSG_PERSIST_COMPLETE, 0)
+	}()
 
 	for _, c := range t.Commands {
 
@@ -246,9 +241,7 @@ func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 			c.Status = COMMAND_STATUS_CORRECT
 		}
 
-		if env.Persistence != nil {
-			env.Persistence.Notify(c, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS|MSG_FIELD_OUTPUT)
-		}
+		env.notifyAndLogErr("Build Test Output", c, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS|MSG_FIELD_OUTPUT)
 
 		if err != nil {
 			if t.isTempDir {

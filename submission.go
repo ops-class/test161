@@ -381,7 +381,7 @@ func (s *Submission) Run() error {
 	s.Env.notifyAndLogErr("Submission Status (Running) ", s, MSG_PERSIST_UPDATE, MSG_FIELD_TESTS|MSG_FIELD_STATUS)
 
 	runner := NewDependencyRunner(s.Tests)
-	done, _ := runner.Run()
+	done := runner.Run()
 
 	// Update the score unless a test aborts, then it's 0 and we abort (eventually)
 	for r := range done {

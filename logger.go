@@ -37,10 +37,7 @@ func (t *Test) Recv(receivedTime time.Time, received []byte) {
 			t.currentOutput.Line = t.currentOutput.Buffer.String()
 			t.outputLineComplete()
 			t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
-			if t.env.Persistence != nil {
-				t.env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
-			}
-			t.sendUpdateMsg(UpdateReasonOutput)
+			t.env.notifyAndLogErr("Update Command Output", t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
 			t.currentOutput = &OutputLine{}
 		}
 	}

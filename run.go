@@ -93,8 +93,7 @@ type Test struct {
 	statRecord bool // Protected by statCond.L
 
 	// Output channels
-	statChan   chan Stat           // Nonblocking write
-	updateChan chan *TestUpdateMsg // Nonblocking write, may be nil
+	statChan chan Stat // Nonblocking write
 }
 
 const (
@@ -200,15 +199,11 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	t.env = env
 
 	defer func() {
-		if env.Persistence != nil {
-			env.Persistence.Notify(t, MSG_PERSIST_COMPLETE, 0)
-		}
+		env.notifyAndLogErr("Test Complete", t, MSG_PERSIST_COMPLETE, 0)
 	}()
 
 	t.Result = TEST_RESULT_RUNNING
-	if env.Persistence != nil {
-		env.Persistence.Notify(t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
-	}
+	env.notifyAndLogErr("Test Status Running", t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 
 	// Set the instance-specific input and expected output
 	for _, c := range t.Commands {
@@ -327,20 +322,16 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	t.allCorrect = true
 
 	// Broadcast current command
-	if env.Persistence != nil {
-		env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
-	}
+	env.notifyAndLogErr("Command Status", t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 
 	for int(t.commandCounter) < len(t.Commands) {
 		if t.commandCounter != 0 {
 			t.currentCommand.Status = COMMAND_STATUS_RUNNING
 
 			// Broadcast current command
-			if env.Persistence != nil {
-				env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
-			}
-
+			env.notifyAndLogErr("Command Status", t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
+
 			if err != nil {
 				t.addStatus("expect", "couldn't send a command")
 				break
@@ -447,17 +438,14 @@ func (t *Test) finishCurCommand(env *TestEnvironment, eof bool) *Command {
 		t.currentOutput.Line = t.currentOutput.Buffer.String()
 		t.outputLineComplete()
 		t.currentCommand.Output = append(t.currentCommand.Output, t.currentOutput)
-
-		if env.Persistence != nil {
-			env.Persistence.Notify(t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
-		}
+		env.notifyAndLogErr("Update Command Output", t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_OUTPUT)
 	}
 
 	cur := t.currentCommand
 	cur.evaluate(env.KeyMap, eof)
 
 	if env.Persistence != nil {
-		env.Persistence.Notify(cur, MSG_PERSIST_UPDATE,
+		env.notifyAndLogErr("Command Status", cur, MSG_PERSIST_UPDATE,
 			MSG_FIELD_STATUS|MSG_FIELD_SCORE)
 	}
 
@@ -482,24 +470,6 @@ func (t *Test) finishAndEvaluate() {
 		}
 	} else {
 		t.Result = TEST_RESULT_INCORRECT
-	}
-}
-
-func (t *Test) sendUpdateMsg(reason int) {
-	msg := &TestUpdateMsg{
-		Test:   t,
-		Reason: reason,
-	}
-
-	if reason == UpdateReasonOutput {
-		msg.Data = t.currentOutput
-	} else if reason == UpdateReasonCommandDone {
-		msg.Data = t.currentCommand
-	}
-
-	select {
-	case t.updateChan <- msg:
-	default:
 	}
 }
 

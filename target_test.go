@@ -102,7 +102,7 @@ func runTargetTest(t *testing.T, testPoints map[string]*expectedTestResults, tar
 	env.manager.start()
 
 	r := NewDependencyRunner(tg)
-	done, _ := r.Run()
+	done := r.Run()
 
 	for res := range done {
 		id := res.Test.DependencyID
