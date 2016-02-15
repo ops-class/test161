@@ -69,6 +69,7 @@ type Submission struct {
 type TargetResult struct {
 	TargetName     string    `bson:"target_name"`
 	TargetVersion  uint      `bson:"target_version"`
+	TargetType     string    `bson:"target_type"`
 	Status         string    `bson:"status"`
 	Score          uint      `bson:"score"`
 	MaxScore       uint      `bson:"max_score"`
@@ -253,6 +254,7 @@ func (s *Submission) TargetResult() (result *TargetResult) {
 	result = &TargetResult{
 		TargetName:     s.TargetName,
 		TargetVersion:  s.TargetVersion,
+		TargetType:     s.TargetType,
 		Status:         s.Status,
 		Score:          s.Score,
 		MaxScore:       s.PointsAvailable,
@@ -278,8 +280,14 @@ func (s *Submission) updateStudents() {
 		student.LastSubmission = res
 		if s.Status == SUBMISSION_COMPLETED {
 			// Update the high score for the target
-			if prev, ok := student.TargetResults[s.TargetName]; !ok || prev.Score < s.Score {
-				student.TargetResults[s.TargetName] = res
+			if s.TargetType == TARGET_ASST {
+				if prev, ok := student.TargetResults[s.TargetName]; !ok || prev.Score < s.Score {
+					student.TargetResults[s.TargetName] = res
+				}
+			} else if s.TargetType == TARGET_PERF && s.Score == s.PointsAvailable {
+				if prev, ok := student.TargetResults[s.TargetName]; !ok || prev.Performance < s.Performance {
+					student.TargetResults[s.TargetName] = res
+				}
 			}
 		}
 		if s.Env.Persistence != nil {
