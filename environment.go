@@ -2,6 +2,8 @@ package test161
 
 import (
 	"io/ioutil"
+	"log"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -19,6 +21,8 @@ type TestEnvironment struct {
 	CacheDir    string
 	Persistence PersistenceManager
 
+	Log *log.Logger
+
 	// These depend on the TestGroup/Target
 	KeyMap  map[string]string
 	RootDir string
@@ -34,6 +38,7 @@ func (env *TestEnvironment) CopyEnvironment() *TestEnvironment {
 		Targets:     env.Targets,
 		manager:     env.manager,
 		Persistence: env.Persistence,
+		Log:         env.Log,
 		KeyMap:      make(map[string]string),
 		RootDir:     "",
 	}
@@ -55,6 +60,7 @@ func NewEnvironment(testDir, targetDir string) (*TestEnvironment, error) {
 		Commands: make(map[string]*CommandTemplate),
 		Targets:  make(map[string]*Target),
 		KeyMap:   make(map[string]string),
+		Log:      log.New(os.Stderr, "test161: ", log.Ldate|log.Ltime|log.Lshortfile),
 	}
 
 	for _, templ := range templates.Templates {
@@ -101,4 +107,16 @@ func (env *TestEnvironment) TargetList() *TargetList {
 		})
 	}
 	return list
+}
+
+// Helper function for logging persistence errors
+func (env *TestEnvironment) notifyAndLogErr(desc string, entity interface{}, msg, what int) {
+	if env.Persistence != nil {
+		err := env.Persistence.Notify(entity, msg, what)
+		if err != nil {
+			if env.Log != nil {
+				env.Log.Printf("(%v) Error writing data: %v\n", desc, err)
+			}
+		}
+	}
 }

@@ -15,6 +15,10 @@ const (
 	MSG_FIELD_OUTPUT
 )
 
+const (
+	PERSIST_TYPE_STUDENTS = 1 << iota
+)
+
 // Each Submission has at most one PersistenceManager, and it is pinged when a
 // variety of events occur.  These callbacks are invoked synchronously, so it's
 // up to the PersistenceManager to not slow down the tests. We do this because
@@ -24,6 +28,12 @@ const (
 type PersistenceManager interface {
 	Close()
 	Notify(entity interface{}, msg, what int) error
+	CanRetrieve() bool
+
+	// what should be PERSIST_TYPE_*
+	// who is a map of field:value
+	// res is where to deserialize the data
+	Retrieve(what int, who map[string]interface{}, res interface{}) error
 }
 
 type DoNothingPersistence struct {
@@ -33,5 +43,13 @@ func (d *DoNothingPersistence) Close() {
 }
 
 func (d *DoNothingPersistence) Notify(entity interface{}, msg, what int) error {
+	return nil
+}
+
+func (d *DoNothingPersistence) CanRetrieve() bool {
+	return false
+}
+
+func (d *DoNothingPersistence) Retrieve(what int, who map[string]interface{}, res interface{}) error {
 	return nil
 }

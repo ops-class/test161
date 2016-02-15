@@ -17,8 +17,8 @@ func TestSubmissionRun(t *testing.T) {
 		Target: "asst1",
 		Users: []*SubmissionUserInfo{
 			&SubmissionUserInfo{
-				EmailAddress: "t1@xcv58.com",
-				Token:        "abcd",
+				Email: "t1@xcv58.com",
+				Token: "ATamoCT7DdeNdnErQ",
 			},
 		},
 		Repository: "git@gitlab.ops-class.org:staff/sol1.git",
@@ -45,6 +45,11 @@ func TestSubmissionRun(t *testing.T) {
 	s, errs := NewSubmission(req, env)
 	assert.Equal(0, len(errs))
 	assert.NotNil(s)
+
+	if s == nil || len(errs) > 0 {
+		t.Log(errs)
+		t.FailNow()
+	}
 
 	env.manager.start()
 

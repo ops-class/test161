@@ -38,3 +38,11 @@ func (c *ConsolePersistence) Notify(entity interface{}, msg, what int) error {
 
 	return nil
 }
+
+func (d *ConsolePersistence) Retrieve(what int, who map[string]interface{}, res interface{}) error {
+	return nil
+}
+
+func (d *ConsolePersistence) CanRetrieve() bool {
+	return false
+}

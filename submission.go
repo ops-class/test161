@@ -1,15 +1,18 @@
 package test161
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/satori/go.uuid"
 	"os"
+	"sync"
 	"time"
 )
 
 type SubmissionUserInfo struct {
-	EmailAddress string `yaml:"email"`
-	Token        string `yaml:"token"`
+	Email string `yaml:"email"`
+	Token string `yaml:"token"`
 }
 
 // SubmissionRequests are created by clients and used to generate Submissions.
@@ -50,7 +53,7 @@ type Submission struct {
 	Score       uint     `bson:"score"`
 	Performance float64  `bson:"performance"`
 	TestIDs     []string `bson:"tests"`
-	Message     string   `bson:"message"`
+	Errors      []string `bson:"errors"`
 
 	SubmissionTime time.Time `bson:"submission_time"`
 	CompletionTime time.Time `bson:"completion_time"`
@@ -59,32 +62,94 @@ type Submission struct {
 
 	BuildTest *BuildTest `bson:"-"`
 	Tests     *TestGroup `bson:"-"`
+
+	students []*Student
 }
 
-func (req *SubmissionRequest) validate(env *TestEnvironment) error {
+type TargetResult struct {
+	TargetName     string    `bson:"target_name"`
+	TargetVersion  uint      `bson:"target_version"`
+	Status         string    `bson:"status"`
+	Score          uint      `bson:"score"`
+	MaxScore       uint      `bson:"max_score"`
+	Performance    float64   `bson:"performance"`
+	SubmissionTime time.Time `bson:"submission_time"`
+	CompletionTime time.Time `bson:"completion_time"`
+	SubmissionID   string    `bson:"submission_id"`
+}
+
+type Student struct {
+	ID             string                   `bson:"_id"`
+	Email          string                   `bson:"email"`
+	Token          string                   `bson:"token"`
+	LastSubmission *TargetResult            `bson:"last_submission"`
+	TargetResults  map[string]*TargetResult `bson:"target_results"`
+}
+
+// Keep track of pending submissions.  Keep this out of the database in case there are
+// communication issues so that we don't need to manually reset things in the DB.
+var userLock = &sync.Mutex{}
+var pendingSubmissions = make(map[string]bool)
+
+// Check users against users database.  Don't lock them until we run though
+func (req *SubmissionRequest) validateUsers(env *TestEnvironment) ([]*Student, error) {
+
+	allStudents := make([]*Student, 0)
+
+	for _, user := range req.Users {
+		request := map[string]interface{}{
+			"email": user.Email,
+			"token": user.Token,
+		}
+
+		fmt.Println("Received:", user.Email, user.Token)
+
+		students := []*Student{}
+		if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, &students); err != nil {
+			return nil, err
+		}
+
+		if len(students) != 1 || students[0].Email != user.Email || students[0].Token != user.Token {
+			return nil, errors.New("Unable to authenticate student: " + user.Email)
+		}
+		allStudents = append(allStudents, students[0])
+	}
+
+	return allStudents, nil
+}
+
+func (req *SubmissionRequest) validate(env *TestEnvironment) ([]*Student, error) {
+
+	students := []*Student{}
+	var err error
 
 	if _, ok := env.Targets[req.Target]; !ok {
-		return errors.New("Invalid target: " + req.Target)
+		return students, errors.New("Invalid target: " + req.Target)
 	}
-
-	// TODO: Check for closed targets
 
 	if len(req.Users) == 0 {
-		return errors.New("No usernames specified")
+		return students, errors.New("No usernames specified")
 	}
 
-	// TODO: Check users against users database, duplicate user, etc.
+	if env.Persistence != nil && env.Persistence.CanRetrieve() {
+		if students, err = req.validateUsers(env); err != nil {
+			return students, err
+		}
+	}
 
 	if len(req.Repository) == 0 || len(req.CommitID) == 0 {
-		return errors.New("Must specify a Git repository and commit id")
+		return students, errors.New("Must specify a Git repository and commit id")
 	}
 
-	return nil
+	return students, nil
 }
 
 // Create a new Submission that can be evaluated by the test161 server or client.
 func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submission, []error) {
-	if err := request.validate(env); err != nil {
+	var students []*Student
+	var err error
+
+	if students, err = request.validate(env); err != nil {
 		return nil, []error{err}
 	}
 
@@ -126,7 +191,7 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 		Score:       uint(0),
 		Performance: float64(0.0),
 		TestIDs:     []string{buildTest.ID},
-		Message:     "",
+		Errors:      []string{},
 
 		SubmissionTime: time.Now(),
 
@@ -135,14 +200,45 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 		Tests:     tg,
 	}
 
+	s.students = students
 	s.Users = make([]string, 0, len(request.Users))
 	for _, u := range request.Users {
-		s.Users = append(s.Users, u.EmailAddress)
+		s.Users = append(s.Users, u.Email)
+	}
+
+	// Try and lock students now so we don't
+	userLock.Lock()
+	defer userLock.Unlock()
+
+	// First pass - just check
+	for _, student := range students {
+		if running := pendingSubmissions[student.Email]; running {
+			msg := fmt.Sprintf("Cannot submit at this time: User %v has a submission pending.", student.Email)
+			env.Log.Println(msg)
+			return nil, []error{errors.New(msg)}
+		}
+	}
+
+	// Now lock
+	for _, student := range students {
+		pendingSubmissions[student.Email] = true
 	}
 
 	if env.Persistence != nil {
-		env.Persistence.Notify(buildTest, MSG_PERSIST_CREATE, 0)
-		env.Persistence.Notify(s, MSG_PERSIST_CREATE, 0)
+		if buildTest != nil {
+			// If we get an error here, we can still hopefully recover
+			env.notifyAndLogErr("Create Build Test", buildTest, MSG_PERSIST_CREATE, 0)
+		}
+		// This we can't recover from
+		err = env.Persistence.Notify(s, MSG_PERSIST_CREATE, 0)
+	}
+
+	// Unlock so they can resubmit
+	if err != nil {
+		for _, student := range students {
+			delete(pendingSubmissions, student.Email)
+		}
+		return nil, []error{err}
 	}
 
 	return s, nil
@@ -151,6 +247,74 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 func (s *Submission) persistFailure() {
 	// TODO: handle failures
 	s.Status = SUBMISSION_ABORTED
+}
+
+func (s *Submission) TargetResult() (result *TargetResult) {
+	result = &TargetResult{
+		TargetName:     s.TargetName,
+		TargetVersion:  s.TargetVersion,
+		Status:         s.Status,
+		Score:          s.Score,
+		MaxScore:       s.PointsAvailable,
+		Performance:    s.Performance,
+		SubmissionTime: s.SubmissionTime,
+		CompletionTime: s.CompletionTime,
+		SubmissionID:   s.ID,
+	}
+	return
+}
+
+// Update students.  We copy metadata to make this quick and store the
+// submision id to look up the full details.
+func (s *Submission) updateStudents() {
+
+	res := s.TargetResult()
+	for _, student := range s.students {
+		// This might be nil coming out of Mongo
+		if student.TargetResults == nil {
+			student.TargetResults = make(map[string]*TargetResult)
+		}
+
+		student.LastSubmission = res
+		if s.Status == SUBMISSION_COMPLETED {
+			// Update the high score for the target
+			if prev, ok := student.TargetResults[s.TargetName]; !ok || prev.Score < s.Score {
+				student.TargetResults[s.TargetName] = res
+			}
+		}
+		if s.Env.Persistence != nil {
+			if err := s.Env.Persistence.Notify(student, MSG_PERSIST_UPDATE, 0); err != nil {
+				if sbytes, jerr := json.Marshal(student); jerr != nil {
+					s.Env.Log.Printf("Error updating student: %v  (%v)\n", student.Email, err)
+				} else {
+					s.Env.Log.Printf("Error updating student: %v  (%v)\n", string(sbytes), err)
+				}
+			}
+		}
+	}
+
+	userLock.Lock()
+	defer userLock.Unlock()
+
+	// Unblock the students from resubmitting
+	for _, student := range s.students {
+		delete(pendingSubmissions, student.Email)
+	}
+}
+
+func (s *Submission) finish() {
+
+	s.CompletionTime = time.Now()
+	if s.Status == SUBMISSION_RUNNING {
+		s.Status = SUBMISSION_COMPLETED
+	}
+
+	// Send the final submission update to the db
+	s.Env.notifyAndLogErr("Finish Submission", s, MSG_PERSIST_COMPLETE, 0)
+
+	if len(s.students) > 0 {
+		s.updateStudents()
+	}
 }
 
 // Synchronous submission runner
@@ -166,20 +330,17 @@ func (s *Submission) Run() error {
 		s.Env.Persistence = &DoNothingPersistence{}
 	}
 
+	defer s.finish()
+
 	// Build os161
 	if s.BuildTest != nil {
 		s.Status = SUBMISSION_BUILDING
-		err = s.Env.Persistence.Notify(s, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
-		if err != nil {
-			s.persistFailure()
-			return err
-		}
+		s.Env.notifyAndLogErr("Submission Status Building", s, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 
-		var res *BuildResults
-		res, err = s.BuildTest.Run(s.Env)
+		res, err := s.BuildTest.Run(s.Env)
 		if err != nil {
 			s.Status = SUBMISSION_ABORTED
-			s.Env.Persistence.Notify(s, MSG_PERSIST_COMPLETE, 0)
+			s.Env.notifyAndLogErr("Submission Complete (Aborted)", s, MSG_PERSIST_COMPLETE, 0)
 			return err
 		}
 
@@ -199,20 +360,17 @@ func (s *Submission) Run() error {
 		s.TestIDs = append(s.TestIDs, test.ID)
 
 		// Create the test object in the DB
+		// If this fails, we abort the submission beacase we can't verify the results
 		err = s.Env.Persistence.Notify(test, MSG_PERSIST_CREATE, 0)
 		if err != nil {
-			s.persistFailure()
-			return nil
+			s.Status = SUBMISSION_ABORTED
+			return err
 		}
 	}
 
 	// Run it
 	s.Status = SUBMISSION_RUNNING
-	err = s.Env.Persistence.Notify(s, MSG_PERSIST_UPDATE, MSG_FIELD_TESTS|MSG_FIELD_STATUS)
-	if err != nil {
-		s.persistFailure()
-		return nil
-	}
+	s.Env.notifyAndLogErr("Submission Status (Running) ", s, MSG_PERSIST_UPDATE, MSG_FIELD_TESTS|MSG_FIELD_STATUS)
 
 	runner := NewDependencyRunner(s.Tests)
 	done, _ := runner.Run()
@@ -229,13 +387,10 @@ func (s *Submission) Run() error {
 				s.Env.Persistence.Notify(s, MSG_PERSIST_UPDATE, MSG_FIELD_SCORE)
 			}
 		}
+		if r.Err != nil {
+			s.Errors = append(s.Errors, fmt.Sprintf("%v", r.Err))
+		}
 	}
-
-	if s.Status == SUBMISSION_RUNNING {
-		s.Status = SUBMISSION_COMPLETED
-	}
-	s.CompletionTime = time.Now()
-	err = s.Env.Persistence.Notify(s, MSG_PERSIST_COMPLETE, 0)
 
 	return err
 }
