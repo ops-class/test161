@@ -80,11 +80,11 @@ type TargetResult struct {
 }
 
 type Student struct {
-	ID             string                   `bson:"_id"`
-	Email          string                   `bson:"email"`
-	Token          string                   `bson:"token"`
-	LastSubmission *TargetResult            `bson:"last_submission"`
-	TargetResults  map[string]*TargetResult `bson:"target_results"`
+	ID             string          `bson:"_id"`
+	Email          string          `bson:"email"`
+	Token          string          `bson:"token"`
+	LastSubmission *TargetResult   `bson:"last_submission"`
+	TargetResults  []*TargetResult `bson:"target_results"`
 }
 
 // Keep track of pending submissions.  Keep this out of the database in case there are
@@ -102,8 +102,6 @@ func (req *SubmissionRequest) validateUsers(env *TestEnvironment) ([]*Student, e
 			"email": user.Email,
 			"token": user.Token,
 		}
-
-		fmt.Println("Received:", user.Email, user.Token)
 
 		students := []*Student{}
 		if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, &students); err != nil {
@@ -274,22 +272,28 @@ func (s *Submission) updateStudents() {
 	for _, student := range s.students {
 		// This might be nil coming out of Mongo
 		if student.TargetResults == nil {
-			student.TargetResults = make(map[string]*TargetResult)
+			student.TargetResults = make([]*TargetResult, 0)
 		}
 
 		student.LastSubmission = res
-		if s.Status == SUBMISSION_COMPLETED {
-			// Update the high score for the target
-			if s.TargetType == TARGET_ASST {
-				if prev, ok := student.TargetResults[s.TargetName]; !ok || prev.Score < s.Score {
-					student.TargetResults[s.TargetName] = res
-				}
-			} else if s.TargetType == TARGET_PERF && s.Score == s.PointsAvailable {
-				if prev, ok := student.TargetResults[s.TargetName]; !ok || prev.Performance < s.Performance {
-					student.TargetResults[s.TargetName] = res
+
+		// Update the high score for the target
+		if s.Status == SUBMISSION_COMPLETED &&
+			(s.TargetType == TARGET_ASST || s.Score == s.PointsAvailable) {
+			found := false
+			var prev *TargetResult
+			for _, prev = range student.TargetResults {
+				if prev.TargetName == s.TargetName {
+					found = true
+					break
 				}
 			}
+			if !found || (s.TargetType == TARGET_ASST && prev.Score < s.Score) ||
+				(s.TargetType == TARGET_PERF && prev.Performance < s.Performance) {
+				student.TargetResults = append(student.TargetResults, res)
+			}
 		}
+
 		if s.Env.Persistence != nil {
 			if err := s.Env.Persistence.Notify(student, MSG_PERSIST_UPDATE, 0); err != nil {
 				if sbytes, jerr := json.Marshal(student); jerr != nil {
