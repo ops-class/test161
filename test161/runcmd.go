@@ -111,7 +111,7 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 	}
 
 	test161.StartManager()
-	done, _ := r.Run()
+	done := r.Run()
 
 	// Collect the results
 	complete := make([]*test161.Test161JobResult, 0)
