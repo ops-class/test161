@@ -232,6 +232,11 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	defer os.RemoveAll(tempRoot)
 	t.tempDir = path.Join(tempRoot, "root")
 
+	// Delete this first because shutil can't handle this
+	// FIXME: we should just copy what we need instead of this hack,
+	// but then we need to handle symlinks too.
+	os.RemoveAll(path.Join(env.RootDir, ".sockets/"))
+
 	// Copy root.
 	err = shutil.CopyTree(env.RootDir, t.tempDir, nil)
 	if err != nil {
@@ -239,6 +244,10 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		t.Result = TEST_RESULT_ABORT
 		return err
 	}
+
+	// ... and clean it up - disk161 can't handle this
+	os.Remove(path.Join(t.tempDir, "LHD0.img"))
+	os.Remove(path.Join(t.tempDir, "LHD1.img"))
 
 	// Make sure we have a kernel.
 	kernelTarget := path.Join(t.tempDir, "kernel")
@@ -271,7 +280,6 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	// Create disks.
 	if t.Sys161.Disk1.Enabled == "true" {
-		os.Remove(path.Join(t.tempDir, "LHD0.img"))
 		create := exec.Command("disk161", "create", "LHD0.img", t.Sys161.Disk1.Bytes)
 		create.Dir = t.tempDir
 		err = create.Run()
@@ -283,7 +291,6 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		}
 	}
 	if t.Sys161.Disk2.Enabled == "true" {
-		os.Remove(path.Join(t.tempDir, "LHD1.img"))
 		create := exec.Command("disk161", "create", "LHD1.img", t.Sys161.Disk2.Bytes)
 		create.Dir = t.tempDir
 		err = create.Run()
