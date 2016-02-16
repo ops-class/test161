@@ -90,9 +90,10 @@ func help() {
 }
 
 func main() {
+	exitcode := 2
+
 	if len(os.Args) == 1 {
 		usage()
-		os.Exit(2)
 	} else {
 		// Get the sub-command
 		if os.Args[1] == "help" {
@@ -102,15 +103,15 @@ func main() {
 			envInit() // This might exit
 			switch os.Args[1] {
 			case "run":
-				doRun()
+				exitcode = doRun()
 			case "submit":
-				doSubmit()
+				exitcode = doSubmit()
 			case "list-targets":
-				doListTargets()
+				exitcode = doListTargets()
 			default:
 				usage()
-				os.Exit(2)
 			}
 		}
 	}
+	os.Exit(exitcode)
 }
