@@ -56,8 +56,8 @@ server: https://test161.ops-class.org
 repository: git@your-remote-git-repo.os161.git
 users:
   - email: "your-email@bufalo.edu"
-    token: "your-token (from test161.ops-class.org"
+    token: "your-token (from test161.ops-class.org)"
   - email: "your-email@bufalo.edu"
-    token: "your-token (from test161.ops-class.org"
+    token: "your-token (from test161.ops-class.org)"
 `)
 }

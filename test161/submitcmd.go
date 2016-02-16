@@ -146,7 +146,7 @@ func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
 		if target.Name == submitTargetName {
 			// Verify that the targets are actually the same
 			if target.FileHash != ourVersion.FileHash {
-				return nil, fmt.Errorf("Target '%v' is out of date with the server version.  Please update your os161 sources", name)
+				return nil, fmt.Errorf("Target '%v' is out of sync with the server version.  Please update your os161 sources", name)
 			}
 			serverVersion = target
 			break
