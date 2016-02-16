@@ -253,6 +253,8 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 * Correctly identify lines in interleaved output.
 * Tracking dependencies should be the default and ignoring them the command
 line option.
+* Add ways to print all tests and groups.
+* Set the exit code to indicate whether all tests passed.
 
 === Support for GDB backtraces on error
 
