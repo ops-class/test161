@@ -78,7 +78,7 @@ style file names.  The following are all valid commands:
 
 [source,bash]
 ----
-test161 run snyc/*.t         # Run all tests in the tests/sync
+test161 run sync/*.t         # Run all tests in the tests/sync
 test161 run **/l*.t          # Run all tests in all sub-directories beginning with 'l'
 test161 run syncprobs/sp*.t  # Run the syncprobs
 test161 run sync/lt1.t       # Run lock test 1
