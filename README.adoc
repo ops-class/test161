@@ -251,6 +251,8 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 * Configuration sanity checks
 * sys161 version checks
 * Correctly identify lines in interleaved output.
+* Tracking dependencies should be the default and ignoring them the command
+line option.
 
 === Support for GDB backtraces on error
 
