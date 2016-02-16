@@ -217,7 +217,7 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 
 	// Print totals
 	desc := []string{"Total Correct", "Total Incorrect",
-		"Total Aborted", "Total Skipped",
+		"Total Skipped", "Total Aborted",
 	}
 
 	fmt.Println()
