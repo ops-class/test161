@@ -51,16 +51,50 @@ go install github.com/ops-class/test161/test161
 
 == Configuration
 
+In order to run `test161`, it needs to know about which <<tests>>, 
+<<targets>>, and <<commands>> it can run, and what to expect from  each command.
+Additionally, `test161` needs to know where to find your root directory for
+testing and your repository for submission. This information is specified in your
+`.test161.conf` file, which can be located in your `$HOME` directory, or whichever
+directory you plan to run `test161` in. If you run `test161 run` without a config
+file set up, an example will be displayed on screen.  You can redirect this output
+to `.test161.conf` and edit it accordingly.
+
+[source,bash]
+----
+test161 run > ~/.test161.conf
+vim ~/.test161.conf
+----
+
 == Usage
 
-`test161` requires a set of arguments. The following can be provided either
-on the command line or in a YAML configuration file:
+=== Running Tests
 
-* `root:` or `--root`: the location of a directory containing the kernel
-binary to test and any associated executables that are required, probably
-`~/root/` or `~/os161/root` depending on how you have configured your OS/161
-source tree
-* `tests:` or `--tests`: a list of directories containing testing scripts.
+To run a tests, group of tests, or target, use the `test161 run <names>` sub-command.
+Here, names can be a single target, a list of tests, or a list of <<tags>>.footnote:[In the case
+that tag and target names conflict, specify -tag if you mean tag.] For test files,
+<names> is a list of http://www.linuxjournal.com/content/globstar-new-bash-globbing-option [globstar]
+style file names.  The following are all valid commands:
+
+[source,bash]
+----
+test161 run snyc/*.t         # Run all tests in the tests/sync
+test161 run **/l*.t          # Run all tests in all sub-directories beginning with 'l'
+test161 run syncprobs/sp*.t  # Run the syncprobs
+test161 run sync/lt1.t       # Run lock test 1
+test161 run locks            # Run all lock tests (tests tagged with 'locks')
+test161 run asst1            # Run the asst1 target
+----
+
+==== Command Line Flags
+There are several command line flags that can be specified to customize how `test161` runs tests.
+
+* -dry-run (-r): Show the tests that would be run, but don't run them.
+* -sequential (-s): By default the output of all tests are interleaved, which can be hard to debug.
+Specify this option to run tests one at a time.
+* -dependencies (-d): Run the given tests and their dependencies. In test files, you can specify a
+test's dependencies, and the test will be skipped if the dependency fails.
+* -verbose (-v): There are 3 levels of output: loud (default), quiet, and whishper.
 
 == Requirements
 
@@ -94,6 +128,34 @@ monitor:
     prompt: 300
     progress: 60
 ....
+
+== Commands, Tests, and Targets
+
+=== [[commands]]Commands
+
+The basic unit in `test161` is a command. such as `lt1` for running Lock Test 1,
+or `sp1` to run the whalemating test.  Information about what to
+expect when running these commands, as well as what input/ouput they expect
+ is specified in the `commands/` directory in your test161 root directory.
+All .tc (test command) file in this directory will be loaded and commands must
+only be specified once.
+
+=== [[tests]]Tests
+
+Test files (*.t) are located in the `tests/` directory in your test161 root
+directory. This directory can contain subdirectories to help organize tests.
+Each test consists of one or more commands, and each test can have its own
+`sys161` configuration.  Tests are run in their own sandboxed envrionment, 
+but commands within the test are executed within the same `sys161` session.
+Some tests will consist of multiple commands, and such tests are designed to
+stress test your system.
+
+=== [[targets]]Targets
+
+Target files (*.tt) are located in the `targets/` directory in your test161 root
+directory. Targets specify which tests are run for each assignment, and
+how the scoring is distributed. When you `test161 submit` your assignments, you will
+specify which target to submit to.
 
 == Features
 
@@ -139,6 +201,10 @@ But this is so much simpler, right?
 $ /bin/true
 ....
 
+=== [tags]Test Tags
+Optionally, tests can have one or more tags. `test161` can be invoked to run these tests
+as a group with `test161 run <tag>`.
+
 === Progress Tracking Using `stat161` Output
 
 `test161` uses the collected `stat161` output produced by the running kernel to
@@ -161,6 +227,22 @@ User limits are only applied when running in userspace.
 also checks to ensure that there are no user cycles generated when we are
 running in kernel mode, which could be caused by a hung progress.
 
+
+=== Running multiple tests and dependencies
+
+=== Correctness vs. Grading
+
+=== Multiple output strategies
+
+`test161` supports different output strategies through its PersistenceManager
+interface. Each TestEnvironment as a PersistenceManager which receives
+callbacks when events happen, like when scores changes, status change, or when
+output lines are added. This allows multiple implementations to handle output
+as they wish. The test161 client utility implements the interface through
+its ConsolePersistence type, which writes all input to stdout. The server uses
+a MongoPersistence type which outputs JSON data to our mongo backend server.
+
+
 == TODOs
 
 === Nits
@@ -169,75 +251,22 @@ running in kernel mode, which could be caused by a hung progress.
 * Configuration sanity checks
 * sys161 version checks
 
-=== Running multiple tests and dependencies
-
-Support for loading a bunch of tests from a directory and running multiple
-tests concurrently, probably identified by a tag. (You might want to look at
-this parallel walk library: github.com/MichaelTJones/walk)
-
-For test dependency traking my idea is to have all tests start in parallel in
-multiple goroutines but then wait on a channel until all of their
-dependencies are met (or one fails, in which case the test will abort). To
-control concurrency, they should next wait on a separate channel for a
-message from a concurrency manager that can limit the number of `sys161`
-instances executing in parallel.
-
-=== Multiple output strategies
-
-We want to support printing to the screen (not the JSON, but output that
-looks like what you'd see in the terminal) and saving JSON output to a
-MongoDB instance for later grading.
-
-=== Primitive success or failure tracking
-
-This isn't grading, which is more
-fine-grained, just a sense of whether the test(s) completely successfully and
-didn't panic. I'm working on standardizing the OS/161 test output to make
-this easier so that every test prints a SUCCESS or FAILURE message on exit,
-but we still need to grab panics.
-
-commands.go has the building blocks for determining this. Expected output is
-specified using golang templates.  Also, random inputs can be generated in
-this way as well. Some things that still need to be done:
-
-* Master commands template yaml file, which will get updated as the output
-is fixed in os161
-* External output references (i.e. triplehuge referencing huge)
-* Integrating this with Tests and, eventually, submissions.
-
 === Support for GDB backtraces on error
 
 It should be possible to automate the process of hooking up a debugger and
 running BT on panics.
 
-
-=== Targets/Submissions
-
-This needs to be fully designed.  Some considerations:
-
-* Multiple target types, e.g. assignments, performance
-* Grading
-* Integration with TestGroups (which work)
-* Output format
-* Submission metadata
-* Test specification
-* Argument overriding (see commands.go)
-* Short-circuit setting - when to stop the test?  when to skip dependencies?
-
 === Security
 
 The os161 side is in working condition, though we need still need to modify
-userspace binaries and add secprintf to userspace.  In test161, we need to
-verify output lines when we see the secure 4-tuple. Still to do:
+userspace binaries and add secprintf to userspace.  In test161, we currently
+verify output lines when we see the secure 4-tuple, but the keymap still
+needs to be generated during the build. Still to do:
 
 * Key generation
 * Overlay file copying
 * Key substitution
-* Key verification
+* Check for unique salt values during validation
 
-=== Client & Server Binaries
-
-* Client Local test runner
-* Client sumbission
-* Server daemon
-* Server stats?
+=== Server Binary
+* Server stats API
