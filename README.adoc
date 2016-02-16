@@ -72,7 +72,7 @@ vim ~/.test161.conf
 
 To run a tests, group of tests, or target, use the `test161 run <names>` sub-command.
 Here, names can be a single target, a list of tests, or a list of <<tags>>.footnote:[In the case
-that tag and target names conflict, specify -tag if you mean tag.] For test files,
+that tag and target names conflict, specify `-tag` if you mean tag.] For test files,
 <names> is a list of http://www.linuxjournal.com/content/globstar-new-bash-globbing-option [globstar]
 style file names.  The following are all valid commands:
 
@@ -89,12 +89,13 @@ test161 run asst1            # Run the asst1 target
 ==== Command Line Flags
 There are several command line flags that can be specified to customize how `test161` runs tests.
 
-* -dry-run (-r): Show the tests that would be run, but don't run them.
-* -sequential (-s): By default the output of all tests are interleaved, which can be hard to debug.
+* `-dry-run` (`-r`): Show the tests that would be run, but don't run them.
+* `-sequential` (`-s`): By default the output of all tests are interleaved, which can be hard to debug.
 Specify this option to run tests one at a time.
-* -dependencies (-d): Run the given tests and their dependencies. In test files, you can specify a
+* `-dependencies` (`-d`): Run the given tests and their dependencies. In test files, you can specify a
 test's dependencies, and the test will be skipped if the dependency fails.
-* -verbose (-v): There are 3 levels of output: loud (default), quiet, and whishper.
+* `-verbose` (`-v`): There are 3 levels of output: `loud` (default), `quiet` (no test output), and `whisper` (only final summary, no
+per test status).
 
 == Requirements
 
@@ -142,7 +143,7 @@ only be specified once.
 
 === [[tests]]Tests
 
-Test files (*.t) are located in the `tests/` directory in your test161 root
+Test files (`*.t`) are located in the `tests/` directory in your test161 root
 directory. This directory can contain subdirectories to help organize tests.
 Each test consists of one or more commands, and each test can have its own
 `sys161` configuration.  Tests are run in their own sandboxed envrionment, 
@@ -152,7 +153,7 @@ stress test your system.
 
 === [[targets]]Targets
 
-Target files (*.tt) are located in the `targets/` directory in your test161 root
+Target files (`*.tt`) are located in the `targets/` directory in your test161 root
 directory. Targets specify which tests are run for each assignment, and
 how the scoring is distributed. When you `test161 submit` your assignments, you will
 specify which target to submit to.
@@ -201,7 +202,7 @@ But this is so much simpler, right?
 $ /bin/true
 ....
 
-=== [tags]Test Tags
+=== [[tags]]Test Tags
 Optionally, tests can have one or more tags. `test161` can be invoked to run these tests
 as a group with `test161 run <tag>`.
 
