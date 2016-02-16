@@ -154,7 +154,7 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 		info := &result{
 			test:   res.Test.DependencyID,
 			result: res.Test.Result,
-			score:  fmt.Sprintf("%v/%v", res.Test.PointsAvailable, res.Test.PointsEarned),
+			score:  fmt.Sprintf("%v/%v", res.Test.PointsEarned, res.Test.PointsAvailable),
 		}
 		if len(info.test) > max[0] {
 			max[0] = len(info.test)
