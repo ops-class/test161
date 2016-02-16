@@ -23,8 +23,7 @@ var serverEnv *test161.TestEnvironment
 // Environment config
 type SubmissionServerConfig struct {
 	CacheDir   string `yaml:"cache_dir"`
-	TestDir    string `yaml:"test_dir"`
-	TargetDir  string `yaml:"target_dir"`
+	Test161Dir string `yaml:"test161dir`
 	MaxTests   uint   `yaml:"max_tests"`
 	Database   string `yaml:"dbname"`
 	DBServer   string `yaml:"dbsever"`
@@ -38,8 +37,7 @@ const CONF_FILE = ".test161-server.conf"
 
 var defaultConfig = &SubmissionServerConfig{
 	CacheDir:   "/var/cache/test161/builds",
-	TestDir:    "../fixtures/tests/nocycle",
-	TargetDir:  "../fixtures/targets",
+	Test161Dir: "../fixtures/",
 	MaxTests:   0,
 	Database:   "test161",
 	DBServer:   "localhost:27017",
@@ -190,7 +188,7 @@ func loadServerConfig() (*SubmissionServerConfig, error) {
 func (s *SubmissionServer) setUpEnvironment() error {
 
 	// Submission environment
-	env, err := test161.NewEnvironment(s.conf.TestDir, s.conf.TargetDir)
+	env, err := test161.NewEnvironment(s.conf.Test161Dir)
 	if err != nil {
 		return err
 	}
