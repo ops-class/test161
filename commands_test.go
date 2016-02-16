@@ -145,10 +145,12 @@ func TestCommandFactorial(t *testing.T) {
 }
 
 func addInputTest() (*TestEnvironment, error) {
-	env, err := NewEnvironment("./fixtures/tests/nocycle/", "")
+
+	env, err := NewEnvironment("./fixtures")
 	if err != nil {
 		return nil, err
 	}
+	env.TestDir = "./fixtures/tests/nocycle/"
 
 	// Create the Command Template for (fake) randinput.
 	c := &CommandTemplate{
@@ -262,10 +264,11 @@ templates:
 }
 
 func addExternalCmd() (*TestEnvironment, error) {
-	env, err := NewEnvironment("./fixtures/tests/nocycle/", "")
+	env, err := NewEnvironment("./fixtures")
 	if err != nil {
 		return nil, err
 	}
+	env.TestDir = "./fixtures/tests/nocycle/"
 
 	// Create the Command Template for (fake) randinput.
 	c := &CommandTemplate{

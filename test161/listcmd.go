@@ -43,8 +43,6 @@ func getRemoteTargets() (*test161.TargetList, []error) {
 	endpoint := conf.Server + "/api-v1/targets"
 	request := gorequest.New()
 
-	fmt.Println("\nContacting", conf.Server)
-
 	resp, body, errs := request.Get(endpoint).End()
 	if errs != nil {
 		return nil, errs
@@ -64,15 +62,19 @@ func getRemoteTargets() (*test161.TargetList, []error) {
 }
 
 func printTargets(list *test161.TargetList) {
+	var desc string
 	if listRemoteFlag {
-		fmt.Println("\nRemote Targets")
+		desc = "Remote Target"
 	} else {
-		fmt.Println("\nLocal Targets")
+		desc = "Local Target"
 	}
-	fmt.Println(strings.Repeat("-", 40))
+	fmt.Printf("\n%-20v   %-6v   %-8v   %-7v\n", desc, "Type", "Version", "Points")
+
+	fmt.Printf("%v   %v   %v   %v\n", strings.Repeat("-", 20),
+		strings.Repeat("-", 6), strings.Repeat("-", 8), strings.Repeat("-", 7))
 
 	for _, t := range list.Targets {
-		fmt.Printf("%-30v v%v\n", t.Name, t.Version)
+		fmt.Printf("%-20v   %-6v   v%-7v   %-7v\n", t.Name, t.Type, t.Version, t.Points)
 	}
 
 	fmt.Println()

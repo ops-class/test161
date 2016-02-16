@@ -1,9 +1,11 @@
 package test161
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -45,14 +47,61 @@ func (env *TestEnvironment) CopyEnvironment() *TestEnvironment {
 	return copy
 }
 
-func NewEnvironment(testDir, targetDir string) (*TestEnvironment, error) {
-
-	// Initialize the command template cache
-	f := filepath.Join(testDir, "commands")
-	templates, err := CommandTemplatesFromFile(f)
-	if err != nil {
-		return nil, err
+func envCommandHandler(env *TestEnvironment, f string) error {
+	if templates, err := CommandTemplatesFromFile(f); err != nil {
+		return err
+	} else {
+		// If we already know about the command, it's an error
+		for _, templ := range templates.Templates {
+			if _, ok := env.Commands[templ.Name]; ok {
+				return fmt.Errorf("Duplicate command (%v) in file %v", templ.Name, f)
+			}
+			env.Commands[templ.Name] = templ
+		}
+		return nil
 	}
+}
+
+func envTargetHandler(env *TestEnvironment, f string) error {
+	if t, err := TargetFromFile(f); err != nil {
+		return err
+	} else {
+		// Only track the most recent version
+		prev, ok := env.Targets[t.Name]
+		if !ok || t.Version > prev.Version {
+			env.Targets[t.Name] = t
+		}
+		return nil
+	}
+}
+
+func (env *TestEnvironment) envReadLoop(searchDir, ext string, handler func(env *TestEnvironment, f string) error) error {
+	dir, err := ioutil.ReadDir(searchDir)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range dir {
+		if f.Mode().IsRegular() {
+			if strings.HasSuffix(f.Name(), ext) {
+				if err := handler(env, filepath.Join(searchDir, f.Name())); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// Create a new TestEnvironment from the given test161 directory.  The directory
+// must contain these subdirectories: commands/ targets/ tests/
+// In addition to loading tests, commands, and targets, a logger is set up that
+// writes to os.Stderr.  This can be changed by changing env.Log.
+func NewEnvironment(test161Dir string) (*TestEnvironment, error) {
+
+	cmdDir := path.Join(test161Dir, "commands")
+	testDir := path.Join(test161Dir, "tests")
+	targetDir := path.Join(test161Dir, "targets")
 
 	env := &TestEnvironment{
 		TestDir:  testDir,
@@ -63,32 +112,12 @@ func NewEnvironment(testDir, targetDir string) (*TestEnvironment, error) {
 		Log:      log.New(os.Stderr, "test161: ", log.Ldate|log.Ltime|log.Lshortfile),
 	}
 
-	for _, templ := range templates.Templates {
-		env.Commands[templ.Name] = templ
+	if err := env.envReadLoop(targetDir, ".tt", envTargetHandler); err != nil {
+		return nil, err
 	}
 
-	if len(targetDir) > 0 {
-		// Initialize the targets cache
-		dir, err := ioutil.ReadDir(targetDir)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, f := range dir {
-			if f.Mode().IsRegular() {
-				if strings.HasSuffix(f.Name(), ".target") {
-					if t, err := TargetFromFile(filepath.Join(targetDir, f.Name())); err != nil {
-						return nil, err
-					} else {
-						// Only track the most recent version
-						prev, ok := env.Targets[t.Name]
-						if !ok || t.Version > prev.Version {
-							env.Targets[t.Name] = t
-						}
-					}
-				}
-			}
-		}
+	if err := env.envReadLoop(cmdDir, ".tc", envCommandHandler); err != nil {
+		return nil, err
 	}
 
 	return env, nil
@@ -100,10 +129,13 @@ func (env *TestEnvironment) TargetList() *TargetList {
 
 	for _, t := range env.Targets {
 		list.Targets = append(list.Targets, &TargetListItem{
-			Name:    t.Name,
-			Version: t.Version,
-			File:    "",
-			Hash:    "",
+			Name:      t.Name,
+			Version:   t.Version,
+			Points:    t.Points,
+			Type:      t.Type,
+			FileName:  t.FileName,
+			FileHash:  t.FileHash,
+			CollabMsg: collabMsgs[t.Name],
 		})
 	}
 	return list

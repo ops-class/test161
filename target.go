@@ -1,10 +1,14 @@
 package test161
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	yaml "gopkg.in/yaml.v2"
 	"io/ioutil"
+	"os"
+	"strings"
 )
 
 // For simple cases, it is annoying to have to specify the points for the test
@@ -37,7 +41,8 @@ type Target struct {
 	RequiredCommit   string        `yaml:"required_commit"`
 	RequiresUserland bool          `yaml:"userland"`
 	Tests            []*TargetTest `yaml:"tests"`
-	fileHash         string
+	FileHash         string        `yaml:"-"`
+	FileName         string        `yaml:"-"`
 }
 
 type TargetTest struct {
@@ -56,10 +61,13 @@ type TargetCommand struct {
 
 // TargetListItem is the target detail we send to remote clients about a target
 type TargetListItem struct {
-	Name    string
-	Version uint
-	File    string
-	Hash    string
+	Name      string
+	Type      string
+	Version   uint
+	Points    uint
+	FileName  string
+	FileHash  string
+	CollabMsg string
 }
 
 // TargetList is the JSON blob sent to clients
@@ -84,12 +92,27 @@ func (t *Target) fixDefaults() {
 }
 
 func TargetFromFile(file string) (*Target, error) {
+	var err error
+
 	data, err := ioutil.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}
 
-	return TargetFromString(string(data))
+	var info os.FileInfo
+	if info, err = os.Stat(file); err != nil {
+		return nil, err
+	}
+
+	if t, err := TargetFromString(string(data)); err != nil {
+		return t, err
+	} else {
+		// Save file version and hash
+		t.FileName = info.Name()
+		raw := md5.Sum(data)
+		t.FileHash = strings.ToLower(hex.EncodeToString(raw[:]))
+		return t, nil
+	}
 }
 
 func TargetFromString(text string) (*Target, error) {

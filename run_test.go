@@ -27,10 +27,13 @@ var testFlagDB = false
 func init() {
 	// Make sure the default test manager exists first
 	var err error
-	defaultEnv, err = NewEnvironment("./fixtures/tests/nocycle", "./fixtures/targets")
+	defaultEnv, err = NewEnvironment("./fixtures")
+
 	if err != nil {
 		panic(fmt.Sprintf("Unable to create default environment: %v", err))
 	}
+
+	defaultEnv.TestDir = "./fixtures/tests/nocycle"
 	defaultEnv.RootDir = "./fixtures/root"
 
 	// Command line flags

@@ -271,21 +271,25 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	// Create disks.
 	if t.Sys161.Disk1.Enabled == "true" {
+		os.Remove(path.Join(t.tempDir, "LHD0.img"))
 		create := exec.Command("disk161", "create", "LHD0.img", t.Sys161.Disk1.Bytes)
 		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
 			t.addStatus("aborted", "")
+			env.Log.Printf("Error creating LHD0.img")
 			t.Result = TEST_RESULT_ABORT
 			return err
 		}
 	}
 	if t.Sys161.Disk2.Enabled == "true" {
+		os.Remove(path.Join(t.tempDir, "LHD1.img"))
 		create := exec.Command("disk161", "create", "LHD1.img", t.Sys161.Disk2.Bytes)
 		create.Dir = t.tempDir
 		err = create.Run()
 		if err != nil {
 			t.addStatus("aborted", "")
+			env.Log.Printf("Error creating LHD1.img")
 			t.Result = TEST_RESULT_ABORT
 			return err
 		}

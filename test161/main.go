@@ -10,7 +10,7 @@ import (
 var env *test161.TestEnvironment
 var conf *ClientConf
 
-func init() {
+func envInit() {
 	var err error
 
 	// Find and load .test161.conf.  Check the current directory, then $HOME
@@ -30,17 +30,17 @@ func init() {
 	}
 
 	if file == "" {
-		fmt.Println("Cannot find configuration file " + CONF_FILE)
+		printDefaultConf()
 		os.Exit(1)
 	}
 
 	if conf, err = ClientConfFromFile(file); err != nil {
-		fmt.Printf("Error reading client configuration: %v", err)
+		fmt.Println("Error reading client configuration:", err)
 		os.Exit(1)
 	}
 
-	if env, err = test161.NewEnvironment(conf.TestDir, conf.TargetDir); err != nil {
-		fmt.Sprintf("Error creating environment: %v", err)
+	if env, err = test161.NewEnvironment(conf.Test161Dir); err != nil {
+		fmt.Println("Error creating environment:", err)
 		os.Exit(1)
 	}
 
@@ -61,7 +61,6 @@ func usage() {
 
            test161 help for a detailed description
 `)
-
 }
 
 func help() {
@@ -91,24 +90,27 @@ func help() {
 }
 
 func main() {
-	// Arg parsing
 	if len(os.Args) == 1 {
 		usage()
 		os.Exit(2)
 	} else {
-		switch os.Args[1] {
-		case "help":
+		// Get the sub-command
+		if os.Args[1] == "help" {
 			help()
-		case "run":
-			doRun()
-		case "submit":
-			doSubmit()
-		case "list-targets":
-			doListTargets()
-		default:
-			usage()
-			os.Exit(2)
+		} else {
+			// For the rest, we need a TestEnvironment
+			envInit() // This might exit
+			switch os.Args[1] {
+			case "run":
+				doRun()
+			case "submit":
+				doSubmit()
+			case "list-targets":
+				doListTargets()
+			default:
+				usage()
+				os.Exit(2)
+			}
 		}
 	}
-
 }

@@ -19,16 +19,13 @@ var (
 	submitTargetName string
 )
 
-const submit_msg = `
-As a reminder, the CSE 421/521 Collaboration Policy...
+const SubmitMsg = `
+The CSE 421/521 Collaboration Guidelines for this assignment are as follows:%v
 
 Your submission will receive an estimated score of %v/%v points.
 
-Do you wish to submit now? (yes to continue)
-
+Do you certify that you have followed the collaboration guidelines and wish to submit now?
 `
-
-const LocalBuild bool = false
 
 func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, errs []error) {
 
@@ -61,10 +58,14 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 
 func doSubmit() {
 
+	collabMsg := ""
+
 	// Parse args
-	if err := getSubmitArgs(); err != nil {
+	if targetInfo, err := getSubmitArgs(); err != nil {
 		printRunError(err)
 		return
+	} else {
+		collabMsg = targetInfo.CollabMsg
 	}
 
 	req := &test161.SubmissionRequest{
@@ -76,23 +77,22 @@ func doSubmit() {
 
 	score, avail := uint(0), uint(0)
 
-	if LocalBuild {
-		var errs []error
-		score, avail, errs = localSubmitTest(req)
-		if len(errs) > 0 {
-			printRunErrors(errs)
-			return
-		}
+	// Local build
+	var errs []error
+	score, avail, errs = localSubmitTest(req)
+	if len(errs) > 0 {
+		printRunErrors(errs)
+		return
+	}
 
-		// Don't bother proceeding if no points earned
-		if score == 0 && avail > 0 {
-			fmt.Println("\nNo points will be earned for this submission, cancelling submission.")
-			return
-		}
+	// Don't bother proceeding if no points earned
+	if score == 0 && avail > 0 {
+		fmt.Println("\nNo points will be earned for this submission, cancelling submission.")
+		return
 	}
 
 	// Show score and collab policy, and give them a chance to cancel
-	fmt.Printf(submit_msg, score, avail)
+	fmt.Printf(SubmitMsg, collabMsg, score, avail)
 	reader := bufio.NewReader(os.Stdin)
 	text, _ := reader.ReadString('\n')
 
@@ -104,8 +104,6 @@ func doSubmit() {
 	// Submit
 	endpoint := conf.Server + "/api-v1/submit"
 	remoteRequest := gorequest.New()
-
-	fmt.Println("\nContacting", conf.Server)
 
 	if reqbytes, err := json.Marshal(req); err != nil {
 		printRunError(err)
@@ -129,44 +127,63 @@ func doSubmit() {
 	}
 }
 
-func getSubmitArgs() error {
-
-	args := os.Args[2:]
-
-	if len(args) == 0 {
-		return errors.New("test161 submit: Missing target name. run test161 help for detailed usage")
-	} else if len(args) > 2 {
-		return errors.New("test161 submit: Too many arguments. run test161 help for detailed usage")
+func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
+	var ourVersion *test161.Target
+	var serverVersion *test161.TargetListItem
+	var ok bool
+	ourVersion, ok = env.Targets[name]
+	if !ok {
+		return nil, fmt.Errorf("Target '%v' does not exist locally.  Please update your os161 sources", name)
 	}
 
-	submitTargetName = args[0]
 	// Verfiy it exists on the sever, and is up to date
-
 	list, errs := getRemoteTargets()
 	if len(errs) > 0 {
-		return errs[0]
+		return nil, errs[0]
 	}
 
-	var ok bool = false
 	for _, target := range list.Targets {
 		if target.Name == submitTargetName {
-			// TODO: Verify the hash
-			ok = true
+			// Verify that the targets are actually the same
+			if target.FileHash != ourVersion.FileHash {
+				return nil, fmt.Errorf("Target '%v' is out of date with the server version.  Please update your os161 sources", name)
+			}
+			serverVersion = target
 			break
 		}
 	}
 
-	if !ok {
-		return fmt.Errorf("The target '%v' does not exist on the remote sever", submitTargetName)
+	if serverVersion == nil {
+		return nil, fmt.Errorf("The target '%v' does not exist on the remote sever", name)
+	}
+
+	return serverVersion, nil
+}
+
+func getSubmitArgs() (*test161.TargetListItem, error) {
+
+	args := os.Args[2:]
+
+	if len(args) == 0 {
+		return nil, errors.New("test161 submit: Missing target name. run test161 help for detailed usage")
+	} else if len(args) > 2 {
+		return nil, errors.New("test161 submit: Too many arguments. run test161 help for detailed usage")
+	}
+
+	submitTargetName = args[0]
+	// Get remote target
+	serverVersion, err := getRemoteTargetAndValidate(submitTargetName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Try to get a commit id
 	if len(args) == 2 {
 		// Minimally, it needs to be a hex string
 		if ok, err := regexp.MatchString("^[0-9a-f]+$", args[1]); err != nil {
-			return err
+			return nil, err
 		} else if !ok {
-			return errors.New("test161 submit: Invalid commit ID")
+			return nil, errors.New("test161 submit: Invalid commit ID")
 		}
 		submitCommit = args[1]
 	} else {
@@ -174,20 +191,20 @@ func getSubmitArgs() error {
 		cmd := exec.Command("git", "rev-parse", "HEAD")
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("Error reading HEAD: %v. Are you in your source directory?", err)
+			return nil, fmt.Errorf("Error reading HEAD: %v. Are you in your source directory?", err)
 		} else if len(output) == 0 {
-			return fmt.Errorf("git rev-parse HEAD returned no output.  Unable to get commit id from HEAD.")
+			return nil, fmt.Errorf("git rev-parse HEAD returned no output.  Unable to get commit id from HEAD.")
 		} else {
 			lines := strings.Split(string(output), "\n")
 			if ok, err := regexp.MatchString("^[0-9a-f]+$", lines[0]); err != nil {
-				return err
+				return nil, err
 			} else if !ok {
-				return errors.New("test161 submit: Invalid commit ID in HEAD?")
+				return nil, errors.New("test161 submit: Invalid commit ID in HEAD?")
 			} else {
 				submitCommit = lines[0]
 			}
 		}
 	}
 
-	return nil
+	return serverVersion, nil
 }

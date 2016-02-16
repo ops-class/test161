@@ -7,6 +7,7 @@ import (
 	"github.com/ops-class/test161"
 	"os"
 	"sort"
+	"strings"
 )
 
 // 'test161 run' flags
@@ -57,6 +58,14 @@ const (
 	VERBOSE_WHISPER = "whisper"
 )
 
+func padRight(s string, w int) string {
+	if w <= len(s) {
+		return s
+	} else {
+		return s + strings.Repeat(" ", w-len(s))
+	}
+}
+
 func getRunArgs() error {
 
 	runFlags := flag.NewFlagSet("test161 run", flag.ExitOnError)
@@ -105,51 +114,62 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 		test161.SetManagerCapacity(0)
 	}
 
-	// Print the output lines
+	// Set up a PersistenceManager that just outputs to the console
 	if runCommandVars.verbose == VERBOSE_LOUD {
 		env.Persistence = &ConsolePersistence{}
 	}
-
-	test161.StartManager()
-	done := r.Run()
-
-	// Collect the results
-	complete := make([]*test161.Test161JobResult, 0)
-	for res := range done {
-		complete = append(complete, res)
-	}
-
-	test161.StopManager()
 
 	totalPoints := uint(0)
 	totalAvail := uint(0)
 	totals := []int{0, 0, 0, 0}
 
-	fmt.Println("\nResults:")
-	fmt.Println("----------------------------------------------------------------------------")
+	type result struct {
+		test   string
+		result test161.TestResult
+		score  string
+	}
 
-	for _, res := range complete {
+	//	fmt.Printf("\n%v   %v   %v\n\n", strings.Repeat("=", 35), "RESULTS", strings.Repeat("=", 35))
 
-		if res == nil {
-			fmt.Println("Res Nil!")
-		} else if res.Test == nil {
-			fmt.Println("Nil!")
-		}
+	// For printing
+	hasScore := false
+	results := make([]*result, 0)
+	headers := []string{
+		"Test", "Result", "Score",
+	}
 
+	// Default column widths, which can expand if the input outgrows them
+	max := []int{30, 10, 10}
+
+	// Run it
+	test161.StartManager()
+	done := r.Run()
+
+	for res := range done {
 		totalPoints += res.Test.PointsEarned
 		totalAvail += res.Test.PointsAvailable
 
-		if runCommandVars.verbose != VERBOSE_WHISPER {
-			if res.Test.PointsAvailable > 0 {
-				fmt.Printf("Test: %-20s  Result: %-10v  Score: %v/%v\n", res.Test.DependencyID,
-					res.Test.Result, res.Test.PointsEarned, res.Test.PointsAvailable)
-			} else {
-				fmt.Printf("Test: %-20s  Result: %-10v\n", res.Test.DependencyID, res.Test.Result)
-			}
+		hasScore = hasScore || res.Test.PointsAvailable > 0
 
-			if res.Err != nil {
-				fmt.Printf("Error (%v): %v\n", res.Test.DependencyID, res.Err)
-			}
+		info := &result{
+			test:   res.Test.DependencyID,
+			result: res.Test.Result,
+			score:  fmt.Sprintf("%v/%v", res.Test.PointsAvailable, res.Test.PointsEarned),
+		}
+		if len(info.test) > max[0] {
+			max[0] = len(info.test)
+		}
+		if len(info.result) > max[1] {
+			max[1] = len(info.result)
+		}
+		if len(info.score) > max[2] {
+			max[2] = len(info.score)
+		}
+
+		results = append(results, info)
+
+		if res.Err != nil {
+			fmt.Printf("Error (%v): %v\n", res.Test.DependencyID, res.Err)
 		}
 
 		switch res.Test.Result {
@@ -164,6 +184,38 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 		}
 	}
 
+	test161.StopManager()
+
+	const colSep = "   "
+
+	if runCommandVars.verbose != VERBOSE_WHISPER {
+		// Heading
+		heading := padRight(headers[0], max[0]) + colSep + padRight(headers[1], max[1])
+		if hasScore {
+			heading += colSep + padRight(headers[2], max[2])
+		}
+
+		fmt.Println()
+		fmt.Println(heading)
+
+		// Dashes under heading
+		dashes := strings.Repeat("-", max[0]) + colSep + strings.Repeat("-", max[1])
+		if hasScore {
+			dashes += colSep + strings.Repeat("-", max[2])
+		}
+		fmt.Println(dashes)
+
+		// Detail lines
+		for _, r := range results {
+			line := padRight(r.test, max[0]) + colSep + padRight(string(r.result), max[1])
+			if hasScore {
+				line += colSep + padRight(r.score, max[2])
+			}
+			fmt.Println(line)
+		}
+	}
+
+	// Print totals
 	desc := []string{"Total Correct", "Total Incorrect",
 		"Total Aborted", "Total Skipped",
 	}
@@ -177,8 +229,10 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 	}
 
 	if totalAvail > 0 {
-		fmt.Printf("\nTotal Score :  %v/%v\n", totalPoints, totalAvail)
+		fmt.Printf("\n%-15v: %v/%v\n", "Total Score", totalPoints, totalAvail)
 	}
+
+	fmt.Println()
 }
 
 func runTests() []error {
