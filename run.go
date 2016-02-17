@@ -78,6 +78,7 @@ type Test struct {
 	statStarted bool             // Only changed once
 	env         *TestEnvironment // Set at top of Run
 	allCorrect  bool
+	salts       map[string]bool // salt values we've already seen
 
 	sys161         *expect.Expect // Protected by L
 	running        bool           // Protected by L
@@ -197,6 +198,8 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	// Save the test environment for other pieces that need it
 	t.env = env
+
+	t.salts = make(map[string]bool)
 
 	defer func() {
 		env.notifyAndLogErr("Test Complete", t, MSG_PERSIST_COMPLETE, 0)
@@ -453,7 +456,7 @@ func (t *Test) finishCurCommand(env *TestEnvironment, eof bool) *Command {
 	}
 
 	cur := t.currentCommand
-	cur.evaluate(env.KeyMap, eof)
+	cur.evaluate(env.keyMap, eof)
 
 	if env.Persistence != nil {
 		env.notifyAndLogErr("Command Status", cur, MSG_PERSIST_UPDATE,
@@ -757,7 +760,16 @@ func (t *Test) outputLineComplete() {
 		id := res[1]
 		hash := res[2]
 		salt := res[3]
-		key := t.env.KeyMap[id] + salt
+		key := t.env.keyMap[id] + salt
+
+		// Check if we've already seen that salt during this test. If so, it's suspicious.
+		if ok, _ := t.salts[salt]; ok {
+			t.env.Log.Println("Salt value failed uniqueness requirement")
+			line.Trusted = false
+			return
+		}
+
+		t.salts[salt] = true
 
 		mac := hmac.New(sha256.New, []byte(key))
 		mac.Write([]byte(res[4]))

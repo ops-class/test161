@@ -4,6 +4,7 @@ version: 1
 points: 50
 type: asst
 kconfig: ASST1
+overlay: asst1
 tests:
   - id: sync/lt1.t
     points: 10

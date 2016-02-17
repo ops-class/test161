@@ -21,12 +21,13 @@ type TestEnvironment struct {
 	manager *manager
 
 	CacheDir    string
+	OverlayRoot string
 	Persistence PersistenceManager
 
 	Log *log.Logger
 
 	// These depend on the TestGroup/Target
-	KeyMap  map[string]string
+	keyMap  map[string]string
 	RootDir string
 }
 
@@ -34,17 +35,15 @@ type TestEnvironment struct {
 // from an existing environment.  Local test state will
 // be initialized to default values.
 func (env *TestEnvironment) CopyEnvironment() *TestEnvironment {
-	copy := &TestEnvironment{
-		TestDir:     env.TestDir,
-		Commands:    env.Commands,
-		Targets:     env.Targets,
-		manager:     env.manager,
-		Persistence: env.Persistence,
-		Log:         env.Log,
-		KeyMap:      make(map[string]string),
-		RootDir:     "",
-	}
-	return copy
+
+	// Global
+	copy := *env
+
+	// Local
+	copy.keyMap = make(map[string]string)
+	copy.RootDir = ""
+
+	return &copy
 }
 
 func envCommandHandler(env *TestEnvironment, f string) error {
@@ -108,7 +107,7 @@ func NewEnvironment(test161Dir string) (*TestEnvironment, error) {
 		manager:  testManager,
 		Commands: make(map[string]*CommandTemplate),
 		Targets:  make(map[string]*Target),
-		KeyMap:   make(map[string]string),
+		keyMap:   make(map[string]string),
 		Log:      log.New(os.Stderr, "test161: ", log.Ldate|log.Ltime|log.Lshortfile),
 	}
 

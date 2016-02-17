@@ -144,34 +144,44 @@ func (req *SubmissionRequest) validate(env *TestEnvironment) ([]*Student, error)
 }
 
 // Create a new Submission that can be evaluated by the test161 server or client.
-func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submission, []error) {
+//
+// This submission has a copy of the test environment, so it's safe to pass the
+// same enviromnent for multiple submissions. Local fields will be set accordingly.
+func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submission, []error) {
 	var students []*Student
 	var err error
 
+	env := origenv.CopyEnvironment()
+
+	// Validate the request details and get the list of students for which
+	// this submission applies. We'll use this list later when we
+	// actually run the submission.
 	if students, err = request.validate(env); err != nil {
 		return nil, []error{err}
 	}
 
-	// First, get the target because there is some build info there
+	// (The target was validated in the previous step)
 	target := env.Targets[request.Target]
 
+	// Create the build configuration.  This is a combination of
+	// the environment, target, and request.
 	conf := &BuildConf{}
 	conf.Repo = request.Repository
 	conf.CommitID = request.CommitID
-	conf.KConfig = target.KConfig
 	conf.CacheDir = env.CacheDir
+	conf.KConfig = target.KConfig
 	conf.RequiredCommit = target.RequiredCommit
 	conf.RequiresUserland = target.RequiresUserland
+	conf.Overlay = target.Overlay
 
-	// Add first test (build)
-	buildTest, err := conf.ToBuildTest()
+	// Add first 'test' (build)
+	buildTest, err := conf.ToBuildTest(env)
 	if err != nil {
 		return nil, []error{err}
 	}
 
 	// Get the TestGroup. The root dir won't be set yet, but that's OK.  We'll
 	// change it after the build
-
 	tg, errs := target.Instance(env)
 	if err != nil {
 		return nil, errs
@@ -199,13 +209,18 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 		Tests:     tg,
 	}
 
+	// We need the students to later update the students collection.  But,
+	// the submission only care about user email addresses.
 	s.students = students
 	s.Users = make([]string, 0, len(request.Users))
 	for _, u := range request.Users {
 		s.Users = append(s.Users, u.Email)
 	}
 
-	// Try and lock students now so we don't
+	// Try and lock students now so we don't allow multiple submissions.
+	// This enforces NewSubmission() can only return successfully if none
+	// of the students has a pending submission. We need to do this
+	// before we persist the submission.
 	userLock.Lock()
 	defer userLock.Unlock()
 
@@ -225,7 +240,8 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 
 	if env.Persistence != nil {
 		if buildTest != nil {
-			// If we get an error here, we can still hopefully recover
+			// If we get an error here, we can still hopefully recover. Though,
+			// build updates won't be seen by the user.
 			env.notifyAndLogErr("Create Build Test", buildTest, MSG_PERSIST_CREATE, 0)
 		}
 		// This we can't recover from
@@ -241,11 +257,6 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 	}
 
 	return s, nil
-}
-
-func (s *Submission) persistFailure() {
-	// TODO: handle failures
-	s.Status = SUBMISSION_ABORTED
 }
 
 func (s *Submission) TargetResult() (result *TargetResult) {
@@ -358,7 +369,6 @@ func (s *Submission) Run() error {
 
 		// Build output
 		s.Env.RootDir = res.RootDir
-		s.Env.KeyMap = res.KeyMap
 
 		// Clean up temp build directory
 		if len(res.TempDir) > 0 {
