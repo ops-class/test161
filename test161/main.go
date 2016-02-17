@@ -52,7 +52,7 @@ func usage() {
 	fmt.Println(`
     usage: test161  <command> <flags> <args>
  
-           test161 run [-dry-run | -r] [sequential | -s] [-no-deps | -n] 
+           test161 run [-dry-run | -r] [sequential | -s] [-dependencies | -d] 
                        [-verbose | -v (whisper|quiet|loud*)] [-tag] <names>
 
            test161 submit <target> <commit>
