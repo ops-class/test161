@@ -257,6 +257,17 @@ line option.
 * Add ways to print all tests and groups.
 * Set the exit code to indicate whether all tests passed.
 
+=== Environment inference
+
+It would be great if we could not require the `.test161.conf` file in certain
+cases, particularly for local testing. For example, if I'm in my source
+directory I should be able to find the `test161` files and determine my `root`
+directory by interpreting `defs.mk`. If I'm in my root directory that's a bit
+trickier, although perhaps eventually we can have the build process stick a
+symlink in the root dir back to the sources that create it for that purpose.
+(You could also create a symlink from `/src/root` to the root dir when you
+compile.)
+
 === Support for GDB backtraces on error
 
 It should be possible to automate the process of hooking up a debugger and
