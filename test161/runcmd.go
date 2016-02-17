@@ -38,18 +38,17 @@ func printRunErrors(errs []error) {
 	}
 }
 
-func doRun() int {
+func doRun() {
 	if err := getRunArgs(); err != nil {
 		printRunError(err)
-		return 1
+		return
 	}
 
-	exitcode, errs := runTests()
+	errs := runTests()
 	if len(errs) > 0 {
 		printRunErrors(errs)
 	}
 
-	return exitcode
 }
 
 // Verbose settings
@@ -101,7 +100,7 @@ func getRunArgs() error {
 	return nil
 }
 
-func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
+func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 	var r test161.TestRunner
 	if useDeps {
 		r = test161.NewDependencyRunner(tg)
@@ -234,15 +233,9 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 	}
 
 	fmt.Println()
-
-	if len(tg.Tests) == totals[0] {
-		return 0
-	} else {
-		return 1
-	}
 }
 
-func runTests() (int, []error) {
+func runTests() []error {
 
 	var target *test161.Target
 	var ok bool
@@ -252,14 +245,14 @@ func runTests() (int, []error) {
 		if target, ok = env.Targets[runCommandVars.tests[0]]; ok {
 			tg, errs := target.Instance(env)
 			if len(errs) > 0 {
-				return 1, errs
+				return errs
 			} else {
 				if runCommandVars.dryRun {
 					printDryRun(tg)
 				} else {
 					runTestGroup(tg, true)
 				}
-				return 0, nil
+				return nil
 			}
 		}
 	}
@@ -272,17 +265,15 @@ func runTests() (int, []error) {
 		Env:     env,
 	}
 
-	exitcode := 0
-
 	if tg, errs := test161.GroupFromConfig(config); len(errs) > 0 {
-		return 1, errs
+		return errs
 	} else {
 		if runCommandVars.dryRun {
 			printDryRun(tg)
 		} else {
-			exitcode = runTestGroup(tg, config.UseDeps)
+			runTestGroup(tg, config.UseDeps)
 		}
-		return exitcode, nil
+		return nil
 	}
 }
 
