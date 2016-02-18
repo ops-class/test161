@@ -34,12 +34,11 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 
 	var submission *test161.Submission
 
+	env.Persistence = &ConsolePersistence{}
 	submission, errs = test161.NewSubmission(req, env)
 	if len(errs) > 0 {
 		return
 	}
-
-	env.Persistence = &ConsolePersistence{}
 
 	test161.SetManagerCapacity(0)
 	test161.StartManager()
@@ -96,11 +95,17 @@ func doSubmit() (exitcode int) {
 	// Show score and collab policy, and give them a chance to cancel
 	fmt.Printf(SubmitMsg, collabMsg, score, avail)
 	reader := bufio.NewReader(os.Stdin)
-	text, _ := reader.ReadString('\n')
-
-	if text != "yes\n" {
-		fmt.Println("\nSubmission request cancelled\n")
-		return
+	for {
+		text, _ := reader.ReadString('\n')
+		text = strings.TrimSpace(text)
+		if text == "no" {
+			fmt.Println("\nSubmission request cancelled\n")
+			return
+		} else if text == "yes" {
+			break
+		} else {
+			fmt.Println("\nPlease answer 'yes' or 'no'")
+		}
 	}
 
 	// Submit
