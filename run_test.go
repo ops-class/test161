@@ -27,7 +27,7 @@ var testFlagDB = false
 func init() {
 	// Make sure the default test manager exists first
 	var err error
-	defaultEnv, err = NewEnvironment("./fixtures")
+	defaultEnv, err = NewEnvironment("./fixtures", &DoNothingPersistence{})
 
 	if err != nil {
 		panic(fmt.Sprintf("Unable to create default environment: %v", err))

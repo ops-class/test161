@@ -70,7 +70,11 @@ func envTargetHandler(env *TestEnvironment, f string) error {
 		if !ok || t.Version > prev.Version {
 			env.Targets[t.Name] = t
 		}
-		return nil
+		if env.Persistence != nil {
+			return env.Persistence.Notify(t, MSG_TARGET_LOAD, 0)
+		} else {
+			return nil
+		}
 	}
 }
 
@@ -96,19 +100,20 @@ func (env *TestEnvironment) envReadLoop(searchDir, ext string, handler func(env 
 // must contain these subdirectories: commands/ targets/ tests/
 // In addition to loading tests, commands, and targets, a logger is set up that
 // writes to os.Stderr.  This can be changed by changing env.Log.
-func NewEnvironment(test161Dir string) (*TestEnvironment, error) {
+func NewEnvironment(test161Dir string, pm PersistenceManager) (*TestEnvironment, error) {
 
 	cmdDir := path.Join(test161Dir, "commands")
 	testDir := path.Join(test161Dir, "tests")
 	targetDir := path.Join(test161Dir, "targets")
 
 	env := &TestEnvironment{
-		TestDir:  testDir,
-		manager:  testManager,
-		Commands: make(map[string]*CommandTemplate),
-		Targets:  make(map[string]*Target),
-		keyMap:   make(map[string]string),
-		Log:      log.New(os.Stderr, "test161: ", log.Ldate|log.Ltime|log.Lshortfile),
+		TestDir:     testDir,
+		manager:     testManager,
+		Commands:    make(map[string]*CommandTemplate),
+		Targets:     make(map[string]*Target),
+		keyMap:      make(map[string]string),
+		Log:         log.New(os.Stderr, "test161: ", log.Ldate|log.Ltime|log.Lshortfile),
+		Persistence: pm,
 	}
 
 	if err := env.envReadLoop(targetDir, ".tt", envTargetHandler); err != nil {

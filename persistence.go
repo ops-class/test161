@@ -5,6 +5,7 @@ const (
 	MSG_PERSIST_UPDATE          // Generic update message.
 	MSG_PERSIST_OUTPUT          // Added an output line (command types only)
 	MSG_PERSIST_COMPLETE        // We won't update the object any more
+	MSG_TARGET_LOAD             // When a target is loaded
 )
 
 // Inidividual field updates

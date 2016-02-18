@@ -43,7 +43,7 @@ type Submission struct {
 	CommitID   string   `bson:"commit_id"`
 
 	// Target details
-	TargetID        string `bson:"-"` //TODO: Use this?
+	TargetID        string `bson:"target_id"`
 	TargetName      string `bson:"target_name"`
 	TargetVersion   uint   `bson:"target_version"`
 	PointsAvailable uint   `bson:"max_score"`
@@ -192,6 +192,7 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 		ID:              uuid.NewV4().String(),
 		Repository:      request.Repository,
 		CommitID:        request.CommitID,
+		TargetID:        target.ID,
 		TargetName:      target.Name,
 		TargetVersion:   target.Version,
 		PointsAvailable: target.Points,

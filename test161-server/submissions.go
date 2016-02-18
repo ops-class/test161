@@ -197,16 +197,6 @@ func loadServerConfig() (*SubmissionServerConfig, error) {
 }
 
 func (s *SubmissionServer) setUpEnvironment() error {
-
-	// Submission environment
-	env, err := test161.NewEnvironment(s.conf.Test161Dir)
-	if err != nil {
-		return err
-	}
-
-	env.CacheDir = s.conf.CacheDir
-	env.OverlayRoot = s.conf.OverlayDir
-
 	// MongoDB connection
 	mongoTestDialInfo := &mgo.DialInfo{
 		Username: s.conf.DBUser,
@@ -215,11 +205,21 @@ func (s *SubmissionServer) setUpEnvironment() error {
 		Addrs:    []string{s.conf.DBServer},
 		Timeout:  time.Duration(s.conf.DBTimeout) * time.Second,
 	}
+
 	mongo, err := test161.NewMongoPersistence(mongoTestDialInfo)
 	if err != nil {
 		return err
 	}
-	env.Persistence = mongo
+
+	// Submission environment
+	env, err := test161.NewEnvironment(s.conf.Test161Dir, mongo)
+	if err != nil {
+		return err
+	}
+
+	env.CacheDir = s.conf.CacheDir
+	env.OverlayRoot = s.conf.OverlayDir
+
 	// Set the min client version where the handler can access it
 	minClientVer = s.conf.MinClient
 

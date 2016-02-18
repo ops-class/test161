@@ -32,31 +32,32 @@ const (
 )
 
 type Target struct {
+	ID               string        `yaml:"-" bson:"_id"`
 	Name             string        `yaml:"name"`
 	Version          uint          `yaml:"version"`
 	Type             string        `yaml:"type"`
 	Points           uint          `yaml:"points"`
 	Overlay          string        `yaml:"overlay"`
 	KConfig          string        `yaml:"kconfig"`
-	RequiredCommit   string        `yaml:"required_commit"`
-	RequiresUserland bool          `yaml:"userland"`
+	RequiredCommit   string        `yaml:"required_commit" bson:"required_commit"`
+	RequiresUserland bool          `yaml:"userland" bson:"userland"`
 	Tests            []*TargetTest `yaml:"tests"`
-	FileHash         string        `yaml:"-"`
-	FileName         string        `yaml:"-"`
+	FileHash         string        `yaml:"-" bson:"file_hash"`
+	FileName         string        `yaml:"-" bson:"file_name"`
 }
 
 type TargetTest struct {
-	Id       string           `yaml:"id"`
+	Id       string           `yaml:"id" bson:"test_id"`
 	Scoring  string           `yaml:"scoring"`
 	Points   uint             `yaml:"points"`
 	Commands []*TargetCommand `yaml:"commands"`
 }
 
 type TargetCommand struct {
-	Id     string   `yaml:"id"`     // ID, must match ID in test file
-	Index  int      `yaml:"index"`  // Index > 0 => match to index in test
-	Points uint     `yaml:"points"` // Points for this command
-	Args   []string `yaml:"args"`   // Argument overrides
+	Id     string   `yaml:"id" bson:cmd_id"` // ID, must match ID in test file
+	Index  int      `yaml:"index"`           // Index > 0 => match to index in test
+	Points uint     `yaml:"points"`          // Points for this command
+	Args   []string `yaml:"args"`            // Argument overrides
 }
 
 // TargetListItem is the target detail we send to remote clients about a target

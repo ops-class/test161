@@ -39,7 +39,7 @@ func envInit() {
 		os.Exit(1)
 	}
 
-	if env, err = test161.NewEnvironment(conf.Test161Dir); err != nil {
+	if env, err = test161.NewEnvironment(conf.Test161Dir, nil); err != nil {
 		fmt.Println("Error creating environment:", err)
 		os.Exit(1)
 	}
