@@ -37,7 +37,6 @@ type Target struct {
 	Version          uint          `yaml:"version"`
 	Type             string        `yaml:"type"`
 	Points           uint          `yaml:"points"`
-	Overlay          string        `yaml:"overlay"`
 	KConfig          string        `yaml:"kconfig"`
 	RequiredCommit   string        `yaml:"required_commit" bson:"required_commit"`
 	RequiresUserland bool          `yaml:"userland" bson:"userland"`

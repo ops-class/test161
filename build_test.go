@@ -14,7 +14,6 @@ func TestBuildFull(t *testing.T) {
 		CommitID: "HEAD",
 		KConfig:  "ASST1",
 		//RequiredCommit: "db6d3d219d53a292b96e8529649757bb257e8785",
-		Overlay: "asst1",
 	}
 
 	env := defaultEnv.CopyEnvironment()

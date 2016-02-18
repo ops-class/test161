@@ -173,7 +173,7 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 	conf.KConfig = target.KConfig
 	conf.RequiredCommit = target.RequiredCommit
 	conf.RequiresUserland = target.RequiresUserland
-	conf.Overlay = target.Overlay
+	conf.Overlay = target.Name
 
 	// Add first 'test' (build)
 	buildTest, err := conf.ToBuildTest(env)

@@ -108,6 +108,8 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 
+	logger.Println("Submission Request:", string(body))
+
 	if err := json.Unmarshal(body, &request); err != nil {
 		w.Header().Set("Content-Type", JsonHeader)
 		w.WriteHeader(http.StatusBadRequest)
@@ -123,6 +125,7 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 	if request.ClientVersion.CompareTo(minClientVer) < 0 {
 		logger.Printf("Old request (version %v)\n", request.ClientVersion)
 		w.WriteHeader(http.StatusNotAcceptable)
+		return
 	}
 
 	// Make sure we can create the submission.  This checks for everything but run errors.

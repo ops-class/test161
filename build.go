@@ -293,7 +293,7 @@ func (t *BuildTest) addGitCommands() {
 	if _, err := os.Stat(t.srcDir); err == nil {
 		// First, reset it so we remove previous overlay changes
 		t.addCommand("git reset --hard", t.srcDir)
-		t.addCommand(fmt.Sprintf("git fetch", t.conf.CommitID), t.srcDir)
+		t.addCommand("git fetch", t.srcDir)
 		t.wasCached = true
 	} else {
 		t.addCommand(fmt.Sprintf("git clone %v src", t.conf.Repo), t.dir)
