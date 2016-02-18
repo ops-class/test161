@@ -5,9 +5,9 @@ import (
 )
 
 type ProgramVersion struct {
-	Major    uint
-	Minor    uint
-	Revision uint
+	Major    uint `yaml:"major"`
+	Minor    uint `yaml:"minor"`
+	Revision uint `yaml:"revision"`
 }
 
 var Version = ProgramVersion{

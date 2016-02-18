@@ -22,8 +22,9 @@ var serverEnv *test161.TestEnvironment
 
 // Environment config
 type SubmissionServerConfig struct {
-	CacheDir   string                 `yaml:"cache_dir"`
+	CacheDir   string                 `yaml:"cachedir"`
 	Test161Dir string                 `yaml:"test161dir`
+	OverlayDir string                 `yaml:"overlaydir"`
 	MaxTests   uint                   `yaml:"max_tests"`
 	Database   string                 `yaml:"dbname"`
 	DBServer   string                 `yaml:"dbsever"`
@@ -31,7 +32,7 @@ type SubmissionServerConfig struct {
 	DBPassword string                 `yaml:"dbpw"`
 	DBTimeout  uint                   `yaml:"dbtimeout"`
 	APIPort    uint                   `yaml:"api_port"`
-	MinClient  test161.ProgramVersion `yaml:min_client`
+	MinClient  test161.ProgramVersion `yaml:"min_client"`
 }
 
 const CONF_FILE = ".test161-server.conf"
@@ -204,6 +205,7 @@ func (s *SubmissionServer) setUpEnvironment() error {
 	}
 
 	env.CacheDir = s.conf.CacheDir
+	env.OverlayRoot = s.conf.OverlayDir
 
 	// MongoDB connection
 	mongoTestDialInfo := &mgo.DialInfo{
@@ -218,9 +220,10 @@ func (s *SubmissionServer) setUpEnvironment() error {
 		return err
 	}
 	env.Persistence = mongo
-
 	// Set the min client version where the handler can access it
 	minClientVer = s.conf.MinClient
+
+	fmt.Println("Min client ver:", minClientVer)
 
 	// OK, we're good to go
 	serverEnv = env
