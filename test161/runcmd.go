@@ -147,6 +147,7 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 	done := r.Run()
 
 	for res := range done {
+
 		totalPoints += res.Test.PointsEarned
 		totalAvail += res.Test.PointsAvailable
 

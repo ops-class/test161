@@ -34,6 +34,22 @@ func (c *ConsolePersistence) Notify(entity interface{}, msg, what int) error {
 				}
 			}
 		}
+	} else if msg == test161.MSG_PERSIST_UPDATE && what == test161.MSG_FIELD_STATUSES {
+		switch entity.(type) {
+		case *test161.Test:
+			{
+				test := entity.(*test161.Test)
+				index := len(test.Status) - 1
+				if index > 0 {
+					status := test.Status[index]
+					str := fmt.Sprintf("%.6f\t%s", test.SimTime, status.Status)
+					if status.Message != "" {
+						str += fmt.Sprintf(": %s", status.Message)
+					}
+					fmt.Println(str)
+				}
+			}
+		}
 	}
 
 	return nil

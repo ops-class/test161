@@ -590,6 +590,7 @@ func (t *Test) addStatus(status string, message string) {
 		Status:   status,
 		Message:  message,
 	})
+	t.env.notifyAndLogErr("Statuses Update", t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUSES)
 	t.L.Unlock()
 }
 
