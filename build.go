@@ -289,16 +289,17 @@ func commitCheckHandler(t *BuildTest, command *BuildCommand) error {
 
 func (t *BuildTest) addGitCommands() {
 
-	// If we have the repo cached, try a simple checkout.
+	// If we have the repo cached, fetch instead of clone.
 	if _, err := os.Stat(t.srcDir); err == nil {
 		// First, reset it so we remove previous overlay changes
 		t.addCommand("git reset --hard", t.srcDir)
-		t.addCommand(fmt.Sprintf("git checkout -f %v", t.conf.CommitID), t.srcDir)
+		t.addCommand(fmt.Sprintf("git fetch", t.conf.CommitID), t.srcDir)
 		t.wasCached = true
 	} else {
 		t.addCommand(fmt.Sprintf("git clone %v src", t.conf.Repo), t.dir)
-		t.addCommand(fmt.Sprintf("git checkout %v", t.conf.CommitID), t.srcDir)
 	}
+
+	t.addCommand(fmt.Sprintf("git checkout %v", t.conf.CommitID), t.srcDir)
 
 	// Before building, we may need to check for a specific commit
 	if len(t.conf.RequiredCommit) > 0 {
