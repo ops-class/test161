@@ -19,10 +19,11 @@ type SubmissionUserInfo struct {
 // A SubmissionRequest represents the data required to run a test161 target
 // for evaluation by the test161 server.
 type SubmissionRequest struct {
-	Target     string                // Name of the target
-	Users      []*SubmissionUserInfo // Email addresses of users
-	Repository string                // Git repository to clone
-	CommitID   string                // Git commit id to checkout after cloning
+	Target        string                // Name of the target
+	Users         []*SubmissionUserInfo // Email addresses of users
+	Repository    string                // Git repository to clone
+	CommitID      string                // Git commit id to checkout after cloning
+	ClientVersion ProgramVersion        // The version of test161 the client is running
 }
 
 const (

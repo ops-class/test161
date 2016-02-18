@@ -70,10 +70,11 @@ func doSubmit() (exitcode int) {
 	}
 
 	req := &test161.SubmissionRequest{
-		Target:     submitTargetName,
-		Users:      conf.Users,
-		Repository: conf.Repository,
-		CommitID:   submitCommit,
+		Target:        submitTargetName,
+		Users:         conf.Users,
+		Repository:    conf.Repository,
+		CommitID:      submitCommit,
+		ClientVersion: test161.Version,
 	}
 
 	score, avail := uint(0), uint(0)
@@ -121,6 +122,8 @@ func doSubmit() (exitcode int) {
 			if resp.StatusCode == http.StatusCreated {
 				fmt.Println("\nYour submission has been created and is being processed by the test161 server\n")
 				exitcode = 0
+			} else if resp.StatusCode == http.StatusNotAcceptable {
+				fmt.Println("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit")
 			} else {
 				printRunError(fmt.Errorf("\nThe server could not process your request: %v. \nData: %v\n",
 					resp.Status, body))

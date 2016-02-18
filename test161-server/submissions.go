@@ -22,15 +22,16 @@ var serverEnv *test161.TestEnvironment
 
 // Environment config
 type SubmissionServerConfig struct {
-	CacheDir   string `yaml:"cache_dir"`
-	Test161Dir string `yaml:"test161dir`
-	MaxTests   uint   `yaml:"max_tests"`
-	Database   string `yaml:"dbname"`
-	DBServer   string `yaml:"dbsever"`
-	DBUser     string `yaml:"dbuser"`
-	DBPassword string `yaml:"dbpw"`
-	DBTimeout  uint   `yaml:"dbtimeout"`
-	APIPort    uint   `yaml:"api_port"`
+	CacheDir   string                 `yaml:"cache_dir"`
+	Test161Dir string                 `yaml:"test161dir`
+	MaxTests   uint                   `yaml:"max_tests"`
+	Database   string                 `yaml:"dbname"`
+	DBServer   string                 `yaml:"dbsever"`
+	DBUser     string                 `yaml:"dbuser"`
+	DBPassword string                 `yaml:"dbpw"`
+	DBTimeout  uint                   `yaml:"dbtimeout"`
+	APIPort    uint                   `yaml:"api_port"`
+	MinClient  test161.ProgramVersion `yaml:min_client`
 }
 
 const CONF_FILE = ".test161-server.conf"
@@ -45,6 +46,7 @@ var defaultConfig = &SubmissionServerConfig{
 	DBPassword: "",
 	DBTimeout:  10,
 	APIPort:    4000,
+	MinClient:  test161.ProgramVersion{0, 0, 0},
 }
 
 var logger = log.New(os.Stderr, "test161-server: ", log.LstdFlags)
@@ -72,6 +74,8 @@ func NewSubmissionServer() (test161Server, error) {
 }
 
 const JsonHeader = "application/json; charset=UTF-8"
+
+var minClientVer test161.ProgramVersion
 
 // listTargets return all targets available to submit to
 func listTargets(w http.ResponseWriter, r *http.Request) {
@@ -112,6 +116,12 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 			logger.Println("Encoding error:", err)
 		}
 		return
+	}
+
+	// Check the client's version and make sure it's not too old
+	if request.ClientVersion.CompareTo(minClientVer) < 0 {
+		logger.Printf("Old request (version %v)\n", request.ClientVersion)
+		w.WriteHeader(http.StatusNotAcceptable)
 	}
 
 	// Make sure we can create the submission.  This checks for everything but run errors.
@@ -208,6 +218,9 @@ func (s *SubmissionServer) setUpEnvironment() error {
 		return err
 	}
 	env.Persistence = mongo
+
+	// Set the min client version where the handler can access it
+	minClientVer = s.conf.MinClient
 
 	// OK, we're good to go
 	serverEnv = env

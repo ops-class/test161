@@ -59,6 +59,8 @@ func usage() {
 
            test161 list-targets [-remote | -r]
 
+           test161 version
+
            test161 help for a detailed description
 `)
 }
@@ -108,6 +110,9 @@ func main() {
 				exitcode = doSubmit()
 			case "list-targets":
 				exitcode = doListTargets()
+			case "version":
+				fmt.Printf("test161 version: %v\n", test161.Version)
+				exitcode = 0
 			default:
 				usage()
 			}
