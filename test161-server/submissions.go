@@ -19,6 +19,7 @@ import (
 
 // Environment for running test161 submissions
 var serverEnv *test161.TestEnvironment
+var submissionMgr *test161.SubmissionManager
 
 // Environment config
 type SubmissionServerConfig struct {
@@ -150,10 +151,23 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 
 	// Run it!
 	go func() {
-		if runerr := submission.Run(); err != nil {
+		if runerr := submissionMgr.Run(submission); err != nil {
 			logger.Println("Error running submission:", runerr)
 		}
 	}()
+}
+
+// getStats returns the current manager statistics
+func getStats(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", JsonHeader)
+	w.WriteHeader(http.StatusOK)
+
+	stats := submissionMgr.Stats()
+
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		logger.Println("Error encoding stats:", err)
+	}
 }
 
 func apiUsage(w http.ResponseWriter, r *http.Request) {
@@ -230,6 +244,7 @@ func (s *SubmissionServer) setUpEnvironment() error {
 
 	// OK, we're good to go
 	serverEnv = env
+	submissionMgr = test161.NewSubmissionManager(serverEnv)
 
 	return nil
 }

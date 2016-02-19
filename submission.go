@@ -366,6 +366,7 @@ func (s *Submission) Run() error {
 		if err != nil {
 			s.Status = SUBMISSION_ABORTED
 			s.Env.notifyAndLogErr("Submission Complete (Aborted)", s, MSG_PERSIST_COMPLETE, 0)
+			s.Errors = append(s.Errors, fmt.Sprintf("%v", err))
 			return err
 		}
 
@@ -388,6 +389,7 @@ func (s *Submission) Run() error {
 		err = s.Env.Persistence.Notify(test, MSG_PERSIST_CREATE, 0)
 		if err != nil {
 			s.Status = SUBMISSION_ABORTED
+			s.Errors = append(s.Errors, fmt.Sprintf("%v", err))
 			return err
 		}
 	}

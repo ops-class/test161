@@ -1,7 +1,9 @@
 package test161
 
 import (
+	"errors"
 	"sync"
+	"time"
 )
 
 // This file defines test161's test manager.  The manager is responsible for
@@ -40,11 +42,20 @@ type manager struct {
 
 type ManagerStats struct {
 	// protected by manager.L
-	NumRunning uint
-	HighCount  uint
-	Queued     uint
-	HighQueued uint
-	Finished   uint
+	Running     uint  `json:"running"`
+	HighRunning uint  `json:"high_running"`
+	Queued      uint  `json:"queued"`
+	HighQueued  uint  `json:"high_queued"`
+	Finished    uint  `json:"finished"`
+	MaxWait     int64 `json:"max_wait_ms"`
+	AvgWait     int64 `json:"avg_wait_ms"`
+	total       int64 // denominator for avg
+}
+
+// Combined submission and tests statistics since the service started
+type Test161Stats struct {
+	SubmissionStats ManagerStats `json:"submission_stats"`
+	TestStats       ManagerStats `json:"test_stats"`
 }
 
 const DEFAULT_MGR_CAPACITY uint = 0
@@ -93,7 +104,7 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 	m.statsCond.L.Lock()
 	queued := false
 
-	for m.Capacity > 0 && m.stats.NumRunning >= m.Capacity {
+	for m.Capacity > 0 && m.stats.Running >= m.Capacity {
 		if !queued {
 			queued = true
 
@@ -112,11 +123,12 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 	if queued {
 		m.stats.Queued -= 1
 		queued = false
+		m.statsCond.Broadcast()
 	}
 
-	m.stats.NumRunning += 1
-	if m.stats.NumRunning > m.stats.HighCount {
-		m.stats.HighCount = m.stats.NumRunning
+	m.stats.Running += 1
+	if m.stats.Running > m.stats.HighRunning {
+		m.stats.HighRunning = m.stats.Running
 	}
 
 	m.statsCond.L.Unlock()
@@ -128,9 +140,11 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 
 	// Update stats
 	m.statsCond.L.Lock()
-	m.stats.NumRunning -= 1
+	m.stats.Running -= 1
 	m.stats.Finished += 1
-	m.statsCond.Signal()
+
+	// Broadcast because different entities are blocking for different reasons
+	m.statsCond.Broadcast()
 	m.statsCond.L.Unlock()
 
 	// Pass the completed test back to the caller
@@ -171,8 +185,7 @@ func ManagerCapacity() uint {
 	return testManager.Capacity
 }
 
-// Return a copy of the current shared test manager stats
-func GetManagerStats() *ManagerStats {
+func (m *manager) Stats() *ManagerStats {
 	// Lock so we at least get a consistent view of the stats
 	testManager.statsCond.L.Lock()
 	defer testManager.statsCond.L.Unlock()
@@ -180,4 +193,137 @@ func GetManagerStats() *ManagerStats {
 	// copy
 	var res ManagerStats = testManager.stats
 	return &res
+}
+
+// Return a copy of the current shared test manager stats
+func GetManagerStats() *ManagerStats {
+	return testManager.Stats()
+}
+
+////////  Submission Manager
+//
+// SubmissionManager handles running multiple submissions, which is useful for the server.
+// The (Test)Manager already handles rate limiting tests, but we also need to be careful
+// about rate limiting submissions.  In particular, we don't need to build all new
+// if we have queued tests.  This just wastes cycles and I/O that the tests could use.
+// Plus, the student will see the status go from building to running, but the boot test
+// will just get queued.
+
+const (
+	SM_ACCEPTING = iota
+	SM_NOT_ACCEPTING
+)
+
+type SubmissionManager struct {
+	env     *TestEnvironment
+	runlock *sync.Mutex // Block everything from running
+	l       *sync.Mutex // Synchronize other state
+	status  int
+	stats   ManagerStats
+}
+
+func NewSubmissionManager(env *TestEnvironment) *SubmissionManager {
+	mgr := &SubmissionManager{
+		env:     env,
+		runlock: &sync.Mutex{},
+		l:       &sync.Mutex{},
+		status:  SM_NOT_ACCEPTING,
+	}
+	return mgr
+}
+
+func (sm *SubmissionManager) CombinedStats() *Test161Stats {
+	stats := &Test161Stats{
+		SubmissionStats: *sm.Stats(),
+		TestStats:       *sm.env.manager.Stats(),
+	}
+	return stats
+}
+
+func (sm *SubmissionManager) Stats() *ManagerStats {
+	sm.l.Lock()
+	defer sm.l.Unlock()
+	copy := sm.stats
+	return &copy
+}
+
+func (sm *SubmissionManager) Run(s *Submission) error {
+
+	// The test manager we're associated with
+	mgr := sm.env.manager
+
+	sm.l.Lock()
+
+	// Check to see if we've been paused or stopped.
+	if sm.status != SM_ACCEPTING {
+		sm.l.Unlock()
+		return errors.New("The submission server is not accepting new submissions at this time")
+	}
+
+	// Update Queued
+	sm.stats.Queued += 1
+	start := time.Now()
+	if sm.stats.HighQueued < sm.stats.Queued {
+		sm.stats.HighQueued = sm.stats.Queued
+	}
+	sm.l.Unlock()
+
+	///////////
+	// Queued here
+	sm.runlock.Lock()
+
+	// Still queued, but on deck. Wait on the manager's condition variable so we
+	// get notifications when stats change.
+	mgr.statsCond.L.Lock()
+	for mgr.stats.Queued > 0 {
+		mgr.statsCond.Wait()
+	}
+	mgr.statsCond.L.Unlock()
+	///////////
+
+	// Update run stats
+	sm.l.Lock()
+	sm.stats.Running += 1
+	if sm.stats.HighRunning < sm.stats.Running {
+		sm.stats.HighRunning = sm.stats.Running
+	}
+
+	// Max and average waits
+	curWait := int64(time.Now().Sub(start).Nanoseconds() / 1e6)
+	if sm.stats.MaxWait < curWait {
+		sm.stats.MaxWait = curWait
+	}
+	sm.stats.AvgWait = (sm.stats.total*sm.stats.AvgWait + curWait) / (sm.stats.total + 1)
+	sm.stats.total += 1
+
+	sm.l.Unlock()
+
+	// Run the submission
+	sm.runlock.Unlock()
+	err := s.Run()
+
+	// Update stats
+	sm.l.Lock()
+	sm.stats.Finished += 1
+	sm.l.Unlock()
+
+	return err
+}
+
+func (sm *SubmissionManager) Pause() {
+	sm.l.Lock()
+	defer sm.l.Unlock()
+	sm.status = SM_NOT_ACCEPTING
+}
+
+func (sm *SubmissionManager) Resume() {
+	sm.l.Lock()
+	defer sm.l.Unlock()
+	sm.status = SM_ACCEPTING
+}
+
+func (sm *SubmissionManager) Status() {
+	sm.l.Lock()
+	defer sm.l.Unlock()
+	sm.status = SM_ACCEPTING
 }
