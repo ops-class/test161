@@ -12,7 +12,7 @@ type ProgramVersion struct {
 
 var Version = ProgramVersion{
 	Major:    1,
-	Minor:    0,
+	Minor:    1,
 	Revision: 0,
 }
 
