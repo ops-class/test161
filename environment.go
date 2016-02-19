@@ -22,6 +22,7 @@ type TestEnvironment struct {
 
 	CacheDir    string
 	OverlayRoot string
+	KeyDir      string
 	Persistence PersistenceManager
 
 	Log *log.Logger

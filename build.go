@@ -51,8 +51,11 @@ type BuildTest struct {
 	srcDir    string // Directory for the os161 source code (dir/src)
 	rootDir   string // Directory for compilation output (dir/root)
 
+	users []string
+
 	conf    *BuildConf
 	env     *TestEnvironment
+	cmdEnv  []string
 	keyLock sync.Mutex
 }
 
@@ -87,6 +90,7 @@ type BuildConf struct {
 	CacheDir         string // Cache for previous builds
 	RequiresUserland bool   // Does userland need to be built?
 	Overlay          string // The overlay to use (append to overlay dir in env)
+	Users            []string
 }
 
 // Use the BuildConf to create a sequence of commands that will build an os161 kernel
@@ -159,6 +163,7 @@ func (cmd *BuildCommand) Run(env *TestEnvironment) error {
 
 	c := exec.Command(tokens[0], tokens[1:]...)
 	c.Dir = cmd.startDir
+	c.Env = cmd.test.cmdEnv
 
 	output, err := c.CombinedOutput()
 
@@ -235,6 +240,7 @@ func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 
 	t.env = env
 	t.env.keyMap = make(map[string]string)
+	t.setCommandEnv()
 
 	t.Result = TEST_RESULT_RUNNING
 	t.env.notifyAndLogErr("Build Test Running", t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
@@ -285,6 +291,28 @@ func commitCheckHandler(t *BuildTest, command *BuildCommand) error {
 	}
 
 	return errors.New("Cannot find required commit id")
+}
+
+func (t *BuildTest) setCommandEnv() {
+	keyfile := ""
+	studentDir := ""
+
+	// Get env for git clone/fetch. Pick one of the partners that has a key.
+	for _, user := range t.conf.Users {
+		studentDir = path.Join(t.env.KeyDir, user)
+		temp := path.Join(path.Join(studentDir, "id_rsa"))
+		if _, err := os.Stat(temp); err == nil {
+			// File exists
+			keyfile = temp
+			break
+		}
+	}
+
+	t.cmdEnv = os.Environ()
+
+	if keyfile != "" {
+		t.cmdEnv = append(t.cmdEnv, fmt.Sprintf(`GIT_SSH=%v`, path.Join(studentDir, "setssh.sh")))
+	}
 }
 
 func (t *BuildTest) addGitCommands() {
@@ -457,7 +485,8 @@ func (t *BuildTest) addOverlayCommand() {
 		return
 	}
 
-	cmd := t.addCommand(fmt.Sprintf("rsync -r %v/ %v", overlayPath, t.srcDir), t.srcDir)
+	t.addCommand(fmt.Sprintf("rsync -r %v/ %v", overlayPath, t.srcDir), t.srcDir)
+	cmd := t.addCommand("sync", t.srcDir)
 	cmd.handler = overlayHandler
 }
 
@@ -465,13 +494,18 @@ func (t *BuildTest) addBuildCommands() error {
 	confDir := path.Join(t.srcDir, "kern/conf")
 	compDir := path.Join(path.Join(t.srcDir, "kern/compile"), t.conf.KConfig)
 
+	os.RemoveAll(compDir)
+
 	t.addCommand("./configure --ostree="+t.rootDir, t.srcDir)
 
 	if t.conf.RequiresUserland {
+		t.addCommand("bmake clean", t.srcDir)
 		t.addCommand("bmake", t.srcDir)
 		t.addCommand("bmake install", t.srcDir)
 	}
+
 	t.addCommand("./config "+t.conf.KConfig, confDir)
+	t.addCommand("bmake clean", compDir)
 	t.addCommand("bmake", compDir)
 	t.addCommand("bmake depend", compDir)
 	t.addCommand("bmake install", compDir)

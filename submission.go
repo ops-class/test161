@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/satori/go.uuid"
+	"io/ioutil"
 	"os"
+	"os/exec"
+	"path"
 	"sync"
 	"time"
 )
@@ -84,6 +87,7 @@ type Student struct {
 	ID             string          `bson:"_id"`
 	Email          string          `bson:"email"`
 	Token          string          `bson:"token"`
+	PublicKey      string          `bson:"key"`
 	LastSubmission *TargetResult   `bson:"last_submission"`
 	TargetResults  []*TargetResult `bson:"target_results"`
 }
@@ -99,23 +103,33 @@ func (req *SubmissionRequest) validateUsers(env *TestEnvironment) ([]*Student, e
 	allStudents := make([]*Student, 0)
 
 	for _, user := range req.Users {
-		request := map[string]interface{}{
-			"email": user.Email,
-			"token": user.Token,
-		}
 
-		students := []*Student{}
-		if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, &students); err != nil {
+		if students, err := getStudents(user.Email, user.Token, env); err != nil {
 			return nil, err
+		} else {
+			allStudents = append(allStudents, students[0])
 		}
-
-		if len(students) != 1 || students[0].Email != user.Email || students[0].Token != user.Token {
-			return nil, errors.New("Unable to authenticate student: " + user.Email)
-		}
-		allStudents = append(allStudents, students[0])
 	}
 
 	return allStudents, nil
+}
+
+// Get a particular student from the DB and validate
+func getStudents(email, token string, env *TestEnvironment) ([]*Student, error) {
+
+	request := map[string]interface{}{
+		"email": email,
+		"token": token,
+	}
+	students := []*Student{}
+	if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, &students); err != nil {
+		return nil, err
+	}
+
+	if len(students) != 1 || students[0].Email != email || students[0].Token != token {
+		return nil, errors.New("Unable to authenticate student: " + email)
+	}
+	return students, nil
 }
 
 func (req *SubmissionRequest) validate(env *TestEnvironment) ([]*Student, error) {
@@ -174,6 +188,11 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 	conf.RequiredCommit = target.RequiredCommit
 	conf.RequiresUserland = target.RequiresUserland
 	conf.Overlay = target.Name
+
+	conf.Users = make([]string, 0, len(request.Users))
+	for _, u := range request.Users {
+		conf.Users = append(conf.Users, u.Email)
+	}
 
 	// Add first 'test' (build)
 	buildTest, err := conf.ToBuildTest(env)
@@ -419,4 +438,64 @@ func (s *Submission) Run() error {
 	}
 
 	return err
+}
+
+// On success, KeyGen returns the public key of the newly generated public/private key pair
+func KeyGen(email, token string, env *TestEnvironment) (string, error) {
+
+	if len(env.KeyDir) == 0 {
+		return "", errors.New("No key directory specified")
+	} else if _, err := os.Stat(env.KeyDir); err != nil {
+		return "", errors.New("Key directory not found")
+	}
+
+	// Find user
+	students, err := getStudents(email, token, env)
+	if err != nil {
+		return "", err
+	}
+
+	studentDir := path.Join(env.KeyDir, email)
+	privkey := path.Join(studentDir, "id_rsa")
+	pubkey := privkey + ".pub"
+
+	if _, err = os.Stat(studentDir); err == nil {
+		os.Remove(privkey)
+		os.Remove(pubkey)
+	} else {
+		err = os.Mkdir(studentDir, 0770)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// Generate key
+	cmd := exec.Command("ssh-keygen", "-C", "test161@ops-class.org", "-N", "", "-f", privkey)
+	cmd.Dir = env.KeyDir
+	err = cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	cmd = exec.Command("/home/test161/scripts/make_ssh.sh", path.Join(studentDir, "setssh.sh"), privkey)
+	cmd.Dir = "/home/test161/scripts/"
+	err = cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	data, err := ioutil.ReadFile(pubkey)
+	if err != nil {
+		return "", err
+	}
+
+	keytext := string(data)
+
+	// Update user
+	students[0].PublicKey = keytext
+	if env.Persistence != nil {
+		err = env.Persistence.Notify(students[0], MSG_PERSIST_UPDATE, 0)
+	}
+
+	return keytext, nil
 }

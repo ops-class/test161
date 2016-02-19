@@ -26,6 +26,7 @@ type SubmissionServerConfig struct {
 	CacheDir   string                 `yaml:"cachedir"`
 	Test161Dir string                 `yaml:"test161dir`
 	OverlayDir string                 `yaml:"overlaydir"`
+	KeyDir     string                 `yaml:"keydir"`
 	MaxTests   uint                   `yaml:"max_tests"`
 	Database   string                 `yaml:"dbname"`
 	DBServer   string                 `yaml:"dbsever"`
@@ -184,6 +185,47 @@ func apiUsage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `<html><body>See <a href="https://github.com/ops-class/test161">the ops-class test161 GitHub page </a> for API and usage</body></html>`)
 }
 
+type KeygenRequest struct {
+	Email string
+	Token string
+}
+
+// Generate a public/private key pair for a particular user
+func keygen(w http.ResponseWriter, r *http.Request) {
+	var request KeygenRequest
+
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 2*1024))
+	if err != nil {
+		logger.Println("Error reading web request:", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if err := r.Body.Close(); err != nil {
+		logger.Println("Error closing submission request body:", err)
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	if err := json.Unmarshal(body, &request); err != nil {
+		w.Header().Set("Content-Type", TextHeader)
+		w.WriteHeader(http.StatusBadRequest)
+
+		logger.Printf("Error unmarshalling keygen request. Error: %v\nRequest: ", err, string(body))
+		fmt.Fprintf(w, "%v", err)
+		return
+	}
+
+	key, err := test161.KeyGen(request.Email, request.Token, serverEnv)
+	if err != nil {
+		w.WriteHeader(422) // unprocessable entity
+		fmt.Fprintf(w, "%v", err)
+	} else {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, key)
+	}
+
+}
+
 func loadServerConfig() (*SubmissionServerConfig, error) {
 
 	// Check current directory, but fall back to home directory
@@ -246,6 +288,7 @@ func (s *SubmissionServer) setUpEnvironment() error {
 
 	env.CacheDir = s.conf.CacheDir
 	env.OverlayRoot = s.conf.OverlayDir
+	env.KeyDir = s.conf.KeyDir
 
 	// Set the min client version where the handler can access it
 	minClientVer = s.conf.MinClient
