@@ -45,6 +45,7 @@ func envInit() {
 	}
 
 	env.RootDir = conf.RootDir
+	env.OverlayRoot = conf.OverlayDir
 }
 
 func usage() {

@@ -19,6 +19,7 @@ type ClientConf struct {
 	Users      []*test161.SubmissionUserInfo `yaml:"users"`
 	RootDir    string                        `yaml:"rootdir"`
 	Test161Dir string                        `yaml:"test161dir"`
+	OverlayDir string                        `yaml:"overlaydir"`
 }
 
 func ClientConfFromFile(file string) (*ClientConf, error) {
