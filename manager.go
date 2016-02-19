@@ -2,6 +2,7 @@ package test161
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -103,6 +104,7 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 
 	m.statsCond.L.Lock()
 	queued := false
+	start := time.Now()
 
 	for m.Capacity > 0 && m.stats.Running >= m.Capacity {
 		if !queued {
@@ -123,6 +125,15 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 	if queued {
 		m.stats.Queued -= 1
 		queued = false
+
+		// Max and average waits
+		curWait := int64(time.Now().Sub(start).Nanoseconds() / 1e6)
+		if m.stats.MaxWait < curWait {
+			m.stats.MaxWait = curWait
+		}
+		m.stats.AvgWait = (m.stats.total*m.stats.AvgWait + curWait) / (m.stats.total + 1)
+		m.stats.total += 1
+
 		m.statsCond.Broadcast()
 	}
 
@@ -227,7 +238,7 @@ func NewSubmissionManager(env *TestEnvironment) *SubmissionManager {
 		env:     env,
 		runlock: &sync.Mutex{},
 		l:       &sync.Mutex{},
-		status:  SM_NOT_ACCEPTING,
+		status:  SM_ACCEPTING,
 	}
 	return mgr
 }
@@ -257,7 +268,11 @@ func (sm *SubmissionManager) Run(s *Submission) error {
 	// Check to see if we've been paused or stopped.
 	if sm.status != SM_ACCEPTING {
 		sm.l.Unlock()
-		return errors.New("The submission server is not accepting new submissions at this time")
+		s.Status = SUBMISSION_ABORTED
+		err := errors.New("The submission server is not accepting new submissions at this time")
+		s.Errors = append(s.Errors, fmt.Sprintf("%v", err))
+		sm.env.notifyAndLogErr("Submissions Closed", s, MSG_PERSIST_COMPLETE, 0)
+		return err
 	}
 
 	// Update Queued
@@ -283,6 +298,7 @@ func (sm *SubmissionManager) Run(s *Submission) error {
 
 	// Update run stats
 	sm.l.Lock()
+	sm.stats.Queued -= 1
 	sm.stats.Running += 1
 	if sm.stats.HighRunning < sm.stats.Running {
 		sm.stats.HighRunning = sm.stats.Running
@@ -304,6 +320,7 @@ func (sm *SubmissionManager) Run(s *Submission) error {
 
 	// Update stats
 	sm.l.Lock()
+	sm.stats.Running -= 1
 	sm.stats.Finished += 1
 	sm.l.Unlock()
 
@@ -322,8 +339,8 @@ func (sm *SubmissionManager) Resume() {
 	sm.status = SM_ACCEPTING
 }
 
-func (sm *SubmissionManager) Status() {
+func (sm *SubmissionManager) Status() int {
 	sm.l.Lock()
 	defer sm.l.Unlock()
-	sm.status = SM_ACCEPTING
+	return sm.status
 }

@@ -76,6 +76,7 @@ func NewSubmissionServer() (test161Server, error) {
 }
 
 const JsonHeader = "application/json; charset=UTF-8"
+const TextHeader = "text/plain; charset=UTF-8"
 
 var minClientVer test161.ProgramVersion
 
@@ -129,6 +130,15 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if submissionMgr.Status() == test161.SM_NOT_ACCEPTING {
+		// We're trying to shut down
+		logger.Println("Rejecting due to SM_NOT_ACCEPTING")
+		w.Header().Set("Content-Type", TextHeader)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(w, "The submission server is currently not accepting new submissions")
+		return
+	}
+
 	// Make sure we can create the submission.  This checks for everything but run errors.
 	submission, errs := test161.NewSubmission(&request, serverEnv)
 	if len(errs) > 0 {
@@ -163,7 +173,7 @@ func getStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", JsonHeader)
 	w.WriteHeader(http.StatusOK)
 
-	stats := submissionMgr.Stats()
+	stats := submissionMgr.CombinedStats()
 
 	if err := json.NewEncoder(w).Encode(stats); err != nil {
 		logger.Println("Error encoding stats:", err)
