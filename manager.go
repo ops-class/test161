@@ -55,6 +55,7 @@ type ManagerStats struct {
 
 // Combined submission and tests statistics since the service started
 type Test161Stats struct {
+	Status          string       `json:"status"`
 	SubmissionStats ManagerStats `json:"submission_stats"`
 	TestStats       ManagerStats `json:"test_stats"`
 }
@@ -248,6 +249,11 @@ func (sm *SubmissionManager) CombinedStats() *Test161Stats {
 		SubmissionStats: *sm.Stats(),
 		TestStats:       *sm.env.manager.Stats(),
 	}
+	if sm.Status() == SM_ACCEPTING {
+		stats.Status = "accepting submissions"
+	} else {
+		stats.Status = "not accepting submissions"
+	}
 	return stats
 }
 
@@ -265,7 +271,7 @@ func (sm *SubmissionManager) Run(s *Submission) error {
 
 	sm.l.Lock()
 
-	// Check to see if we've been paused or stopped.
+	// Check to see if we've been paused or stopped. The server checks too, but there's delay.
 	if sm.status != SM_ACCEPTING {
 		sm.l.Unlock()
 		s.Status = SUBMISSION_ABORTED
@@ -294,6 +300,8 @@ func (sm *SubmissionManager) Run(s *Submission) error {
 		mgr.statsCond.Wait()
 	}
 	mgr.statsCond.L.Unlock()
+	// It's OK if we get a rush of builds here. Eventually we'll get a queue again, and
+	// the test manager handles this.
 	///////////
 
 	// Update run stats
