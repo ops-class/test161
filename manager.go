@@ -50,6 +50,7 @@ type ManagerStats struct {
 	Finished    uint  `json:"finished"`
 	MaxWait     int64 `json:"max_wait_ms"`
 	AvgWait     int64 `json:"avg_wait_ms"`
+	StartTime   time.Time
 	total       int64 // denominator for avg
 }
 
@@ -87,7 +88,9 @@ func (m *manager) start() {
 		return
 	}
 
-	m.stats = ManagerStats{}
+	m.stats = ManagerStats{
+		StartTime: time.Now(),
+	}
 	m.SubmitChan = make(chan *test161Job)
 	m.isRunning = true
 
@@ -240,6 +243,9 @@ func NewSubmissionManager(env *TestEnvironment) *SubmissionManager {
 		runlock: &sync.Mutex{},
 		l:       &sync.Mutex{},
 		status:  SM_ACCEPTING,
+		stats: ManagerStats{
+			StartTime: time.Now(),
+		},
 	}
 	return mgr
 }
