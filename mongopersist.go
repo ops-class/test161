@@ -3,6 +3,7 @@ package test161
 import (
 	"errors"
 	"fmt"
+	"github.com/satori/go.uuid"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -16,6 +17,7 @@ const (
 	COLLECTION_SUBMISSIONS = "submissions"
 	COLLECTION_TESTS       = "tests"
 	COLLECTION_STUDENTS    = "students"
+	COLLECTION_TARGETS     = "targets"
 )
 
 func NewMongoPersistence(dial *mgo.DialInfo) (PersistenceManager, error) {
@@ -187,9 +189,52 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 				err = m.updateDocumentByID(session, COLLECTION_STUDENTS, student.ID, student)
 			}
 		}
+	case *Target:
+		{
+			target := t.(*Target)
+			switch msg {
+			case MSG_TARGET_LOAD:
+				c := session.DB(m.dbName).C(COLLECTION_TARGETS)
+				targets := []*Target{}
+				c.Find(bson.M{
+					"name":    target.Name,
+					"version": target.Version,
+				}).All(&targets)
+				if len(targets) == 0 {
+					// Insert
+					target.ID = uuid.NewV4().String()
+					err = m.insertDocument(session, COLLECTION_TARGETS, target)
+				} else if len(targets) == 1 {
+
+					target.ID = targets[0].ID
+
+					// Sanity checks to make sure no one changed a target we know about.
+					// (If this happens in testing, just clear the DB manually)
+					if target.FileHash != targets[0].FileHash {
+						// Figure out if there are any submissions with this id.  If so, fail.
+						var submissions []*Submission
+						subColl := session.DB(m.dbName).C(COLLECTION_SUBMISSIONS)
+						err = subColl.Find(bson.M{"target_id": target.ID}).Limit(1).All(&submissions)
+						fmt.Println(len(submissions), err)
+						if err == nil {
+							if len(submissions) > 0 {
+								err = errors.New(
+									"Target details changed and previous submissions exist. Increment the version number of the new target.")
+							} else {
+								// Just update it with the new version
+								err = m.updateDocumentByID(session, COLLECTION_TARGETS, target.ID, target)
+							}
+						}
+					}
+				} else {
+					err = errors.New("Multiple targets exist in DB for '" + target.Name + "'")
+				}
+			}
+		}
 	}
 	return
 }
+
 func (m *MongoPersistence) CanRetrieve() bool {
 	return true
 }

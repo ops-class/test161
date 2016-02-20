@@ -146,7 +146,7 @@ func TestCommandFactorial(t *testing.T) {
 
 func addInputTest() (*TestEnvironment, error) {
 
-	env, err := NewEnvironment("./fixtures")
+	env, err := NewEnvironment("./fixtures", &DoNothingPersistence{})
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ templates:
 }
 
 func addExternalCmd() (*TestEnvironment, error) {
-	env, err := NewEnvironment("./fixtures")
+	env, err := NewEnvironment("./fixtures", &DoNothingPersistence{})
 	if err != nil {
 		return nil, err
 	}

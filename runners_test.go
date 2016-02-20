@@ -91,11 +91,11 @@ func TestRunnerCapacity(t *testing.T) {
 		assert.Equal(uint(len(expected)), env.manager.stats.Finished)
 
 		if env.manager.Capacity > 0 {
-			assert.True(env.manager.stats.HighCount <= env.manager.Capacity)
+			assert.True(env.manager.stats.HighRunning <= env.manager.Capacity)
 		}
 
 		t.Log(fmt.Sprintf("High count: %v High queue: %v Finished: %v",
-			env.manager.stats.HighCount, env.manager.stats.HighQueued, env.manager.stats.Finished))
+			env.manager.stats.HighRunning, env.manager.stats.HighQueued, env.manager.stats.Finished))
 
 		env.manager.stop()
 	}
@@ -365,10 +365,10 @@ func TestRunnersParallel(t *testing.T) {
 	env.manager.stop()
 
 	if env.manager.Capacity > 0 {
-		assert.True(env.manager.stats.HighCount <= env.manager.Capacity)
+		assert.True(env.manager.stats.HighRunning <= env.manager.Capacity)
 	}
 
 	t.Log(fmt.Sprintf("High count: %v High queue: %v Finished: %v",
-		env.manager.stats.HighCount, env.manager.stats.HighQueued, env.manager.stats.Finished))
+		env.manager.stats.HighRunning, env.manager.stats.HighQueued, env.manager.stats.Finished))
 
 }

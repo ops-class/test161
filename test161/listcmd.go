@@ -14,10 +14,10 @@ import (
 
 var listRemoteFlag bool
 
-func doListTargets() {
+func doListTargets() int {
 	if err := getListArgs(); err != nil {
 		printRunError(err)
-		return
+		return 1
 	}
 
 	var targets *test161.TargetList
@@ -26,13 +26,15 @@ func doListTargets() {
 		var errs []error
 		if targets, errs = getRemoteTargets(); len(errs) > 0 {
 			printRunErrors(errs)
-			return
+			return 1
 		}
 	} else {
 		targets = env.TargetList()
 	}
 
 	printTargets(targets)
+
+	return 0
 }
 
 func getRemoteTargets() (*test161.TargetList, []error) {

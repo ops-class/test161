@@ -97,15 +97,15 @@ var CONF_DEFAULTS = Test{
 		Window:     1,
 	},
 	Monitor: MonitorConf{
-		Enabled: "false",
+		Enabled: "true",
 		Window:  400,
 		Kernel: Limits{
-			EnableMin: "true",
+			EnableMin: "false",
 			Min:       0.001,
-			Max:       0.99,
+			Max:       1.0,
 		},
 		User: Limits{
-			EnableMin: "true",
+			EnableMin: "false",
 			Min:       0.0001,
 			Max:       1.0,
 		},

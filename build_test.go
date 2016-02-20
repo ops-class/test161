@@ -10,14 +10,16 @@ func TestBuildFull(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &BuildConf{
-		Repo:           "https://github.com/ops-class/os161.git",
-		CommitID:       "e9e9b91904d5b098e1c69cd4ed23dfd65f6f212d",
-		KConfig:        "DUMBVM",
-		CacheDir:       "",
-		RequiredCommit: "db6d3d219d53a292b96e8529649757bb257e8785",
+		Repo:     "git@gitlab.ops-class.org:staff/sol1.git",
+		CommitID: "HEAD",
+		KConfig:  "ASST1",
+		//RequiredCommit: "db6d3d219d53a292b96e8529649757bb257e8785",
 	}
 
-	test, err := conf.ToBuildTest()
+	env := defaultEnv.CopyEnvironment()
+	env.RootDir = "./fixtures/root"
+
+	test, err := conf.ToBuildTest(env)
 	assert.Nil(err)
 	assert.NotNil(test)
 
@@ -26,10 +28,15 @@ func TestBuildFull(t *testing.T) {
 		t.FailNow()
 	}
 
-	_, err = test.Run(defaultEnv)
+	_, err = test.Run(env)
 	assert.Nil(err)
 
 	t.Log(test.OutputJSON())
+
+	for k, v := range env.keyMap {
+		t.Log(k, v)
+	}
+
 }
 
 type confDetail struct {
@@ -59,7 +66,7 @@ func TestBuildFailures(t *testing.T) {
 			RequiredCommit: c.reqCommit,
 		}
 
-		test, err := conf.ToBuildTest()
+		test, err := conf.ToBuildTest(defaultEnv)
 		assert.NotNil(test)
 
 		res, err := test.Run(defaultEnv)

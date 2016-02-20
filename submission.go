@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/satori/go.uuid"
+	"io/ioutil"
 	"os"
+	"os/exec"
+	"path"
 	"sync"
 	"time"
 )
@@ -19,10 +22,11 @@ type SubmissionUserInfo struct {
 // A SubmissionRequest represents the data required to run a test161 target
 // for evaluation by the test161 server.
 type SubmissionRequest struct {
-	Target     string                // Name of the target
-	Users      []*SubmissionUserInfo // Email addresses of users
-	Repository string                // Git repository to clone
-	CommitID   string                // Git commit id to checkout after cloning
+	Target        string                // Name of the target
+	Users         []*SubmissionUserInfo // Email addresses of users
+	Repository    string                // Git repository to clone
+	CommitID      string                // Git commit id to checkout after cloning
+	ClientVersion ProgramVersion        // The version of test161 the client is running
 }
 
 const (
@@ -42,7 +46,7 @@ type Submission struct {
 	CommitID   string   `bson:"commit_id"`
 
 	// Target details
-	TargetID        string `bson:"-"` //TODO: Use this?
+	TargetID        string `bson:"target_id"`
 	TargetName      string `bson:"target_name"`
 	TargetVersion   uint   `bson:"target_version"`
 	PointsAvailable uint   `bson:"max_score"`
@@ -83,6 +87,7 @@ type Student struct {
 	ID             string          `bson:"_id"`
 	Email          string          `bson:"email"`
 	Token          string          `bson:"token"`
+	PublicKey      string          `bson:"key"`
 	LastSubmission *TargetResult   `bson:"last_submission"`
 	TargetResults  []*TargetResult `bson:"target_results"`
 }
@@ -98,23 +103,33 @@ func (req *SubmissionRequest) validateUsers(env *TestEnvironment) ([]*Student, e
 	allStudents := make([]*Student, 0)
 
 	for _, user := range req.Users {
-		request := map[string]interface{}{
-			"email": user.Email,
-			"token": user.Token,
-		}
 
-		students := []*Student{}
-		if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, &students); err != nil {
+		if students, err := getStudents(user.Email, user.Token, env); err != nil {
 			return nil, err
+		} else {
+			allStudents = append(allStudents, students[0])
 		}
-
-		if len(students) != 1 || students[0].Email != user.Email || students[0].Token != user.Token {
-			return nil, errors.New("Unable to authenticate student: " + user.Email)
-		}
-		allStudents = append(allStudents, students[0])
 	}
 
 	return allStudents, nil
+}
+
+// Get a particular student from the DB and validate
+func getStudents(email, token string, env *TestEnvironment) ([]*Student, error) {
+
+	request := map[string]interface{}{
+		"email": email,
+		"token": token,
+	}
+	students := []*Student{}
+	if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, &students); err != nil {
+		return nil, err
+	}
+
+	if len(students) != 1 || students[0].Email != email || students[0].Token != token {
+		return nil, errors.New("Unable to authenticate student: " + email)
+	}
+	return students, nil
 }
 
 func (req *SubmissionRequest) validate(env *TestEnvironment) ([]*Student, error) {
@@ -144,34 +159,49 @@ func (req *SubmissionRequest) validate(env *TestEnvironment) ([]*Student, error)
 }
 
 // Create a new Submission that can be evaluated by the test161 server or client.
-func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submission, []error) {
+//
+// This submission has a copy of the test environment, so it's safe to pass the
+// same enviromnent for multiple submissions. Local fields will be set accordingly.
+func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submission, []error) {
 	var students []*Student
 	var err error
 
+	env := origenv.CopyEnvironment()
+
+	// Validate the request details and get the list of students for which
+	// this submission applies. We'll use this list later when we
+	// actually run the submission.
 	if students, err = request.validate(env); err != nil {
 		return nil, []error{err}
 	}
 
-	// First, get the target because there is some build info there
+	// (The target was validated in the previous step)
 	target := env.Targets[request.Target]
 
+	// Create the build configuration.  This is a combination of
+	// the environment, target, and request.
 	conf := &BuildConf{}
 	conf.Repo = request.Repository
 	conf.CommitID = request.CommitID
-	conf.KConfig = target.KConfig
 	conf.CacheDir = env.CacheDir
+	conf.KConfig = target.KConfig
 	conf.RequiredCommit = target.RequiredCommit
 	conf.RequiresUserland = target.RequiresUserland
+	conf.Overlay = target.Name
 
-	// Add first test (build)
-	buildTest, err := conf.ToBuildTest()
+	conf.Users = make([]string, 0, len(request.Users))
+	for _, u := range request.Users {
+		conf.Users = append(conf.Users, u.Email)
+	}
+
+	// Add first 'test' (build)
+	buildTest, err := conf.ToBuildTest(env)
 	if err != nil {
 		return nil, []error{err}
 	}
 
 	// Get the TestGroup. The root dir won't be set yet, but that's OK.  We'll
 	// change it after the build
-
 	tg, errs := target.Instance(env)
 	if err != nil {
 		return nil, errs
@@ -181,6 +211,7 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 		ID:              uuid.NewV4().String(),
 		Repository:      request.Repository,
 		CommitID:        request.CommitID,
+		TargetID:        target.ID,
 		TargetName:      target.Name,
 		TargetVersion:   target.Version,
 		PointsAvailable: target.Points,
@@ -199,13 +230,18 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 		Tests:     tg,
 	}
 
+	// We need the students to later update the students collection.  But,
+	// the submission only care about user email addresses.
 	s.students = students
 	s.Users = make([]string, 0, len(request.Users))
 	for _, u := range request.Users {
 		s.Users = append(s.Users, u.Email)
 	}
 
-	// Try and lock students now so we don't
+	// Try and lock students now so we don't allow multiple submissions.
+	// This enforces NewSubmission() can only return successfully if none
+	// of the students has a pending submission. We need to do this
+	// before we persist the submission.
 	userLock.Lock()
 	defer userLock.Unlock()
 
@@ -225,7 +261,8 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 
 	if env.Persistence != nil {
 		if buildTest != nil {
-			// If we get an error here, we can still hopefully recover
+			// If we get an error here, we can still hopefully recover. Though,
+			// build updates won't be seen by the user.
 			env.notifyAndLogErr("Create Build Test", buildTest, MSG_PERSIST_CREATE, 0)
 		}
 		// This we can't recover from
@@ -241,11 +278,6 @@ func NewSubmission(request *SubmissionRequest, env *TestEnvironment) (*Submissio
 	}
 
 	return s, nil
-}
-
-func (s *Submission) persistFailure() {
-	// TODO: handle failures
-	s.Status = SUBMISSION_ABORTED
 }
 
 func (s *Submission) TargetResult() (result *TargetResult) {
@@ -353,12 +385,12 @@ func (s *Submission) Run() error {
 		if err != nil {
 			s.Status = SUBMISSION_ABORTED
 			s.Env.notifyAndLogErr("Submission Complete (Aborted)", s, MSG_PERSIST_COMPLETE, 0)
+			s.Errors = append(s.Errors, fmt.Sprintf("%v", err))
 			return err
 		}
 
 		// Build output
 		s.Env.RootDir = res.RootDir
-		s.Env.KeyMap = res.KeyMap
 
 		// Clean up temp build directory
 		if len(res.TempDir) > 0 {
@@ -376,6 +408,7 @@ func (s *Submission) Run() error {
 		err = s.Env.Persistence.Notify(test, MSG_PERSIST_CREATE, 0)
 		if err != nil {
 			s.Status = SUBMISSION_ABORTED
+			s.Errors = append(s.Errors, fmt.Sprintf("%v", err))
 			return err
 		}
 	}
@@ -405,4 +438,64 @@ func (s *Submission) Run() error {
 	}
 
 	return err
+}
+
+// On success, KeyGen returns the public key of the newly generated public/private key pair
+func KeyGen(email, token string, env *TestEnvironment) (string, error) {
+
+	if len(env.KeyDir) == 0 {
+		return "", errors.New("No key directory specified")
+	} else if _, err := os.Stat(env.KeyDir); err != nil {
+		return "", errors.New("Key directory not found")
+	}
+
+	// Find user
+	students, err := getStudents(email, token, env)
+	if err != nil {
+		return "", err
+	}
+
+	studentDir := path.Join(env.KeyDir, email)
+	privkey := path.Join(studentDir, "id_rsa")
+	pubkey := privkey + ".pub"
+
+	if _, err = os.Stat(studentDir); err == nil {
+		os.Remove(privkey)
+		os.Remove(pubkey)
+	} else {
+		err = os.Mkdir(studentDir, 0770)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// Generate key
+	cmd := exec.Command("ssh-keygen", "-C", "test161@ops-class.org", "-N", "", "-f", privkey)
+	cmd.Dir = env.KeyDir
+	err = cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	cmd = exec.Command("/home/test161/scripts/make_ssh.sh", path.Join(studentDir, "setssh.sh"), privkey)
+	cmd.Dir = "/home/test161/scripts/"
+	err = cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	data, err := ioutil.ReadFile(pubkey)
+	if err != nil {
+		return "", err
+	}
+
+	keytext := string(data)
+
+	// Update user
+	students[0].PublicKey = keytext
+	if env.Persistence != nil {
+		err = env.Persistence.Notify(students[0], MSG_PERSIST_UPDATE, 0)
+	}
+
+	return keytext, nil
 }

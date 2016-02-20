@@ -34,6 +34,18 @@ var routes = []Route{
 		"/api-v1/targets",
 		listTargets,
 	},
+	Route{
+		"stats",
+		"GET",
+		"/api-v1/stats",
+		getStats,
+	},
+	Route{
+		"keygen",
+		"POST",
+		"/api-v1/keygen",
+		keygen,
+	},
 }
 
 func NewRouter() *mux.Router {

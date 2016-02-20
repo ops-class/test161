@@ -34,12 +34,11 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 
 	var submission *test161.Submission
 
+	env.Persistence = &ConsolePersistence{}
 	submission, errs = test161.NewSubmission(req, env)
 	if len(errs) > 0 {
 		return
 	}
-
-	env.Persistence = &ConsolePersistence{}
 
 	test161.SetManagerCapacity(0)
 	test161.StartManager()
@@ -56,9 +55,10 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 	return
 }
 
-func doSubmit() {
+func doSubmit() (exitcode int) {
 
 	collabMsg := ""
+	exitcode = 1
 
 	// Parse args
 	if targetInfo, err := getSubmitArgs(); err != nil {
@@ -69,10 +69,11 @@ func doSubmit() {
 	}
 
 	req := &test161.SubmissionRequest{
-		Target:     submitTargetName,
-		Users:      conf.Users,
-		Repository: conf.Repository,
-		CommitID:   submitCommit,
+		Target:        submitTargetName,
+		Users:         conf.Users,
+		Repository:    conf.Repository,
+		CommitID:      submitCommit,
+		ClientVersion: test161.Version,
 	}
 
 	score, avail := uint(0), uint(0)
@@ -94,11 +95,17 @@ func doSubmit() {
 	// Show score and collab policy, and give them a chance to cancel
 	fmt.Printf(SubmitMsg, collabMsg, score, avail)
 	reader := bufio.NewReader(os.Stdin)
-	text, _ := reader.ReadString('\n')
-
-	if text != "yes\n" {
-		fmt.Println("\nSubmission request cancelled\n")
-		return
+	for {
+		text, _ := reader.ReadString('\n')
+		text = strings.TrimSpace(text)
+		if text == "no" {
+			fmt.Println("\nSubmission request cancelled\n")
+			return
+		} else if text == "yes" {
+			break
+		} else {
+			fmt.Println("\nPlease answer 'yes' or 'no'")
+		}
 	}
 
 	// Submit
@@ -119,12 +126,17 @@ func doSubmit() {
 		} else {
 			if resp.StatusCode == http.StatusCreated {
 				fmt.Println("\nYour submission has been created and is being processed by the test161 server\n")
+				exitcode = 0
+			} else if resp.StatusCode == http.StatusNotAcceptable {
+				fmt.Println("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit")
 			} else {
 				printRunError(fmt.Errorf("\nThe server could not process your request: %v. \nData: %v\n",
 					resp.Status, body))
 			}
 		}
 	}
+
+	return
 }
 
 func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
@@ -133,7 +145,7 @@ func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
 	var ok bool
 	ourVersion, ok = env.Targets[name]
 	if !ok {
-		return nil, fmt.Errorf("Target '%v' does not exist locally.  Please update your os161 sources", name)
+		return nil, fmt.Errorf("Target '%v' does not exist locally.  Please update your os161 sources.", name)
 	}
 
 	// Verfiy it exists on the sever, and is up to date

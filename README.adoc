@@ -255,7 +255,6 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 * Tracking dependencies should be the default and ignoring them the command
 line option.
 * Add ways to print all tests and groups.
-* Set the exit code to indicate whether all tests passed.
 * Order the test output in some meaningful way, probably by depth in the
 dependency graph. (That way all skipped tests should be shown last.)
 * Update the defaults on this document to match the new default settings.

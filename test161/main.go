@@ -39,12 +39,13 @@ func envInit() {
 		os.Exit(1)
 	}
 
-	if env, err = test161.NewEnvironment(conf.Test161Dir); err != nil {
+	if env, err = test161.NewEnvironment(conf.Test161Dir, nil); err != nil {
 		fmt.Println("Error creating environment:", err)
 		os.Exit(1)
 	}
 
 	env.RootDir = conf.RootDir
+	env.OverlayRoot = conf.OverlayDir
 }
 
 func usage() {
@@ -58,6 +59,8 @@ func usage() {
            test161 submit <target> <commit>
 
            test161 list-targets [-remote | -r]
+
+           test161 version
 
            test161 help for a detailed description
 `)
@@ -90,9 +93,10 @@ func help() {
 }
 
 func main() {
+	exitcode := 2
+
 	if len(os.Args) == 1 {
 		usage()
-		os.Exit(2)
 	} else {
 		// Get the sub-command
 		if os.Args[1] == "help" {
@@ -102,15 +106,18 @@ func main() {
 			envInit() // This might exit
 			switch os.Args[1] {
 			case "run":
-				doRun()
+				exitcode = doRun()
 			case "submit":
-				doSubmit()
+				exitcode = doSubmit()
 			case "list-targets":
-				doListTargets()
+				exitcode = doListTargets()
+			case "version":
+				fmt.Printf("test161 version: %v\n", test161.Version)
+				exitcode = 0
 			default:
 				usage()
-				os.Exit(2)
 			}
 		}
 	}
+	os.Exit(exitcode)
 }

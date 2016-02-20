@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/ops-class/test161"
 	"os"
 	"os/signal"
 )
@@ -37,6 +38,34 @@ func waitForSignal() {
 }
 
 func main() {
+	// TODO: Usage
+
+	if len(os.Args) == 2 {
+		var err error
+		var status int
+
+		switch os.Args[1] {
+		case "status":
+			status, err = CtrlStatus()
+			if err == nil {
+				if status == test161.SM_ACCEPTING {
+					fmt.Println("test161 server: accepting submissions")
+				} else {
+					fmt.Println("test161 server: not accepting submissions")
+				}
+			}
+		case "pause":
+			err = CtrlPause()
+		case "resume":
+			err = CtrlResume()
+		}
+		if err != nil {
+			fmt.Println("Error processing request:", err)
+			os.Exit(1)
+		} else {
+			os.Exit(0)
+		}
+	}
 
 	// Create Submission Server
 	server, err := NewSubmissionServer()
@@ -46,7 +75,8 @@ func main() {
 	}
 	servers = append(servers, server)
 
-	// Eventually we'll add stats and control servers
+	ctrl := &ControlServer{}
+	servers = append(servers, ctrl)
 
 	for _, s := range servers {
 		go s.Start()

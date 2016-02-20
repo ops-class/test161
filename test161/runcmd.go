@@ -38,17 +38,18 @@ func printRunErrors(errs []error) {
 	}
 }
 
-func doRun() {
+func doRun() int {
 	if err := getRunArgs(); err != nil {
 		printRunError(err)
-		return
+		return 1
 	}
 
-	errs := runTests()
+	exitcode, errs := runTests()
 	if len(errs) > 0 {
 		printRunErrors(errs)
 	}
 
+	return exitcode
 }
 
 // Verbose settings
@@ -100,7 +101,7 @@ func getRunArgs() error {
 	return nil
 }
 
-func runTestGroup(tg *test161.TestGroup, useDeps bool) {
+func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 	var r test161.TestRunner
 	if useDeps {
 		r = test161.NewDependencyRunner(tg)
@@ -146,6 +147,7 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 	done := r.Run()
 
 	for res := range done {
+
 		totalPoints += res.Test.PointsEarned
 		totalAvail += res.Test.PointsAvailable
 
@@ -233,9 +235,15 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) {
 	}
 
 	fmt.Println()
+
+	if len(tg.Tests) == totals[0] {
+		return 0
+	} else {
+		return 1
+	}
 }
 
-func runTests() []error {
+func runTests() (int, []error) {
 
 	var target *test161.Target
 	var ok bool
@@ -245,14 +253,14 @@ func runTests() []error {
 		if target, ok = env.Targets[runCommandVars.tests[0]]; ok {
 			tg, errs := target.Instance(env)
 			if len(errs) > 0 {
-				return errs
+				return 1, errs
 			} else {
 				if runCommandVars.dryRun {
 					printDryRun(tg)
 				} else {
 					runTestGroup(tg, true)
 				}
-				return nil
+				return 0, nil
 			}
 		}
 	}
@@ -265,15 +273,17 @@ func runTests() []error {
 		Env:     env,
 	}
 
+	exitcode := 0
+
 	if tg, errs := test161.GroupFromConfig(config); len(errs) > 0 {
-		return errs
+		return 1, errs
 	} else {
 		if runCommandVars.dryRun {
 			printDryRun(tg)
 		} else {
-			runTestGroup(tg, config.UseDeps)
+			exitcode = runTestGroup(tg, config.UseDeps)
 		}
-		return nil
+		return exitcode, nil
 	}
 }
 
