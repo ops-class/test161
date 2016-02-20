@@ -477,13 +477,6 @@ func KeyGen(email, token string, env *TestEnvironment) (string, error) {
 		return "", err
 	}
 
-	cmd = exec.Command("/home/test161/scripts/make_ssh.sh", path.Join(studentDir, "setssh.sh"), privkey)
-	cmd.Dir = "/home/test161/scripts/"
-	err = cmd.Run()
-	if err != nil {
-		return "", err
-	}
-
 	data, err := ioutil.ReadFile(pubkey)
 	if err != nil {
 		return "", err
