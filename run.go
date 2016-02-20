@@ -512,12 +512,14 @@ func (t *Test) sendCommand(commandLine string) error {
 				if err == nil {
 					break
 				} else if err == expect.ErrTimeout {
+					t.env.Log.Printf("Character timeout in command line '%v'\n", commandLine)
 					continue
 				} else {
 					return err
 				}
 			}
 			if retryCount == t.Misc.CommandRetries {
+				t.env.Log.Printf("Too many character retries in command line '%v'\n", commandLine)
 				return errors.New("test161: timeout sending command")
 			}
 		}

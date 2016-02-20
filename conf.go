@@ -114,7 +114,7 @@ var CONF_DEFAULTS = Test{
 	Misc: MiscConf{
 		CommandRetries:   5,
 		PromptTimeout:    300.0,
-		CharacterTimeout: 250,
+		CharacterTimeout: 1000,
 		RetryCharacters:  "true",
 		KillOnExit:       "false",
 	},
