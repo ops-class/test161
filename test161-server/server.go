@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/ops-class/test161"
 	"os"
@@ -40,7 +41,7 @@ func waitForSignal() {
 func main() {
 	// TODO: Usage
 
-	if len(os.Args) == 2 {
+	if len(os.Args) > 1 {
 		var err error
 		var status int
 
@@ -58,7 +59,27 @@ func main() {
 			err = CtrlPause()
 		case "resume":
 			err = CtrlResume()
+		case "set-capacity":
+			if len(os.Args) != 3 {
+				err = errors.New("Wrong number of arguments to set-capacity")
+			} else {
+				err = CtrlSetCapacity(os.Args[2])
+			}
+		case "get-capacity":
+			var capacity int
+			capacity, err = CtrlGetCapacity()
+			if err == nil {
+				fmt.Println("Current test capacity:", capacity)
+			}
+		case "version":
+			fmt.Printf("test161-server version: %v\n", test161.Version)
+			err = nil
+
+		default:
+			fmt.Println("Unknown command:", os.Args[1])
+			os.Exit(2)
 		}
+
 		if err != nil {
 			fmt.Println("Error processing request:", err)
 			os.Exit(1)

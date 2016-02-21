@@ -512,12 +512,14 @@ func (t *Test) sendCommand(commandLine string) error {
 				if err == nil {
 					break
 				} else if err == expect.ErrTimeout {
+					t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'", t.ID, commandLine)
 					continue
 				} else {
 					return err
 				}
 			}
 			if retryCount == t.Misc.CommandRetries {
+				t.env.Log.Printf("Test ID %v  Too many character retries in command line '%v'", t.ID, commandLine)
 				return errors.New("test161: timeout sending command")
 			}
 		}
@@ -765,7 +767,7 @@ func (t *Test) outputLineComplete() {
 
 		// Check if we've already seen that salt during this test. If so, it's suspicious.
 		if ok, _ := t.salts[salt]; ok {
-			t.env.Log.Println("Salt value failed uniqueness requirement")
+			t.env.Log.Printf("Test ID %v  Salt value failed uniqueness requirement\n", t.ID)
 			line.Trusted = false
 			return
 		}

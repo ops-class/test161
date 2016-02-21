@@ -32,15 +32,11 @@ func envInit() {
 	if file == "" {
 		printDefaultConf()
 		os.Exit(1)
-	}
-
-	if conf, err = ClientConfFromFile(file); err != nil {
-		fmt.Println("Error reading client configuration:", err)
+	} else if conf, err = ClientConfFromFile(file); err != nil {
+		printDefaultConf()
 		os.Exit(1)
-	}
-
-	if env, err = test161.NewEnvironment(conf.Test161Dir, nil); err != nil {
-		fmt.Println("Error creating environment:", err)
+	} else if env, err = test161.NewEnvironment(conf.Test161Dir, nil); err != nil {
+		printDefaultConf()
 		os.Exit(1)
 	}
 

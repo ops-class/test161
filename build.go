@@ -311,7 +311,7 @@ func (t *BuildTest) setCommandEnv() {
 	t.cmdEnv = os.Environ()
 
 	if keyfile != "" {
-		t.cmdEnv = append(t.cmdEnv, fmt.Sprintf(`GIT_SSH=%v`, path.Join(studentDir, "setssh.sh")))
+		t.cmdEnv = append(t.cmdEnv, fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -i %v`, keyfile))
 	}
 }
 

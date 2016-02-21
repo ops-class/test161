@@ -36,6 +36,7 @@ type manager struct {
 
 	// protected by L
 	statsCond *sync.Cond
+	queueCond *sync.Cond
 	isRunning bool
 
 	stats ManagerStats
@@ -50,6 +51,7 @@ type ManagerStats struct {
 	Finished    uint  `json:"finished"`
 	MaxWait     int64 `json:"max_wait_ms"`
 	AvgWait     int64 `json:"avg_wait_ms"`
+	StartTime   time.Time
 	total       int64 // denominator for avg
 }
 
@@ -67,6 +69,7 @@ func newManager() *manager {
 		SubmitChan: nil,
 		Capacity:   DEFAULT_MGR_CAPACITY,
 		statsCond:  sync.NewCond(&sync.Mutex{}),
+		queueCond:  sync.NewCond(&sync.Mutex{}),
 		isRunning:  false,
 	}
 	return m
@@ -87,7 +90,9 @@ func (m *manager) start() {
 		return
 	}
 
-	m.stats = ManagerStats{}
+	m.stats = ManagerStats{
+		StartTime: time.Now(),
+	}
 	m.SubmitChan = make(chan *test161Job)
 	m.isRunning = true
 
@@ -124,7 +129,11 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 
 	// We've got the green light... (and the stats lock)
 	if queued {
+		// Update the queue count and signal the submission manager (if there is one)
+		m.queueCond.L.Lock()
 		m.stats.Queued -= 1
+		m.queueCond.Signal()
+		m.queueCond.L.Unlock()
 		queued = false
 
 		// Max and average waits
@@ -134,8 +143,6 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 		}
 		m.stats.AvgWait = (m.stats.total*m.stats.AvgWait + curWait) / (m.stats.total + 1)
 		m.stats.total += 1
-
-		m.statsCond.Broadcast()
 	}
 
 	m.stats.Running += 1
@@ -155,8 +162,7 @@ func (m *manager) runOrQueueJob(job *test161Job) {
 	m.stats.Running -= 1
 	m.stats.Finished += 1
 
-	// Broadcast because different entities are blocking for different reasons
-	m.statsCond.Broadcast()
+	m.statsCond.Signal()
 	m.statsCond.L.Unlock()
 
 	// Pass the completed test back to the caller
@@ -240,6 +246,9 @@ func NewSubmissionManager(env *TestEnvironment) *SubmissionManager {
 		runlock: &sync.Mutex{},
 		l:       &sync.Mutex{},
 		status:  SM_ACCEPTING,
+		stats: ManagerStats{
+			StartTime: time.Now(),
+		},
 	}
 	return mgr
 }
@@ -293,15 +302,16 @@ func (sm *SubmissionManager) Run(s *Submission) error {
 	// Queued here
 	sm.runlock.Lock()
 
-	// Still queued, but on deck. Wait on the manager's condition variable so we
-	// get notifications when stats change.
-	mgr.statsCond.L.Lock()
+	// Still queued, but on deck. Wait on the manager's queue condition variable so we
+	// get notifications when the count changes.
+	mgr.queueCond.L.Lock()
 	for mgr.stats.Queued > 0 {
-		mgr.statsCond.Wait()
+		mgr.queueCond.Wait()
 	}
-	mgr.statsCond.L.Unlock()
-	// It's OK if we get a rush of builds here. Eventually we'll get a queue again, and
+	mgr.queueCond.L.Unlock()
+	// We may get a rush of builds here. Eventually we'll get a queue again, and
 	// the test manager handles this.
+	// TODO: Consider better build rate limiting
 	///////////
 
 	// Update run stats

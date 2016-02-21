@@ -70,26 +70,35 @@ type Submission struct {
 	students []*Student
 }
 
-type TargetResult struct {
-	TargetName     string    `bson:"target_name"`
-	TargetVersion  uint      `bson:"target_version"`
-	TargetType     string    `bson:"target_type"`
-	Status         string    `bson:"status"`
-	Score          uint      `bson:"score"`
-	MaxScore       uint      `bson:"max_score"`
-	Performance    float64   `bson:"performance"`
-	SubmissionTime time.Time `bson:"submission_time"`
-	CompletionTime time.Time `bson:"completion_time"`
-	SubmissionID   string    `bson:"submission_id"`
+type TargetStats struct {
+	TargetName    string `bson:"target_name"`
+	TargetVersion uint   `bson:"target_version"`
+	TargetType    string `bson:"target_type"`
+	MaxScore      uint   `bson:"max_score"`
+
+	TotalSubmissions uint `bson:"total_submissions"`
+	TotalComplete    uint `bson:"total_complete"`
+
+	HighScore uint    `bson:"high_score"`
+	LowScore  uint    `bson:"low_score"`
+	AvgScore  float64 `bson:"avg_score"`
+
+	BestPerf  float64 `bson:"best_perf"`
+	WorstPerf float64 `bson:"worst_perf"`
+	AvgPerf   float64 `bson:"avg_perf"`
+
+	BestSubmission string `bson:"best_submission_id"`
 }
 
 type Student struct {
-	ID             string          `bson:"_id"`
-	Email          string          `bson:"email"`
-	Token          string          `bson:"token"`
-	PublicKey      string          `bson:"key"`
-	LastSubmission *TargetResult   `bson:"last_submission"`
-	TargetResults  []*TargetResult `bson:"target_results"`
+	ID        string `bson:"_id"`
+	Email     string `bson:"email"`
+	Token     string `bson:"token"`
+	PublicKey string `bson:"key"`
+
+	// Stats
+	TotalSubmissions uint           `bson:"total_submissions"`
+	Stats            []*TargetStats `bson:"target_stats"`
 }
 
 // Keep track of pending submissions.  Keep this out of the database in case there are
@@ -280,51 +289,111 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 	return s, nil
 }
 
-func (s *Submission) TargetResult() (result *TargetResult) {
-	result = &TargetResult{
-		TargetName:     s.TargetName,
-		TargetVersion:  s.TargetVersion,
-		TargetType:     s.TargetType,
-		Status:         s.Status,
-		Score:          s.Score,
-		MaxScore:       s.PointsAvailable,
-		Performance:    s.Performance,
-		SubmissionTime: s.SubmissionTime,
-		CompletionTime: s.CompletionTime,
-		SubmissionID:   s.ID,
+func (s *Submission) TargetStats() (result *TargetStats) {
+	result = &TargetStats{
+		TargetName:    s.TargetName,
+		TargetVersion: s.TargetVersion,
+		TargetType:    s.TargetType,
+		MaxScore:      s.PointsAvailable,
 	}
 	return
+}
+
+// Are the submission results valid, from the perspective of updating statistics?
+// We only count submissions that complete successfully for assignments.
+// For perf, the score has to be perfect also.
+func (s *Submission) validResult() bool {
+	if s.Status == SUBMISSION_COMPLETED &&
+		(s.TargetType == TARGET_ASST || s.Score == s.PointsAvailable) {
+		return true
+	} else {
+		return false
+	}
+}
+
+// update the
+func (student *Student) updateStats(submission *Submission) {
+
+	// This might be nil coming out of Mongo
+	if student.Stats == nil {
+		student.Stats = make([]*TargetStats, 0)
+	}
+
+	student.TotalSubmissions += 1
+
+	// Find the TargetStats to update, or create a new one
+	var stat *TargetStats
+
+	for _, temp := range student.Stats {
+		if temp.TargetName == submission.TargetName {
+			stat = temp
+			break
+		}
+	}
+	if stat == nil {
+		stat = submission.TargetStats()
+		student.Stats = append(student.Stats, stat)
+	}
+
+	// Always increment submission count, but everything else depends on the
+	// submission result
+	stat.TotalSubmissions += 1
+
+	if submission.validResult() {
+
+		if stat.TargetType == TARGET_ASST {
+			// High score
+			if stat.HighScore < submission.Score {
+				stat.HighScore = submission.Score
+				stat.BestSubmission = submission.ID
+			}
+
+			// Low score
+			if stat.LowScore == 0 || stat.LowScore > submission.Score {
+				stat.LowScore = submission.Score
+			}
+
+			// Average
+			prevTotal := float64(stat.TotalComplete) * stat.AvgScore
+			stat.TotalComplete += 1
+			if stat.TotalComplete == 0 {
+				stat.TotalComplete = 1
+				prevTotal = 0
+			}
+			stat.AvgScore = (prevTotal + float64(submission.Score)) / float64(stat.TotalComplete)
+
+		} else if stat.TargetType == TARGET_PERF {
+			// Best Perf
+			if submission.Performance < stat.BestPerf || stat.BestPerf == 0.0 {
+				stat.BestPerf = submission.Performance
+				stat.BestSubmission = submission.ID
+			}
+
+			// Worst Perf
+			if stat.WorstPerf < submission.Performance {
+				stat.WorstPerf = submission.Performance
+			}
+
+			// Average perf
+			prevPerfTotal := float64(stat.TotalComplete) * stat.AvgPerf
+			stat.TotalComplete += 1
+			if stat.TotalComplete == 0 {
+				stat.TotalComplete = 1
+				prevPerfTotal = 0.0
+			}
+			stat.AvgPerf = (prevPerfTotal + submission.Performance) / float64(stat.TotalComplete)
+		}
+	}
 }
 
 // Update students.  We copy metadata to make this quick and store the
 // submision id to look up the full details.
 func (s *Submission) updateStudents() {
 
-	res := s.TargetResult()
 	for _, student := range s.students {
-		// This might be nil coming out of Mongo
-		if student.TargetResults == nil {
-			student.TargetResults = make([]*TargetResult, 0)
-		}
 
-		student.LastSubmission = res
-
-		// Update the high score for the target
-		if s.Status == SUBMISSION_COMPLETED &&
-			(s.TargetType == TARGET_ASST || s.Score == s.PointsAvailable) {
-			found := false
-			var prev *TargetResult
-			for _, prev = range student.TargetResults {
-				if prev.TargetName == s.TargetName {
-					found = true
-					break
-				}
-			}
-			if !found || (s.TargetType == TARGET_ASST && prev.Score < s.Score) ||
-				(s.TargetType == TARGET_PERF && prev.Performance < s.Performance) {
-				student.TargetResults = append(student.TargetResults, res)
-			}
-		}
+		// Update stats
+		student.updateStats(s)
 
 		if s.Env.Persistence != nil {
 			if err := s.Env.Persistence.Notify(student, MSG_PERSIST_UPDATE, 0); err != nil {
@@ -472,13 +541,6 @@ func KeyGen(email, token string, env *TestEnvironment) (string, error) {
 	// Generate key
 	cmd := exec.Command("ssh-keygen", "-C", "test161@ops-class.org", "-N", "", "-f", privkey)
 	cmd.Dir = env.KeyDir
-	err = cmd.Run()
-	if err != nil {
-		return "", err
-	}
-
-	cmd = exec.Command("/home/test161/scripts/make_ssh.sh", path.Join(studentDir, "setssh.sh"), privkey)
-	cmd.Dir = "/home/test161/scripts/"
 	err = cmd.Run()
 	if err != nil {
 		return "", err

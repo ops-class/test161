@@ -289,6 +289,7 @@ func (s *SubmissionServer) setUpEnvironment() error {
 	env.CacheDir = s.conf.CacheDir
 	env.OverlayRoot = s.conf.OverlayDir
 	env.KeyDir = s.conf.KeyDir
+	env.Log = logger
 
 	// Set the min client version where the handler can access it
 	minClientVer = s.conf.MinClient
