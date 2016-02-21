@@ -71,6 +71,10 @@ func main() {
 			if err == nil {
 				fmt.Println("Current test capacity:", capacity)
 			}
+		case "version":
+			fmt.Printf("test161-server version: %v\n", test161.Version)
+			err = nil
+
 		default:
 			fmt.Println("Unknown command:", os.Args[1])
 			os.Exit(2)
