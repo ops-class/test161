@@ -20,16 +20,16 @@ source $HOME/.gvm/scripts/gvm
 ----
 
 At this point you are ready to start using GVM. We are currently building and
-testing `test161` with Go version `go1.6beta2`. However, because the Go
-compiler is now written in Go, installing versions of Go past 1.5 require
-install Go version 1.4 first.
+testing `test161` with Go version `go1.5.3`. However, because the Go compiler
+is now written in Go, installing versions of Go past 1.5 require install Go
+version 1.4 first.
 
 [source,bash]
 ----
 gvm install go1.4
 gvm use 1.4
-gvm install go1.6beta2
-gvm use 1.6beta2
+gvm install go1.5.3
+gvm use 1.5.3 --default
 ----
 
 === `GOPATH`
@@ -45,8 +45,7 @@ Once you have Go installed, upgrading or installing `test161` is simple:
 
 [source,bash]
 ----
-go get -u github.com/ops-class/test161/
-go install github.com/ops-class/test161/test161
+go get -u github.com/ops-class/test161/test161
 ----
 
 == Configuration
@@ -258,6 +257,24 @@ line option.
 * Order the test output in some meaningful way, probably by depth in the
 dependency graph. (That way all skipped tests should be shown last.)
 * Update the defaults on this document to match the new default settings.
+* Print test breakdown and totals before submission (similar to `test161
+run`).
+* Check user identity _before_ cloning and configuring the repository to
+short-circuit when tokens change.
+* Cache a copy of the cloned repository somewhere so that we can pull and
+checkout rather than recloning every time (slow).
+* Better error messages and hints about repository problems:
+** Check and fail for dirty working trees
+** Check and fail for unpushed refs
+** Check and fail if it doesn't look like an OS/161 source tree, has
+inappropriate files (`.o`), or is too large. (Prevent backend storage DOS
+attacks.)
+
+=== Key saving
+
+Now that we are having students save a key through the web interface we need
+to make sure that these keys get saved, associated with each successful
+submission, and not destroyed even if they are changed later.
 
 === Environment inference
 
