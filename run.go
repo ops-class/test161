@@ -608,6 +608,7 @@ func (l *InputLine) splitCommand() (prefix, base string, args []string) {
 	if strings.HasPrefix(command, "p ") {
 		prefix = "p"
 		start, pos = 0, 2
+		command = command[2:]
 	}
 
 	// We're looking for the first unescaped space that isn't in quotes,
