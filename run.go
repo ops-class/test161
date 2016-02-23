@@ -132,7 +132,7 @@ type Command struct {
 
 	// Set during run init
 	Panic          string `json:"panic"`
-	expectedOutput []*ExpectedOutputLine
+	ExpectedOutput []*ExpectedOutputLine
 
 	// Set during testing
 	Output       []*OutputLine `json:"output"`
@@ -210,7 +210,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	// Set the instance-specific input and expected output
 	for _, c := range t.Commands {
-		if err = c.instantiate(env); err != nil {
+		if err = c.Instantiate(env); err != nil {
 			t.addStatus("aborted", "")
 			t.Result = TEST_RESULT_ABORT
 			return
@@ -666,7 +666,7 @@ func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 		// Not correct, we should have panicked
 		c.Status = COMMAND_STATUS_INCORRECT
 		return
-	} else if len(c.expectedOutput) == 0 {
+	} else if len(c.ExpectedOutput) == 0 {
 		// If we didn't crash and we aren't expecting anything, then
 		// we passed with flying colors.
 		c.PointsEarned = c.PointsAvailable
@@ -677,8 +677,8 @@ func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 	// We're expecting something. First check if we got exactly what we're
 	// looking for (it's OK if there are extra output lines).
 	expectedIndex, actualIndex := 0, 0
-	for actualIndex < len(c.Output) && expectedIndex < len(c.expectedOutput) {
-		expected := c.expectedOutput[expectedIndex]
+	for actualIndex < len(c.Output) && expectedIndex < len(c.ExpectedOutput) {
+		expected := c.ExpectedOutput[expectedIndex]
 		actual := c.Output[actualIndex]
 
 		if actual.Line == expected.Text {
@@ -695,7 +695,7 @@ func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 
 	// If we've matched all expected lines, the command succeeded and full
 	// points are awarded (if there are any).
-	if expectedIndex == len(c.expectedOutput) {
+	if expectedIndex == len(c.ExpectedOutput) {
 		c.Status = COMMAND_STATUS_CORRECT
 		c.PointsEarned = c.PointsAvailable
 	} else {

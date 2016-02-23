@@ -38,25 +38,25 @@ func TestCommandArgTest(t *testing.T) {
 	}
 
 	// Create the command instance
-	err = argtest.instantiate(defaultEnv)
+	err = argtest.Instantiate(defaultEnv)
 
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 
-	for _, o := range argtest.expectedOutput {
+	for _, o := range argtest.ExpectedOutput {
 		t.Log(o.Text)
 	}
 
 	// Assertions
-	assert.Equal(3+len(args), len(argtest.expectedOutput))
+	assert.Equal(3+len(args), len(argtest.ExpectedOutput))
 
-	if len(argtest.expectedOutput) == 7 {
-		assert.Equal("argc: 5", argtest.expectedOutput[0].Text)
-		assert.Equal("argv[0]: /testbin/argtest", argtest.expectedOutput[1].Text)
+	if len(argtest.ExpectedOutput) == 7 {
+		assert.Equal("argc: 5", argtest.ExpectedOutput[0].Text)
+		assert.Equal("argv[0]: /testbin/argtest", argtest.ExpectedOutput[1].Text)
 		for i, arg := range args {
-			assert.Equal(fmt.Sprintf("argv[%d]: %v", i+1, arg), argtest.expectedOutput[i+2].Text)
+			assert.Equal(fmt.Sprintf("argv[%d]: %v", i+1, arg), argtest.ExpectedOutput[i+2].Text)
 		}
 	}
 
@@ -85,21 +85,21 @@ func TestCommandAdd(t *testing.T) {
 	}
 
 	// Create the command instance
-	err = add.instantiate(defaultEnv)
+	err = add.Instantiate(defaultEnv)
 
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 
-	for _, o := range add.expectedOutput {
+	for _, o := range add.ExpectedOutput {
 		t.Log(o.Text)
 	}
 
 	// Assertions
-	assert.Equal(1, len(add.expectedOutput))
-	if len(add.expectedOutput) == 1 {
-		assert.Equal("270", add.expectedOutput[0].Text)
+	assert.Equal(1, len(add.ExpectedOutput))
+	if len(add.ExpectedOutput) == 1 {
+		assert.Equal("270", add.ExpectedOutput[0].Text)
 	}
 }
 
@@ -126,21 +126,21 @@ func TestCommandFactorial(t *testing.T) {
 	}
 
 	// Create the command instance
-	err = factorial.instantiate(defaultEnv)
+	err = factorial.Instantiate(defaultEnv)
 
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 
-	for _, o := range factorial.expectedOutput {
+	for _, o := range factorial.ExpectedOutput {
 		t.Log(o.Text)
 	}
 
 	// Assertions
-	assert.Equal(1, len(factorial.expectedOutput))
-	if len(factorial.expectedOutput) == 1 {
-		assert.Equal("40320", factorial.expectedOutput[0].Text)
+	assert.Equal(1, len(factorial.ExpectedOutput))
+	if len(factorial.ExpectedOutput) == 1 {
+		assert.Equal("40320", factorial.ExpectedOutput[0].Text)
 	}
 }
 
@@ -192,11 +192,11 @@ func TestCommandInput(t *testing.T) {
 	}
 
 	// Create the command instance
-	err = randinput.instantiate(env)
+	err = randinput.Instantiate(env)
 
 	t.Log(randinput.Input.Line)
 
-	for _, o := range randinput.expectedOutput {
+	for _, o := range randinput.ExpectedOutput {
 		t.Log(o.Text)
 	}
 
@@ -216,13 +216,13 @@ func TestCommandInput(t *testing.T) {
 
 	// Now, check override
 	randinput.Input.Line = "randinput 1"
-	randinput.expectedOutput = nil
+	randinput.ExpectedOutput = nil
 
-	randinput.instantiate(defaultEnv)
+	randinput.Instantiate(defaultEnv)
 
 	_, id, args = randinput.Input.splitCommand()
 
-	assert.Equal(0, len(randinput.expectedOutput))
+	assert.Equal(0, len(randinput.ExpectedOutput))
 	assert.Equal(1, len(args))
 	if len(args) == 1 {
 		assert.Equal("1", args[0])
@@ -319,27 +319,27 @@ func TestCommandExternal(t *testing.T) {
 	}
 
 	// Create the command instance
-	err = cmd.instantiate(env)
+	err = cmd.Instantiate(env)
 
-	for _, o := range cmd.expectedOutput {
+	for _, o := range cmd.ExpectedOutput {
 		t.Log(o.Text)
 	}
 
-	t.Log(cmd.expectedOutput)
+	t.Log(cmd.ExpectedOutput)
 
 	// Assertions
-	assert.Equal(2, len(cmd.expectedOutput))
-	if len(cmd.expectedOutput) != 2 {
+	assert.Equal(2, len(cmd.ExpectedOutput))
+	if len(cmd.ExpectedOutput) != 2 {
 		t.FailNow()
 	}
 
-	assert.Equal("sem1: SUCCESS", cmd.expectedOutput[0].Text)
-	assert.True(cmd.expectedOutput[0].Trusted)
-	assert.Equal("sem1", cmd.expectedOutput[0].KeyName)
+	assert.Equal("sem1: SUCCESS", cmd.ExpectedOutput[0].Text)
+	assert.True(cmd.ExpectedOutput[0].Trusted)
+	assert.Equal("sem1", cmd.ExpectedOutput[0].KeyName)
 
-	assert.Equal("lt1: SUCCESS", cmd.expectedOutput[1].Text)
-	assert.True(cmd.expectedOutput[1].Trusted)
-	assert.Equal("lt1", cmd.expectedOutput[1].KeyName)
+	assert.Equal("lt1: SUCCESS", cmd.ExpectedOutput[1].Text)
+	assert.True(cmd.ExpectedOutput[1].Trusted)
+	assert.Equal("lt1", cmd.ExpectedOutput[1].KeyName)
 }
 
 func TestCommandID(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 // 'test161 run' flags
 var runCommandVars struct {
 	dryRun     bool
+	explain    bool
 	sequential bool
 	deps       bool
 	verbose    string
@@ -74,6 +75,8 @@ func getRunArgs() error {
 
 	runFlags.BoolVar(&runCommandVars.dryRun, "dry-run", false, "")
 	runFlags.BoolVar(&runCommandVars.dryRun, "r", false, "")
+	runFlags.BoolVar(&runCommandVars.explain, "explain", false, "")
+	runFlags.BoolVar(&runCommandVars.explain, "x", false, "")
 	runFlags.BoolVar(&runCommandVars.sequential, "sequential", false, "")
 	runFlags.BoolVar(&runCommandVars.sequential, "s", false, "")
 	runFlags.BoolVar(&runCommandVars.deps, "dependencies", false, "")
@@ -255,7 +258,9 @@ func runTests() (int, []error) {
 			if len(errs) > 0 {
 				return 1, errs
 			} else {
-				if runCommandVars.dryRun {
+				if runCommandVars.explain {
+					explain(tg)
+				} else if runCommandVars.dryRun {
 					printDryRun(tg)
 				} else {
 					runTestGroup(tg, true)
@@ -278,7 +283,9 @@ func runTests() (int, []error) {
 	if tg, errs := test161.GroupFromConfig(config); len(errs) > 0 {
 		return 1, errs
 	} else {
-		if runCommandVars.dryRun {
+		if runCommandVars.explain {
+			explain(tg)
+		} else if runCommandVars.dryRun {
 			printDryRun(tg)
 		} else {
 			exitcode = runTestGroup(tg, config.UseDeps)
@@ -316,6 +323,7 @@ func printDryRun(tg *test161.TestGroup) {
 			fmt.Printf("%-30v (dependency)\n", test.DependencyID)
 		}
 	}
+
 	for _, test := range tests {
 		if test.PointsAvailable > 0 {
 			fmt.Printf("%-30v (%v points)\n", test.DependencyID, test.PointsAvailable)
@@ -325,5 +333,82 @@ func printDryRun(tg *test161.TestGroup) {
 	}
 
 	fmt.Println()
+}
 
+func explain(tg *test161.TestGroup) {
+
+	// Create a test with the default settings so we can print the configuration
+	// differences
+	//defTest, _ := test161.TestFromString("q")
+
+	deps := make([]*test161.Test, 0)
+	tests := make([]*test161.Test, 0)
+
+	for _, test := range tg.Tests {
+		if test.IsDependency {
+			deps = append(deps, test)
+		} else {
+			tests = append(tests, test)
+		}
+	}
+
+	sort.Sort(testsByID(deps))
+	sort.Sort(testsByID(tests))
+
+	fmt.Println()
+
+	if len(deps) > 0 {
+		for _, test := range deps {
+			fmt.Printf("%-30v (dependency)\n", test.DependencyID)
+		}
+	}
+
+	for _, test := range tests {
+		fmt.Println()
+
+		// Test ID
+		fmt.Println(test.DependencyID)
+		fmt.Println(strings.Repeat("-", 60))
+
+		// Points/scoring
+		if test.PointsAvailable > 0 {
+			fmt.Println("Points       : ", test.PointsAvailable)
+			fmt.Println("Scoring      : ", test.ScoringMethod)
+		}
+
+		// Dependencies
+		if len(test.ExpandedDeps) > 0 {
+			sorted := make([]*test161.Test, 0)
+			for _, dep := range test.ExpandedDeps {
+				sorted = append(sorted, dep)
+			}
+			sort.Sort(testsByID(sorted))
+
+			fmt.Println("Dependencies :")
+			for _, dep := range sorted {
+				fmt.Println("    ", dep.DependencyID)
+			}
+		}
+
+		// Commands
+		fmt.Println("Commands:")
+
+		for _, cmd := range test.Commands {
+			// Instantiate the command so we get the expected output
+			cmd.Instantiate(env)
+			fmt.Println("    Cmd Line :", cmd.Input.Line)
+			fmt.Println("      Panics :", cmd.Panic)
+			fmt.Println("      Points :", cmd.PointsAvailable)
+			if len(cmd.ExpectedOutput) > 0 {
+				fmt.Println("      Output :")
+				for _, output := range cmd.ExpectedOutput {
+					fmt.Println("            Text     :", output.Text)
+					fmt.Println("            Trusted  :", output.Trusted)
+					fmt.Println("            KeyID    :", output.KeyName)
+				}
+			}
+		}
+	}
+
+	fmt.Println()
 }

@@ -218,7 +218,7 @@ func (c *Command) Id() string {
 
 // Instantiate the command (input, expected output) using the command template.
 // This needs to be must be done prior to executing the command.
-func (c *Command) instantiate(env *TestEnvironment) error {
+func (c *Command) Instantiate(env *TestEnvironment) error {
 	pfx, id, args := (&c.Input).splitCommand()
 	tmpl, ok := env.Commands[id]
 	if !ok {
@@ -266,7 +266,7 @@ func (c *Command) instantiate(env *TestEnvironment) error {
 		}
 
 		c.Input.Line = commandLine
-		c.expectedOutput = expected
+		c.ExpectedOutput = expected
 
 		return nil
 	}

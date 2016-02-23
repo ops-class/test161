@@ -49,8 +49,11 @@ func usage() {
 	fmt.Println(`
     usage: test161  <command> <flags> <args>
  
-           test161 run [-dry-run | -r] [sequential | -s] [-dependencies | -d] 
-                       [-verbose | -v (whisper|quiet|loud*)] [-tag] <names>
+           test161 run [-dry-run | -r] [-explain | -x] [sequential | -s]
+                       [-dependencies | -d] [-verbose | -v (whisper|quiet|loud*)]
+                       [-tag] <names>
+
+           test161 explain [-tag] <names>
 
            test161 submit <target> <commit>
 
@@ -77,7 +80,10 @@ func help() {
            Unless specified by -sequential, all output is interleaved with a summary
            at the end.  You can turn off the output lines with -v quiet, and hide
            everything except pass/fail with -v whisper. Specifying -dry-run will
-           show you the tests that would be run, without running them.
+           show you the tests that would be run, without running them. Similarly,
+           -explain will give you more detailed information about the tests and
+           what they expect, without running them. This option is very useful when
+           writing your own tests.
 
            'test161' submit will create a submission for <target> and using commit
            <commit>.  This command will return a status, but will not block while
