@@ -57,7 +57,7 @@ func usage() {
 
            test161 submit <target> <commit>
 
-           test161 list-targets [-remote | -r]
+           test161 list (targets|tags|tests) [-remote | -r]
 
            test161 version
 
@@ -89,8 +89,10 @@ func help() {
            <commit>.  This command will return a status, but will not block while
            grading.
 
-           'test161 list-targets' will print a list of available targets.  Specifying
+           'test161 list targets' will print a list of available targets.  Specifying
            -r will query the test161 server for this list.
+
+           'test161 list (tags|tests)' prints the list of local tags or tests.
 	`)
 }
 
@@ -111,8 +113,8 @@ func main() {
 				exitcode = doRun()
 			case "submit":
 				exitcode = doSubmit()
-			case "list-targets":
-				exitcode = doListTargets()
+			case "list":
+				exitcode = doListCommand()
 			case "version":
 				fmt.Printf("test161 version: %v\n", test161.Version)
 				exitcode = 0

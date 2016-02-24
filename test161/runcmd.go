@@ -60,14 +60,6 @@ const (
 	VERBOSE_WHISPER = "whisper"
 )
 
-func padRight(s string, w int) string {
-	if w <= len(s) {
-		return s
-	} else {
-		return s + strings.Repeat(" ", w-len(s))
-	}
-}
-
 func getRunArgs() error {
 
 	runFlags := flag.NewFlagSet("test161 run", flag.ExitOnError)
@@ -127,51 +119,46 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 	totalAvail := uint(0)
 	totals := []int{0, 0, 0, 0}
 
-	type result struct {
-		test   string
-		result test161.TestResult
-		score  string
-	}
-
 	//	fmt.Printf("\n%v   %v   %v\n\n", strings.Repeat("=", 35), "RESULTS", strings.Repeat("=", 35))
 
 	// For printing
 	hasScore := false
-	results := make([]*result, 0)
-	headers := []string{
-		"Test", "Result", "Score",
-	}
+	results := make([][]string, 0)
 
-	// Default column widths, which can expand if the input outgrows them
-	max := []int{30, 10, 10}
+	headers := []*Heading{
+		&Heading{
+			Text:          "Test",
+			MinWidth:      30,
+			LeftJustified: true,
+		},
+		&Heading{
+			Text:          "Result",
+			MinWidth:      10,
+			LeftJustified: true,
+		},
+		&Heading{
+			Text:     "Score",
+			MinWidth: 10,
+		},
+	}
 
 	// Run it
 	test161.StartManager()
 	done := r.Run()
 
 	for res := range done {
-
 		totalPoints += res.Test.PointsEarned
 		totalAvail += res.Test.PointsAvailable
 
 		hasScore = hasScore || res.Test.PointsAvailable > 0
 
-		info := &result{
-			test:   res.Test.DependencyID,
-			result: res.Test.Result,
-			score:  fmt.Sprintf("%v/%v", res.Test.PointsEarned, res.Test.PointsAvailable),
-		}
-		if len(info.test) > max[0] {
-			max[0] = len(info.test)
-		}
-		if len(info.result) > max[1] {
-			max[1] = len(info.result)
-		}
-		if len(info.score) > max[2] {
-			max[2] = len(info.score)
+		row := []string{
+			res.Test.DependencyID,
+			string(res.Test.Result),
+			fmt.Sprintf("%v/%v", res.Test.PointsEarned, res.Test.PointsAvailable),
 		}
 
-		results = append(results, info)
+		results = append(results, row)
 
 		if res.Err != nil {
 			fmt.Printf("Error (%v): %v\n", res.Test.DependencyID, res.Err)
@@ -191,33 +178,17 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 
 	test161.StopManager()
 
-	const colSep = "   "
-
 	if runCommandVars.verbose != VERBOSE_WHISPER {
-		// Heading
-		heading := padRight(headers[0], max[0]) + colSep + padRight(headers[1], max[1])
-		if hasScore {
-			heading += colSep + padRight(headers[2], max[2])
+		// Chop off the score if it's not a graded target
+		if !hasScore {
+			headers = headers[0:len(headers)]
+			for i, row := range results {
+				results[i] = row[0:len(row)]
+			}
 		}
 
 		fmt.Println()
-		fmt.Println(heading)
-
-		// Dashes under heading
-		dashes := strings.Repeat("-", max[0]) + colSep + strings.Repeat("-", max[1])
-		if hasScore {
-			dashes += colSep + strings.Repeat("-", max[2])
-		}
-		fmt.Println(dashes)
-
-		// Detail lines
-		for _, r := range results {
-			line := padRight(r.test, max[0]) + colSep + padRight(string(r.result), max[1])
-			if hasScore {
-				line += colSep + padRight(r.score, max[2])
-			}
-			fmt.Println(line)
-		}
+		printColumns(headers, results, defaultPrintConf)
 	}
 
 	// Print totals
@@ -337,10 +308,6 @@ func printDryRun(tg *test161.TestGroup) {
 
 func explain(tg *test161.TestGroup) {
 
-	// Create a test with the default settings so we can print the configuration
-	// differences
-	//defTest, _ := test161.TestFromString("q")
-
 	deps := make([]*test161.Test, 0)
 	tests := make([]*test161.Test, 0)
 
@@ -369,11 +336,13 @@ func explain(tg *test161.TestGroup) {
 		// Test ID
 		fmt.Println(test.DependencyID)
 		fmt.Println(strings.Repeat("-", 60))
+		fmt.Println("Name        :", test.Name)
+		fmt.Println("Description :", test.Description)
 
 		// Points/scoring
 		if test.PointsAvailable > 0 {
-			fmt.Println("Points       : ", test.PointsAvailable)
-			fmt.Println("Scoring      : ", test.ScoringMethod)
+			fmt.Println("Points      : ", test.PointsAvailable)
+			fmt.Println("Scoring     : ", test.ScoringMethod)
 		}
 
 		// Dependencies
@@ -384,7 +353,7 @@ func explain(tg *test161.TestGroup) {
 			}
 			sort.Sort(testsByID(sorted))
 
-			fmt.Println("Dependencies :")
+			fmt.Println("Dependencies:")
 			for _, dep := range sorted {
 				fmt.Println("    ", dep.DependencyID)
 			}
@@ -402,9 +371,9 @@ func explain(tg *test161.TestGroup) {
 			if len(cmd.ExpectedOutput) > 0 {
 				fmt.Println("      Output :")
 				for _, output := range cmd.ExpectedOutput {
-					fmt.Println("            Text     :", output.Text)
-					fmt.Println("            Trusted  :", output.Trusted)
-					fmt.Println("            KeyID    :", output.KeyName)
+					fmt.Println("          Text     :", output.Text)
+					fmt.Println("          Trusted  :", output.Trusted)
+					fmt.Println("          KeyID    :", output.KeyName)
 				}
 			}
 		}

@@ -9,10 +9,30 @@ import (
 	"github.com/parnurzeal/gorequest"
 	"net/http"
 	"os"
-	"strings"
+	"sort"
 )
 
 var listRemoteFlag bool
+var tagDetailFlag bool
+
+func doListCommand() int {
+	if len(os.Args) < 3 {
+		fmt.Println("Missing argument to list command")
+		return 1
+	}
+
+	switch os.Args[2] {
+	case "targets":
+		return doListTargets()
+	case "tags":
+		return doListTags()
+	case "tests":
+		return doListTests()
+	default:
+		fmt.Println("Invalid option to 'test161 list'.  Must be one of (targets, tags, tests)")
+		return 1
+	}
+}
 
 func doListTargets() int {
 	if err := getListArgs(); err != nil {
@@ -70,15 +90,35 @@ func printTargets(list *test161.TargetList) {
 	} else {
 		desc = "Local Target"
 	}
-	fmt.Printf("\n%-20v   %-6v   %-8v   %-7v\n", desc, "Type", "Version", "Points")
 
-	fmt.Printf("%v   %v   %v   %v\n", strings.Repeat("-", 20),
-		strings.Repeat("-", 6), strings.Repeat("-", 8), strings.Repeat("-", 7))
-
-	for _, t := range list.Targets {
-		fmt.Printf("%-20v   %-6v   v%-7v   %-7v\n", t.Name, t.Type, t.Version, t.Points)
+	headers := []*Heading{
+		&Heading{
+			Text:          desc,
+			LeftJustified: true,
+			MinWidth:      20,
+		},
+		&Heading{
+			Text:          "Type",
+			LeftJustified: true,
+		},
+		&Heading{
+			Text:          "Version",
+			LeftJustified: true,
+		},
+		&Heading{
+			Text: "Points",
+		},
 	}
 
+	data := make([][]string, 0)
+	for _, t := range list.Targets {
+		data = append(data, []string{
+			t.Name, t.Type, fmt.Sprintf("v%v", t.Version), fmt.Sprintf("%v", t.Points),
+		})
+	}
+
+	fmt.Println()
+	printColumns(headers, data, defaultPrintConf)
 	fmt.Println()
 }
 
@@ -89,11 +129,115 @@ func getListArgs() error {
 	listFlags.BoolVar(&listRemoteFlag, "remote", false, "")
 	listFlags.BoolVar(&listRemoteFlag, "r", false, "")
 
-	listFlags.Parse(os.Args[2:]) // this may exit
+	listFlags.Parse(os.Args[3:]) // this may exit
 
 	if len(listFlags.Args()) > 0 {
 		return errors.New("test161 list-targets does not support positional arguments")
 	}
 
 	return nil
+}
+
+func getAllTests() ([]*test161.Test, []error) {
+	conf := &test161.GroupConfig{
+		Tests: []string{"**/*.t"},
+		Env:   env,
+	}
+
+	tg, errs := test161.GroupFromConfig(conf)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	// Sort the tests by ID
+	tests := make([]*test161.Test, 0)
+	for _, t := range tg.Tests {
+		tests = append(tests, t)
+	}
+	sort.Sort(testsByID(tests))
+
+	return tests, nil
+}
+
+func doListTags() int {
+
+	tags := make(map[string][]*test161.Test)
+
+	// Load every test file
+	tests, errs := getAllTests()
+	if len(errs) > 0 {
+		printRunErrors(errs)
+		return 1
+	}
+
+	// Get a tagmap of tag name -> list of tests
+	for _, test := range tests {
+		for _, tag := range test.Tags {
+			if _, ok := tags[tag]; !ok {
+				tags[tag] = make([]*test161.Test, 0)
+			}
+			tags[tag] = append(tags[tag], test)
+		}
+	}
+
+	sorted := make([]string, 0)
+	for tag, _ := range tags {
+		sorted = append(sorted, tag)
+	}
+	sort.Strings(sorted)
+
+	// Printing
+	fmt.Println()
+
+	for _, tag := range sorted {
+		fmt.Println(tag)
+		for _, test := range tags[tag] {
+			fmt.Println("    ", test.DependencyID)
+		}
+	}
+
+	fmt.Println()
+
+	return 0
+}
+
+func doListTests() int {
+
+	headers := []*Heading{
+		&Heading{
+			Text:          "Test ID",
+			LeftJustified: true,
+		},
+		&Heading{
+			Text:          "Name",
+			LeftJustified: true,
+		},
+		&Heading{
+			Text:          "Description",
+			LeftJustified: true,
+		},
+	}
+
+	// Load every test file
+	tests, errs := getAllTests()
+	if len(errs) > 0 {
+		printRunErrors(errs)
+		return 1
+	}
+
+	// Print ID, line, description for each tests
+	data := make([][]string, 0)
+	for _, test := range tests {
+		data = append(data, []string{
+			test.DependencyID,
+			test.Name,
+			test.Description,
+		})
+	}
+
+	fmt.Println()
+	printColumns(headers, data, defaultPrintConf)
+	fmt.Println()
+
+	return 0
 }
