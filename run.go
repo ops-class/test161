@@ -655,8 +655,9 @@ func (l *InputLine) replaceArgs(args []string) {
 	}
 }
 
-// Partial credit regular expression
-var partialCreditExp *regexp.Regexp = regexp.MustCompile(`^PARTIAL CREDIT ([0-9]+) OF ([0-9]+)$`)
+// Partial credit regular expression. We don't care that the id isn't prefixed,
+// as long as it is signed by the right key.
+var partialCreditExp *regexp.Regexp = regexp.MustCompile(`^.*PARTIAL CREDIT ([0-9]+) OF ([0-9]+)$`)
 
 // Evaluate a single command, setting its status and points
 func (c *Command) evaluate(keyMap map[string]string, eof bool) {
@@ -712,21 +713,27 @@ func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 			// Only check trusted lines signed with our key
 			if !hasKey || (line.Trusted && line.KeyName == id) {
 				if res := partialCreditExp.FindStringSubmatch(line.Line); len(res) == 3 {
-					if earned, err := strconv.Atoi(res[1]); err != nil && earned > 0 {
-						if avail, err := strconv.Atoi(res[2]); err != nil && avail > 0 {
+					if earned, err := strconv.Atoi(res[1]); err == nil && earned > 0 {
+						if avail, err := strconv.Atoi(res[2]); err == nil && avail > 0 {
 							totalAvail += avail
 							totalEarned += earned
+							fmt.Println(totalEarned, totalAvail)
 						}
 					}
+					// Only one partial credit line allowed.
+					break
 				}
 			}
 		}
+
 		if totalEarned > 0 && totalAvail > 0 {
 			// Integral points only
 			c.PointsEarned = uint(float32(c.PointsAvailable) * (float32(totalEarned) / float32(totalAvail)))
 
-			// If they got all of the partial credit, this command was actually correct
-			if c.PointsEarned == c.PointsAvailable && c.PointsEarned > 0 {
+			// If they got all of the partial credit, this command was actually correct.
+			// Don't test on the command's earned points because we may not be
+			// running a target.
+			if totalAvail == totalEarned {
 				c.Status = COMMAND_STATUS_CORRECT
 			}
 		}
