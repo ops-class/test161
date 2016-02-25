@@ -14,6 +14,7 @@ func TestStatsKernelDeadlock(t *testing.T) {
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Enabled = "true"
+	test.Monitor.Kernel.EnableMin = "true"
 	test.Monitor.ProgressTimeout = 8.0
 	assert.Nil(test.Run(defaultEnv))
 
@@ -48,6 +49,7 @@ func TestStatsKernelLivelock(t *testing.T) {
 	assert.Nil(err)
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Enabled = "true"
+	test.Monitor.Kernel.Max = 0.99
 	test.Sys161.CPUs = 1
 	test.Monitor.ProgressTimeout = 8.0
 	assert.Nil(test.Run(defaultEnv))
@@ -84,6 +86,7 @@ func TestStatsUserDeadlock(t *testing.T) {
 	assert.Nil(test.MergeConf(TEST_DEFAULTS))
 	test.Monitor.Enabled = "true"
 	test.Monitor.Kernel.EnableMin = "false"
+	test.Monitor.User.EnableMin = "true"
 	test.Misc.PromptTimeout = 8.0
 	assert.Nil(test.Run(defaultEnv))
 
