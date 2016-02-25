@@ -252,7 +252,6 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 === Nits
 
 * Handle missing newline correctly. Test with shll for lossy shell support.
-* Configuration sanity checks
 * sys161 version checks
 * Correctly identify lines in interleaved output.
 * Tracking dependencies should be the default and ignoring them the command

@@ -75,9 +75,6 @@ func doSubmit() (exitcode int) {
 		ClientVersion: test161.Version,
 	}
 
-	fmt.Println(submitCommit, submitRef)
-	return
-
 	score, avail := uint(0), uint(0)
 
 	// Local build
