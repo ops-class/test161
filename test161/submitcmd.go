@@ -175,6 +175,13 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 
 	args := os.Args[2:]
 
+	debug := false
+
+	if len(args) > 0 && args[0] == "-debug" {
+		args = args[1:]
+		debug = true
+	}
+
 	if len(args) == 0 {
 		return nil, errors.New("test161 submit: Missing target name. run test161 help for detailed usage")
 	} else if len(args) > 2 {
@@ -182,13 +189,6 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 	}
 
 	submitTargetName = args[0]
-	argPtr := 1
-	debug := false
-
-	if len(args) > 1 && args[1] == "-debug" {
-		debug = true
-		argPtr += 1
-	}
 
 	// Get remote target
 	serverVersion, err := getRemoteTargetAndValidate(submitTargetName)
@@ -210,8 +210,8 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 	commit, ref := "", ""
 
 	// Try to get a commit id/ref
-	if argPtr < len(args) {
-		treeish := args[argPtr]
+	if len(args) == 2 {
+		treeish := args[1]
 		commit, ref, err = git.commitFromTreeish(treeish, debug)
 	} else {
 		commit, ref, err = git.commitFromHEAD(debug)

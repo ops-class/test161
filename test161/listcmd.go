@@ -258,8 +258,13 @@ func doListConf() int {
 	fmt.Println(string(text))
 	fmt.Println()
 
+	debug := false
+	if len(os.Args) == 4 && os.Args[3] == "-debug" {
+		debug = true
+	}
+
 	// Infer git info and print it
-	git, err := gitRepoFromDir(clientConf.SrcDir, false)
+	git, err := gitRepoFromDir(clientConf.SrcDir, debug)
 	if err != nil {
 		fmt.Println(err)
 		return 1

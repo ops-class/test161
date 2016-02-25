@@ -90,6 +90,12 @@ func envInit() {
 
 	env.RootDir = clientConf.RootDir
 	env.OverlayRoot = clientConf.OverlayDir
+
+	// The server in the conf file has to override the default one for local testing
+	if confFile.Server != "" {
+		clientConf.Server = confFile.Server
+	}
+
 }
 
 func usage() {
@@ -103,7 +109,7 @@ func usage() {
 
            test161 explain [-tag] <names>
 
-           test161 submit <target> <commit>
+           test161 submit [-debug] <target> <commit>
 
            test161 list (targets|tags|tests|conf) [-debug] [-remote | -r]
 
