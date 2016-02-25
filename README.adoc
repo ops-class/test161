@@ -253,7 +253,6 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 
 * Handle missing newline correctly. Test with shll for lossy shell support.
 * sys161 version checks
-* Correctly identify lines in interleaved output.
 * Tracking dependencies should be the default and ignoring them the command
 line option.
 * Order the test output in some meaningful way, probably by depth in the
