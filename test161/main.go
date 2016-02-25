@@ -8,20 +8,22 @@ import (
 )
 
 var env *test161.TestEnvironment
-var conf *ClientConf
+var clientConf *ClientConf
 
-func envInit() {
+const configOpt = OptionLenient
+
+func getConfFromFile() (*ClientConf, error) {
+
+	conf := &ClientConf{}
 	var err error
 
 	// Find and load .test161.conf.  Check the current directory, then $HOME
-
 	search := []string{
 		CONF_FILE,
 		path.Join(os.Getenv("HOME"), CONF_FILE),
 	}
 
 	file := ""
-
 	for _, f := range search {
 		if _, err2 := os.Stat(f); err2 == nil {
 			file = f
@@ -30,18 +32,64 @@ func envInit() {
 	}
 
 	if file == "" {
-		printDefaultConf()
+		return nil, nil
+	} else if info, err := os.Stat(file); err != nil || info.Size() == 0 {
+		return nil, nil
+	}
+
+	if conf, err = ClientConfFromFile(file); err != nil {
+		return nil, err
+	}
+
+	return conf, nil
+}
+
+func envInit() {
+
+	// Try to infer the config file first
+	inferred, err := inferConf()
+	if err != nil && configOpt == OptionStrict {
+		fmt.Println("Unable to determine your test161 configuration:", err)
 		os.Exit(1)
-	} else if conf, err = ClientConfFromFile(file); err != nil {
-		printDefaultConf()
+	}
+
+	// Now load their actual conf file
+	confFile, err := getConfFromFile()
+	if err != nil {
+		// An error here means we couldn't load the file, either bad yaml or I/O problem
+		fmt.Printf("An error occurred reading your %v file: \n", CONF_FILE, err)
 		os.Exit(1)
-	} else if env, err = test161.NewEnvironment(conf.Test161Dir, nil); err != nil {
+	}
+
+	if inferred != nil && confFile != nil {
+		// Merge the two, favoring the inferred file
+		if err = inferred.mergeConf(confFile); err != nil {
+			fmt.Println("test161 was unable to merge your default configuration:", err)
+			os.Exit(1)
+		}
+		clientConf = inferred
+	} else if inferred != nil {
+		clientConf = inferred
+	} else {
+		clientConf = confFile
+	}
+
+	// Test all the paths before trying to load the environment
+	if err = clientConf.checkPaths(); err != nil {
+		fmt.Println()
+		fmt.Println("The following paths are incorrect in your configuration:", err)
+		fmt.Println()
 		printDefaultConf()
 		os.Exit(1)
 	}
 
-	env.RootDir = conf.RootDir
-	env.OverlayRoot = conf.OverlayDir
+	if env, err = test161.NewEnvironment(clientConf.Test161Dir, nil); err != nil {
+		fmt.Println("Unable to create your test161 test environment:", err)
+		os.Exit(1)
+	}
+
+	env.RootDir = clientConf.RootDir
+	env.OverlayRoot = clientConf.OverlayDir
 }
 
 func usage() {
@@ -57,7 +105,7 @@ func usage() {
 
            test161 submit <target> <commit>
 
-           test161 list (targets|tags|tests) [-remote | -r]
+           test161 list (targets|tags|tests|conf) [-debug] [-remote | -r]
 
            test161 version
 
@@ -93,6 +141,9 @@ func help() {
            -r will query the test161 server for this list.
 
            'test161 list (tags|tests)' prints the list of local tags or tests.
+
+           'test161 list conf [-debug] prints the configuration and Git repository
+           information. Adding -debug will print the individual Git commands used.
 	`)
 }
 

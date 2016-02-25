@@ -9,13 +9,12 @@ import (
 	"github.com/parnurzeal/gorequest"
 	"net/http"
 	"os"
-	"os/exec"
-	"regexp"
 	"strings"
 )
 
 var (
 	submitCommit     string
+	submitRef        string
 	submitTargetName string
 )
 
@@ -70,11 +69,14 @@ func doSubmit() (exitcode int) {
 
 	req := &test161.SubmissionRequest{
 		Target:        submitTargetName,
-		Users:         conf.Users,
-		Repository:    conf.Repository,
+		Users:         clientConf.Users,
+		Repository:    clientConf.Repository,
 		CommitID:      submitCommit,
 		ClientVersion: test161.Version,
 	}
+
+	fmt.Println(submitCommit, submitRef)
+	return
 
 	score, avail := uint(0), uint(0)
 
@@ -109,7 +111,7 @@ func doSubmit() (exitcode int) {
 	}
 
 	// Submit
-	endpoint := conf.Server + "/api-v1/submit"
+	endpoint := clientConf.Server + "/api-v1/submit"
 	remoteRequest := gorequest.New()
 
 	if reqbytes, err := json.Marshal(req); err != nil {
@@ -183,40 +185,48 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 	}
 
 	submitTargetName = args[0]
+	argPtr := 1
+	debug := false
+
+	if len(args) > 1 && args[1] == "-debug" {
+		debug = true
+		argPtr += 1
+	}
+
 	// Get remote target
 	serverVersion, err := getRemoteTargetAndValidate(submitTargetName)
 	if err != nil {
 		return nil, err
 	}
 
-	// Try to get a commit id
-	if len(args) == 2 {
-		// Minimally, it needs to be a hex string
-		if ok, err := regexp.MatchString("^[0-9a-f]+$", args[1]); err != nil {
-			return nil, err
-		} else if !ok {
-			return nil, errors.New("test161 submit: Invalid commit ID")
-		}
-		submitCommit = args[1]
-	} else {
-		// Get HEAD
-		cmd := exec.Command("git", "rev-parse", "HEAD")
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("Error reading HEAD: %v. Are you in your source directory?", err)
-		} else if len(output) == 0 {
-			return nil, fmt.Errorf("git rev-parse HEAD returned no output.  Unable to get commit id from HEAD.")
-		} else {
-			lines := strings.Split(string(output), "\n")
-			if ok, err := regexp.MatchString("^[0-9a-f]+$", lines[0]); err != nil {
-				return nil, err
-			} else if !ok {
-				return nil, errors.New("test161 submit: Invalid commit ID in HEAD?")
-			} else {
-				submitCommit = lines[0]
-			}
-		}
+	// Get the commit ID and ref
+	git, err := gitRepoFromDir(clientConf.SrcDir, debug)
+	if err != nil {
+		return nil, err
 	}
+
+	if !git.canSubmit() {
+		// This prints its own message
+		return nil, errors.New("Unable to submit")
+	}
+
+	commit, ref := "", ""
+
+	// Try to get a commit id/ref
+	if argPtr < len(args) {
+		treeish := args[argPtr]
+		commit, ref, err = git.commitFromTreeish(treeish, debug)
+	} else {
+		commit, ref, err = git.commitFromHEAD(debug)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	clientConf.Repository = git.remoteURL
+	submitCommit = commit
+	submitRef = ref
 
 	return serverVersion, nil
 }

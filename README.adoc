@@ -267,28 +267,14 @@ short-circuit when tokens change.
 * Cache a copy of the cloned repository somewhere so that we can pull and
 checkout rather than recloning every time (slow).
 * Better error messages and hints about repository problems:
-** Check and fail for dirty working trees
-** Check and fail for unpushed refs
-** Check and fail if it doesn't look like an OS/161 source tree, has
-inappropriate files (`.o`), or is too large. (Prevent backend storage DOS
-attacks.)
+** Check and fail if it has inappropriate files (`.o`), or is too large. 
+(Prevent backend storage DOS attacks.)
 
 === Key saving
 
 Now that we are having students save a key through the web interface we need
 to make sure that these keys get saved, associated with each successful
 submission, and not destroyed even if they are changed later.
-
-=== Environment inference
-
-It would be great if we could not require the `.test161.conf` file in certain
-cases, particularly for local testing. For example, if I'm in my source
-directory I should be able to find the `test161` files and determine my `root`
-directory by interpreting `defs.mk`. If I'm in my root directory that's a bit
-trickier, although perhaps eventually we can have the build process stick a
-symlink in the root dir back to the sources that create it for that purpose.
-(You could also create a symlink from `/src/root` to the root dir when you
-compile.)
 
 === Configuration override
 
