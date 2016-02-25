@@ -109,7 +109,7 @@ func usage() {
 
            test161 explain [-tag] <names>
 
-           test161 submit [-debug] [-verify] <target> <commit>
+           test161 submit [-debug] [-verify] [-no-cache] <target> <commit>
 
            test161 list (targets|tags|tests|conf) [-debug] [-remote | -r]
 
@@ -144,7 +144,8 @@ func help() {
            grading. Specifying -verify will verify that the submission will be accepted
            by the server, without submitting it. This is useful for debugging username
            and token issues. Adding -debug will print the git commands that submit uses
-           to determine the status of your repository.
+           to determine the status of your repository. Adding -no-cache will clone the
+           repo locally instead of using a previously cached copy.
 
            'test161 list targets' will print a list of available targets.  Specifying
            -r will query the test161 server for this list.

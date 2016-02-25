@@ -260,10 +260,6 @@ dependency graph. (That way all skipped tests should be shown last.)
 * Update the defaults on this document to match the new default settings.
 * Print test breakdown and totals before submission (similar to `test161
 run`).
-* Check user identity _before_ cloning and configuring the repository to
-short-circuit when tokens change.
-* Cache a copy of the cloned repository somewhere so that we can pull and
-checkout rather than recloning every time (slow).
 * Better error messages and hints about repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
 (Prevent backend storage DOS attacks.)

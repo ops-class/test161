@@ -10,16 +10,20 @@ import (
 	"github.com/parnurzeal/gorequest"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 )
 
 var (
 	submitDebug      bool
 	submitVerfiy     bool
+	submitNoCache    bool
 	submitCommit     string
 	submitRef        string
 	submitTargetName string
 )
+
+const CACHE_DIR = ".test161/cache"
 
 const SubmitMsg = `
 The CSE 421/521 Collaboration Guidelines for this assignment are as follows:%v
@@ -36,8 +40,19 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 
 	var submission *test161.Submission
 
+	// Cache builds for performance, unless we're told not to
+	if !submitNoCache {
+		dir, err := getAndCreateCacheDir()
+		if err != nil {
+			fmt.Println("Skipping build directory cache:", err)
+		} else {
+			env.CacheDir = dir
+		}
+	}
+
 	env.Persistence = &ConsolePersistence{}
 	submission, errs = test161.NewSubmission(req, env)
+
 	if len(errs) > 0 {
 		return
 	}
@@ -209,6 +224,7 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 
 	submitFlags.BoolVar(&submitDebug, "debug", false, "")
 	submitFlags.BoolVar(&submitVerfiy, "verify", false, "")
+	submitFlags.BoolVar(&submitNoCache, "no-cache", false, "")
 	submitFlags.Parse(os.Args[2:]) // this may exit
 
 	args := submitFlags.Args()
@@ -257,4 +273,15 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 	submitRef = ref
 
 	return serverVersion, nil
+}
+
+func getAndCreateCacheDir() (string, error) {
+	cache := path.Join(os.Getenv("HOME"), CACHE_DIR)
+	if _, err := os.Stat(cache); err != nil {
+		if err := os.MkdirAll(cache, 0770); err != nil {
+			return "", err
+		}
+	}
+
+	return cache, nil
 }
