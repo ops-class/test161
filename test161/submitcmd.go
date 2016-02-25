@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/ops-class/test161"
 	"github.com/parnurzeal/gorequest"
@@ -13,6 +14,8 @@ import (
 )
 
 var (
+	submitDebug      bool
+	submitVerfiy     bool
 	submitCommit     string
 	submitRef        string
 	submitTargetName string
@@ -75,6 +78,16 @@ func doSubmit() (exitcode int) {
 		ClientVersion: test161.Version,
 	}
 
+	// Validate before running locally
+	if ok := submitOrValidate(req, true); !ok {
+		return
+	}
+
+	if submitVerfiy {
+		fmt.Println("OK")
+		return
+	}
+
 	score, avail := uint(0), uint(0)
 
 	// Local build
@@ -108,9 +121,24 @@ func doSubmit() (exitcode int) {
 	}
 
 	// Submit
-	endpoint := clientConf.Server + "/api-v1/submit"
-	remoteRequest := gorequest.New()
+	if ok := submitOrValidate(req, false); ok {
+		exitcode = 0
+	}
 
+	return
+}
+
+// Return true if OK, false otherwise
+func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (ok bool) {
+	ok = false
+	endpoint := clientConf.Server
+	if validateOnly {
+		endpoint += "/api-v1/validate"
+	} else {
+		endpoint += "/api-v1/submit"
+	}
+
+	remoteRequest := gorequest.New()
 	if reqbytes, err := json.Marshal(req); err != nil {
 		printRunError(err)
 		return
@@ -123,9 +151,13 @@ func doSubmit() (exitcode int) {
 		if len(errs) > 0 {
 			printRunErrors(errs)
 		} else {
-			if resp.StatusCode == http.StatusCreated {
+			if resp.StatusCode == http.StatusOK {
+				ok = true
+				return
+			} else if resp.StatusCode == http.StatusCreated {
 				fmt.Println("\nYour submission has been created and is being processed by the test161 server\n")
-				exitcode = 0
+				ok = true
+				return
 			} else if resp.StatusCode == http.StatusNotAcceptable {
 				fmt.Println("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit")
 			} else {
@@ -172,15 +204,14 @@ func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
 }
 
 func getSubmitArgs() (*test161.TargetListItem, error) {
+	submitFlags := flag.NewFlagSet("test161 run", flag.ExitOnError)
+	submitFlags.Usage = usage
 
-	args := os.Args[2:]
+	submitFlags.BoolVar(&submitDebug, "debug", false, "")
+	submitFlags.BoolVar(&submitVerfiy, "verify", false, "")
+	submitFlags.Parse(os.Args[2:]) // this may exit
 
-	debug := false
-
-	if len(args) > 0 && args[0] == "-debug" {
-		args = args[1:]
-		debug = true
-	}
+	args := submitFlags.Args()
 
 	if len(args) == 0 {
 		return nil, errors.New("test161 submit: Missing target name. run test161 help for detailed usage")
@@ -197,7 +228,7 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 	}
 
 	// Get the commit ID and ref
-	git, err := gitRepoFromDir(clientConf.SrcDir, debug)
+	git, err := gitRepoFromDir(clientConf.SrcDir, submitDebug)
 	if err != nil {
 		return nil, err
 	}
@@ -212,9 +243,9 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 	// Try to get a commit id/ref
 	if len(args) == 2 {
 		treeish := args[1]
-		commit, ref, err = git.commitFromTreeish(treeish, debug)
+		commit, ref, err = git.commitFromTreeish(treeish, submitDebug)
 	} else {
-		commit, ref, err = git.commitFromHEAD(debug)
+		commit, ref, err = git.commitFromHEAD(submitDebug)
 	}
 
 	if err != nil {

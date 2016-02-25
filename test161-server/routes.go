@@ -46,6 +46,12 @@ var routes = []Route{
 		"/api-v1/keygen",
 		keygen,
 	},
+	Route{
+		"validate",
+		"POST",
+		"/api-v1/validate",
+		validateSubmission,
+	},
 }
 
 func NewRouter() *mux.Router {

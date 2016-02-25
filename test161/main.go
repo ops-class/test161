@@ -109,7 +109,7 @@ func usage() {
 
            test161 explain [-tag] <names>
 
-           test161 submit [-debug] <target> <commit>
+           test161 submit [-debug] [-verify] <target> <commit>
 
            test161 list (targets|tags|tests|conf) [-debug] [-remote | -r]
 
@@ -141,7 +141,10 @@ func help() {
 
            'test161' submit will create a submission for <target> and using commit
            <commit>.  This command will return a status, but will not block while
-           grading.
+           grading. Specifying -verify will verify that the submission will be accepted
+           by the server, without submitting it. This is useful for debugging username
+           and token issues. Adding -debug will print the git commands that submit uses
+           to determine the status of your repository.
 
            'test161 list targets' will print a list of available targets.  Specifying
            -r will query the test161 server for this list.

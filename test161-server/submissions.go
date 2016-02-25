@@ -94,16 +94,14 @@ func listTargets(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// createSubmission accepts POST requests
-func createSubmission(w http.ResponseWriter, r *http.Request) {
-
+func submissionFromHttp(w http.ResponseWriter, r *http.Request, validateOnly bool) *test161.SubmissionRequest {
 	var request test161.SubmissionRequest
 
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1*1024*1024))
 	if err != nil {
 		logger.Println("Error reading web request:", err)
 		w.WriteHeader(http.StatusBadRequest)
-		return
+		return nil
 	}
 
 	if err := r.Body.Close(); err != nil {
@@ -111,7 +109,11 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 
-	logger.Println("Submission Request:", string(body))
+	if !validateOnly {
+		logger.Println("Submission Request:", string(body))
+	} else {
+		logger.Println("Validation Request:", string(body))
+	}
 
 	if err := json.Unmarshal(body, &request); err != nil {
 		w.Header().Set("Content-Type", JsonHeader)
@@ -121,14 +123,14 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(err); err != nil {
 			logger.Println("Encoding error:", err)
 		}
-		return
+		return nil
 	}
 
 	// Check the client's version and make sure it's not too old
 	if request.ClientVersion.CompareTo(minClientVer) < 0 {
 		logger.Printf("Old request (version %v)\n", request.ClientVersion)
 		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		return nil
 	}
 
 	if submissionMgr.Status() == test161.SM_NOT_ACCEPTING {
@@ -137,11 +139,22 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", TextHeader)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		fmt.Fprintf(w, "The submission server is currently not accepting new submissions")
+		return nil
+	}
+
+	return &request
+}
+
+// createSubmission accepts POST requests
+func createSubmission(w http.ResponseWriter, r *http.Request) {
+
+	request := submissionFromHttp(w, r, false)
+	if request == nil {
 		return
 	}
 
 	// Make sure we can create the submission.  This checks for everything but run errors.
-	submission, errs := test161.NewSubmission(&request, serverEnv)
+	submission, errs := test161.NewSubmission(request, serverEnv)
 	if len(errs) > 0 {
 		w.Header().Set("Content-Type", JsonHeader)
 		w.WriteHeader(422) // unprocessable entity
@@ -162,10 +175,29 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 
 	// Run it!
 	go func() {
-		if runerr := submissionMgr.Run(submission); err != nil {
-			logger.Println("Error running submission:", runerr)
+		if err := submissionMgr.Run(submission); err != nil {
+			logger.Println("Error running submission:", err)
 		}
 	}()
+}
+
+// validate accepts POST requests
+func validateSubmission(w http.ResponseWriter, r *http.Request) {
+
+	request := submissionFromHttp(w, r, true)
+	if request == nil {
+		return
+	}
+
+	if _, err := request.Validate(serverEnv); err != nil {
+		w.Header().Set("Content-Type", TextHeader)
+		w.WriteHeader(422) // unprocessable entity
+
+		// Send back a string.
+		fmt.Fprintf(w, "%v", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // getStats returns the current manager statistics

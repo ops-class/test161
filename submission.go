@@ -141,7 +141,7 @@ func getStudents(email, token string, env *TestEnvironment) ([]*Student, error) 
 	return students, nil
 }
 
-func (req *SubmissionRequest) validate(env *TestEnvironment) ([]*Student, error) {
+func (req *SubmissionRequest) Validate(env *TestEnvironment) ([]*Student, error) {
 
 	students := []*Student{}
 	var err error
@@ -180,7 +180,7 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 	// Validate the request details and get the list of students for which
 	// this submission applies. We'll use this list later when we
 	// actually run the submission.
-	if students, err = request.validate(env); err != nil {
+	if students, err = request.Validate(env); err != nil {
 		return nil, []error{err}
 	}
 
