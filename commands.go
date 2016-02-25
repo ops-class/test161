@@ -45,7 +45,7 @@ func randInt(min, max int) (int, error) {
 	}
 
 	// between 0 and max-min
-	temp := rand.Intn((max + 1) - min)
+	temp := rand.Intn(max - min)
 
 	// between min and mix
 	return min + temp, nil
