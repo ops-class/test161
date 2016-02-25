@@ -115,8 +115,11 @@ conf:
     rpm: 7200
     nodoom: false
   random: seed=random # random number generated at configuration time
+stat:
+  resolution: 0.01
+  window: 1
 monitor:
-  enabled: true
+  enabled: "true
   intervals: 10
   kernel:
     enabled: false
@@ -257,9 +260,10 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 line option.
 * Order the test output in some meaningful way, probably by depth in the
 dependency graph. (That way all skipped tests should be shown last.)
-* Update the defaults on this document to match the new default settings.
-* Print test breakdown and totals before submission (similar to `test161
-run`).
+** Not necessarily true. You could have a long, unrelated branch that
+succeeds (even leaf nodes), but some unrelated depencency fails early. I made the
+default print order topological sort, but it's still confusing. I added the
+reason a test is skipped, which helps. Maybe a nice ASCII art tree would work here...
 * Better error messages and hints about repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
 (Prevent backend storage DOS attacks.)

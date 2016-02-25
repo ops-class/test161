@@ -66,6 +66,8 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 		return
 	}
 
+	printRunSummary(submission.Tests, VERBOSE_LOUD, true)
+
 	score = submission.Score
 	available = submission.PointsAvailable
 

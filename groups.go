@@ -247,6 +247,28 @@ func (t *Test) Key() string {
 	return t.DependencyID
 }
 
+func (tg *TestGroup) DependencyGraph() (*graph.Graph, error) {
+	// Nodes
+	nodes := make([]graph.Keyer, 0, len(tg.Tests))
+	for _, t := range tg.Tests {
+		nodes = append(nodes, t)
+	}
+
+	// Our graph
+	g := graph.New(nodes)
+
+	// Edges.  There is an edge from A->B if A depends on B.
+	for _, test := range tg.Tests {
+		for _, dep := range test.ExpandedDeps {
+			if err := g.AddEdge(test, dep); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return g, nil
+}
+
 // DependencyGraph creates a dependency graph from the tests in testMap.
 func (tm *testMap) dependencyGraph() (*graph.Graph, []error) {
 	errs := tm.expandAllDeps()

@@ -122,14 +122,31 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 		env.Persistence = &ConsolePersistence{max}
 	}
 
-	totalPoints := uint(0)
-	totalAvail := uint(0)
-	totals := []int{0, 0, 0, 0}
+	// Run it
+	test161.StartManager()
+	done := r.Run()
 
-	// For printing
-	hasScore := false
-	results := make([][]string, 0)
+	// For reurn val
+	allCorrect := true
 
+	for res := range done {
+		if res.Test.Result != test161.TEST_RESULT_CORRECT {
+			allCorrect = false
+		}
+	}
+
+	test161.StopManager()
+
+	printRunSummary(tg, runCommandVars.verbose, useDeps)
+
+	if allCorrect {
+		return 0
+	} else {
+		return 1
+	}
+}
+
+func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder bool) {
 	headers := []*Heading{
 		&Heading{
 			Text:          "Test",
@@ -147,29 +164,44 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 		},
 	}
 
-	// Run it
-	test161.StartManager()
-	done := r.Run()
+	tests := getPrintOrder(tg, tryDependOrder)
 
-	for res := range done {
-		totalPoints += res.Test.PointsEarned
-		totalAvail += res.Test.PointsAvailable
+	totalPoints, totalAvail := uint(0), uint(0)
 
-		hasScore = hasScore || res.Test.PointsAvailable > 0
+	results := make([][]string, 0)
+
+	desc := []string{"Total Correct", "Total Incorrect",
+		"Total Skipped", "Total Aborted",
+	}
+
+	totals := []int{0, 0, 0, 0}
+
+	for _, test := range tests {
+		totalPoints += test.PointsEarned
+		totalAvail += test.PointsAvailable
+
+		status := string(test.Result)
+		if test.Result == test161.TEST_RESULT_SKIP {
+			// Try to find a failed dependency
+			for _, dep := range test.ExpandedDeps {
+				if dep.Result == test161.TEST_RESULT_INCORRECT ||
+					dep.Result == test161.TEST_RESULT_SKIP {
+
+					status += " (" + (dep.DependencyID) + ")"
+					break
+				}
+			}
+		}
 
 		row := []string{
-			res.Test.DependencyID,
-			string(res.Test.Result),
-			fmt.Sprintf("%v/%v", res.Test.PointsEarned, res.Test.PointsAvailable),
+			test.DependencyID,
+			status,
+			fmt.Sprintf("%v/%v", test.PointsEarned, test.PointsAvailable),
 		}
 
 		results = append(results, row)
 
-		if res.Err != nil {
-			fmt.Printf("Error (%v): %v\n", res.Test.DependencyID, res.Err)
-		}
-
-		switch res.Test.Result {
+		switch test.Result {
 		case test161.TEST_RESULT_CORRECT:
 			totals[0] += 1
 		case test161.TEST_RESULT_INCORRECT:
@@ -183,24 +215,19 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 
 	test161.StopManager()
 
-	if runCommandVars.verbose != VERBOSE_WHISPER {
+	if verbosity != VERBOSE_WHISPER {
 		// Chop off the score if it's not a graded target
-		if !hasScore {
-			headers = headers[0:len(headers)]
+		if totalAvail == 0 {
+			headers = headers[0 : len(headers)-1]
 			for i, row := range results {
-				results[i] = row[0:len(row)]
+				results[i] = row[0 : len(row)-1]
 			}
 		}
-
 		fmt.Println()
 		printColumns(headers, results, defaultPrintConf)
 	}
 
 	// Print totals
-	desc := []string{"Total Correct", "Total Incorrect",
-		"Total Skipped", "Total Aborted",
-	}
-
 	fmt.Println()
 
 	for i := 0; i < len(desc); i++ {
@@ -214,12 +241,6 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 	}
 
 	fmt.Println()
-
-	if len(tg.Tests) == totals[0] {
-		return 0
-	} else {
-		return 1
-	}
 }
 
 func runTests() (int, []error) {
@@ -385,4 +406,35 @@ func explain(tg *test161.TestGroup) {
 	}
 
 	fmt.Println()
+}
+
+func getPrintOrder(tg *test161.TestGroup, tryDependOrder bool) []*test161.Test {
+	tests := make([]*test161.Test, 0, len(tg.Tests))
+
+	if tryDependOrder {
+		if graph, err := tg.DependencyGraph(); err == nil {
+			if topSort, err := graph.TopSort(); err == nil {
+
+				for i := len(topSort) - 1; i >= 0; i -= 1 {
+					if test, ok := tg.Tests[topSort[i]]; !ok {
+						break
+					} else {
+						tests = append(tests, test)
+					}
+				}
+			}
+
+			if len(tests) == len(tg.Tests) {
+				return tests
+			}
+		}
+	}
+
+	// Default to alphabetical
+	for _, t := range tg.Tests {
+		tests = append(tests, t)
+	}
+	sort.Sort(testsByID(tests))
+
+	return tests
 }
