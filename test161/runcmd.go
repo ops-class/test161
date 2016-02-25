@@ -112,14 +112,19 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 
 	// Set up a PersistenceManager that just outputs to the console
 	if runCommandVars.verbose == VERBOSE_LOUD {
-		env.Persistence = &ConsolePersistence{}
+		// Compute the max witdth for pretty-printing lines
+		max := 0
+		for _, t := range tg.Tests {
+			if max < len(t.DependencyID) {
+				max = len(t.DependencyID)
+			}
+		}
+		env.Persistence = &ConsolePersistence{max}
 	}
 
 	totalPoints := uint(0)
 	totalAvail := uint(0)
 	totals := []int{0, 0, 0, 0}
-
-	//	fmt.Printf("\n%v   %v   %v\n\n", strings.Repeat("=", 35), "RESULTS", strings.Repeat("=", 35))
 
 	// For printing
 	hasScore := false

@@ -107,7 +107,7 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 			switch msg {
 			case MSG_PERSIST_UPDATE:
 				selector := bson.M{
-					"_id":          cmd.test.ID,
+					"_id":          cmd.Test.ID,
 					"commands._id": cmd.ID,
 				}
 				changes := bson.M{}

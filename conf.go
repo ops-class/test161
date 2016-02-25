@@ -322,7 +322,7 @@ func (t *Test) initCommands() (err error) {
 	t.Commands = append(t.Commands, &Command{
 		Type:          "kernel",
 		ID:            uuid.NewV4().String(),
-		test:          t,
+		Test:          t,
 		PromptPattern: regexp.MustCompile(regexp.QuoteMeta(KERNEL_COMMAND_CONF.Prompt)),
 		Input: InputLine{
 			Line: "boot",
@@ -411,7 +411,7 @@ func (t *Test) initCommands() (err error) {
 			t.Commands = append(t.Commands, &Command{
 				Type:          commandType,
 				ID:            uuid.NewV4().String(),
-				test:          t,
+				Test:          t,
 				PromptPattern: promptPattern,
 				Input: InputLine{
 					Line: commandLine,

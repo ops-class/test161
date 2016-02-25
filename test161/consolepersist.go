@@ -8,10 +8,13 @@ import (
 // A PersistenceManager that "persists" to the console
 
 type ConsolePersistence struct {
+	width int
 }
 
 func (c *ConsolePersistence) Close() {
 }
+
+const lineFmt = "[%-*v]\t%.6f\t%s"
 
 func (c *ConsolePersistence) Notify(entity interface{}, msg, what int) error {
 
@@ -22,7 +25,11 @@ func (c *ConsolePersistence) Notify(entity interface{}, msg, what int) error {
 			{
 				cmd := entity.(*test161.Command)
 				line := cmd.Output[len(cmd.Output)-1]
-				output := fmt.Sprintf("%.6f\t%s", line.SimTime, line.Line)
+				// Learn the width on the fly (submissions)
+				if c.width < len(cmd.Test.DependencyID) {
+					c.width = len(cmd.Test.DependencyID)
+				}
+				output := fmt.Sprintf(lineFmt, c.width, cmd.Test.DependencyID, line.SimTime, line.Line)
 				fmt.Println(output)
 			}
 		case *test161.BuildCommand:
@@ -42,7 +49,7 @@ func (c *ConsolePersistence) Notify(entity interface{}, msg, what int) error {
 				index := len(test.Status) - 1
 				if index > 0 {
 					status := test.Status[index]
-					str := fmt.Sprintf("%.6f\t%s", test.SimTime, status.Status)
+					str := fmt.Sprintf(lineFmt, c.width, test.DependencyID, test.SimTime, status.Status)
 					if status.Message != "" {
 						str += fmt.Sprintf(": %s", status.Message)
 					}

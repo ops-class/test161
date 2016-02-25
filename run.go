@@ -142,8 +142,8 @@ type Command struct {
 	// Set during evaluation
 	Status string `json:"status"`
 
-	// Backwards pointer to the Test
-	test *Test
+	// Backwards pointer to the Test. This needs to be public for printing
+	Test *Test `json:"-" bson:"-"`
 }
 
 type InputLine struct {
