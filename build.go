@@ -468,8 +468,33 @@ func overlayHandler(t *BuildTest, command *BuildCommand) error {
 		}
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
 
+	// Remove everything from the REMOVED file, if we have one
+	if _, err = os.Stat(path.Join(t.srcDir, "REMOVED")); err != nil {
+		return nil
+	}
+
+	data, err = ioutil.ReadFile(path.Join(t.srcDir, "REMOVED"))
+	if err != nil {
+		return err
+	}
+
+	files = strings.Split(string(data), "\n")
+
+	for _, f := range files {
+		// Last line may or may not have a new line character
+		if len(strings.TrimSpace(f)) > 0 {
+			err = os.RemoveAll(path.Join(t.srcDir, f))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (t *BuildTest) addOverlayCommand() {
