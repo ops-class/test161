@@ -17,7 +17,7 @@ import (
 	"sync"
 )
 
-var ksecprintfExp = regexp.MustCompile(`.*ksecprintf\(SECRET, .+, "(.+)"\);.*`)
+var secprintfExp = regexp.MustCompile(`.*secprintf\(SECRET, .+, "(.+)"\);.*`)
 var successExp = regexp.MustCompile(`.*success\(.+, SECRET, "(.+)"\);.*`)
 
 // BuildTest is a variant of a Test, and specifies how the build process should work.
@@ -400,9 +400,9 @@ func (t *BuildTest) doSecureOverlayFile(filename string, done chan error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Try ksecprintf and success (single lines only).
+		// Try secprintf and success (single lines only).
 		var res []string
-		if res = ksecprintfExp.FindStringSubmatch(line); len(res) == 0 {
+		if res = secprintfExp.FindStringSubmatch(line); len(res) == 0 {
 			res = successExp.FindStringSubmatch(line)
 		}
 
