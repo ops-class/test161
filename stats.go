@@ -279,6 +279,7 @@ func (t *Test) getStats() {
 		}
 		// Cached for use by the monitoring code below
 		progressTime := float64(t.SimTime) - t.progressTime
+		commandTime := float64(t.SimTime - t.currentCommand.StartTime)
 		currentCounter := t.commandCounter
 		currentType := t.currentCommand.Type
 		t.L.Unlock()
@@ -312,22 +313,27 @@ func (t *Test) getStats() {
 		if progressTime > float64(t.Monitor.ProgressTimeout) {
 			monitorError =
 				fmt.Sprintf("no progress for %v s in %v mode", t.Monitor.ProgressTimeout, currentType)
-		}
-		// Only run these checks if we have enough state
-		if uint(len(monitorCache)) >= t.Monitor.Window {
-			if currentType == "kernel" && monitorWindow.Uinsns > 0 {
-				monitorError = "non-zero user instructions during kernel operation"
-			} else if t.Monitor.Kernel.EnableMin == "true" &&
-				float64(monitorWindow.Kinsns)/float64(monitorWindow.Insns) < t.Monitor.Kernel.Min {
-				monitorError = "insufficient kernel instructions (potential deadlock)"
-			} else if float64(monitorWindow.Kinsns)/float64(monitorWindow.Insns) > t.Monitor.Kernel.Max {
-				monitorError = "too many kernel instructions (potential livelock)"
-			} else if currentType == "user" && t.Monitor.User.EnableMin == "true" &&
-				(float64(monitorWindow.Uinsns)/float64(monitorWindow.Insns) < t.Monitor.User.Min) {
-				monitorError = "insufficient user instructions"
-			} else if currentType == "user" &&
-				(float64(monitorWindow.Uinsns)/float64(monitorWindow.Insns) > t.Monitor.User.Max) {
-				monitorError = "too many user instructions"
+		} else if t.currentCommand.Timeout > 0 && commandTime > float64(t.currentCommand.Timeout) {
+			t.currentCommand.TimedOut = true
+			monitorError =
+				fmt.Sprintf("command timed out after %v seconds", commandTime)
+		} else {
+			// Only run these checks if we have enough state
+			if uint(len(monitorCache)) >= t.Monitor.Window {
+				if currentType == "kernel" && monitorWindow.Uinsns > 0 {
+					monitorError = "non-zero user instructions during kernel operation"
+				} else if t.Monitor.Kernel.EnableMin == "true" &&
+					float64(monitorWindow.Kinsns)/float64(monitorWindow.Insns) < t.Monitor.Kernel.Min {
+					monitorError = "insufficient kernel instructions (potential deadlock)"
+				} else if float64(monitorWindow.Kinsns)/float64(monitorWindow.Insns) > t.Monitor.Kernel.Max {
+					monitorError = "too many kernel instructions (potential livelock)"
+				} else if currentType == "user" && t.Monitor.User.EnableMin == "true" &&
+					(float64(monitorWindow.Uinsns)/float64(monitorWindow.Insns) < t.Monitor.User.Min) {
+					monitorError = "insufficient user instructions"
+				} else if currentType == "user" &&
+					(float64(monitorWindow.Uinsns)/float64(monitorWindow.Insns) > t.Monitor.User.Max) {
+					monitorError = "too many user instructions"
+				}
 			}
 		}
 

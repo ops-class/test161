@@ -103,18 +103,21 @@ type templateData struct {
 	ArgLen int
 }
 
+// Command options for panics and timesout
 const (
-	PANIC_NO    = "no"
-	PANIC_MAYBE = "maybe"
-	PANIC_YES   = "yes"
+	CMD_OPT_NO    = "no"
+	CMD_OPT_MAYBE = "maybe"
+	CMD_OPT_YES   = "yes"
 )
 
 // Template for commands instances.  These get expanded depending on the command environment.
 type CommandTemplate struct {
-	Name   string             `yaml:"name"`
-	Output []*TemplOutputLine `yaml:"output"`
-	Input  []string           `yaml:"input"`
-	Panic  string             `yaml:"panics"`
+	Name     string             `yaml:"name"`
+	Output   []*TemplOutputLine `yaml:"output"`
+	Input    []string           `yaml:"input"`
+	Panic    string             `yaml:"panics"`   // CMD_OPT
+	TimesOut string             `yaml:"timesout"` // CMD_OPT
+	Timeout  float32            `yaml:"timeout"`  // Timeout in sec. A timeout of 0.0 uses the test default.
 }
 
 // An expected line of output, which may either be expanded or not.
@@ -227,6 +230,8 @@ func (c *Command) Instantiate(env *TestEnvironment) error {
 	}
 
 	c.Panic = tmpl.Panic
+	c.TimesOut = tmpl.TimesOut
+	c.Timeout = tmpl.Timeout
 
 	// Input
 
@@ -312,8 +317,12 @@ func (t *CommandTemplate) fixDefaults() {
 	// output, add the default expected output.
 
 	// Default for panic is to not allow it, i.e. must return to prompt
-	if t.Panic != PANIC_MAYBE && t.Panic != PANIC_YES {
-		t.Panic = PANIC_NO
+	if t.Panic != CMD_OPT_MAYBE && t.Panic != CMD_OPT_YES {
+		t.Panic = CMD_OPT_NO
+	}
+
+	if t.TimesOut != CMD_OPT_MAYBE && t.TimesOut != CMD_OPT_YES {
+		t.TimesOut = CMD_OPT_NO
 	}
 
 	if len(t.Output) == 1 && strings.TrimSpace(t.Output[0].Text) == "" {

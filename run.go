@@ -131,13 +131,19 @@ type Command struct {
 	PointsEarned    uint `json:"points_earned" bson:"points_earned"`
 
 	// Set during run init
-	Panic          string `json:"panic"`
+	Panic          string  `json:"panic"`
+	Timeout        float32 `json:"timeout"`
+	TimesOut       string  `json:"timesout"`
 	ExpectedOutput []*ExpectedOutputLine
 
 	// Set during testing
 	Output       []*OutputLine `json:"output"`
 	SummaryStats Stat          `json:"summarystats"`
 	AllStats     []Stat        `json:"stats"`
+
+	StartTime TimeFixedPoint `json:"starttime"`
+	EndTime   TimeFixedPoint `json:"endtime"`
+	TimedOut  bool           `json:"timedout"`
 
 	// Set during evaluation
 	Status string `json:"status"`
@@ -319,6 +325,8 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	t.commandCounter = 0
 	t.currentCommand = t.Commands[t.commandCounter]
 	t.currentCommand.Status = COMMAND_STATUS_RUNNING
+	t.currentCommand.StartTime = 0.0
+	t.currentCommand.Timeout = 0.0
 
 	// Start sys161 and defer close.
 	err = t.start161()
@@ -341,6 +349,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 	for int(t.commandCounter) < len(t.Commands) {
 		if t.commandCounter != 0 {
 			t.currentCommand.Status = COMMAND_STATUS_RUNNING
+			t.currentCommand.StartTime = t.SimTime
 
 			// Broadcast current command
 			env.notifyAndLogErr("Command Status", t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
@@ -389,7 +398,8 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 			break
 		} else if expectErr == io.EOF || len(match.Groups) == 0 {
 			// But is it reaaaally unexpected?
-			if t.currentCommand.Panic == PANIC_NO {
+			if t.currentCommand.Panic == CMD_OPT_NO &&
+				!(t.currentCommand.TimesOut != CMD_OPT_NO && t.currentCommand.TimedOut) {
 				t.addStatus("shutdown", "unexpected shutdown")
 				t.currentCommand.Status = COMMAND_STATUS_INCORRECT
 				t.allCorrect = false
@@ -414,8 +424,16 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		}
 
 		// See if we can short-circuit the test
-		if eof || cur.Panic != PANIC_NO {
-			t.addStatus("shutdown", "expected panic")
+		if eof || cur.Panic != CMD_OPT_NO || cur.TimesOut != CMD_OPT_NO {
+			if cur.Panic != CMD_OPT_NO {
+				// If we could have panicked, we cannot have run another command,
+				// so we're done.
+				t.addStatus("shutdown", "panic expected")
+			} else if cur.TimesOut != CMD_OPT_NO {
+				// If we could have timed out, we cannot have run another command,
+				// so we're done.
+				t.addStatus("shutdown", "timeout expected")
+			}
 			break
 		} else if cur.Status == COMMAND_STATUS_INCORRECT {
 			if t.ScoringMethod == "entire" {
@@ -445,6 +463,8 @@ func (t *Test) finishCurCommand(env *TestEnvironment, eof bool) *Command {
 
 	t.L.Lock()
 	defer t.L.Unlock()
+
+	t.currentCommand.EndTime = t.SimTime
 
 	// Rotate running command to the next command, saving any previous
 	// output as needed.
@@ -663,8 +683,12 @@ var partialCreditExp *regexp.Regexp = regexp.MustCompile(`^.*PARTIAL CREDIT ([0-
 func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 	c.PointsEarned = 0
 
-	if c.Panic == PANIC_YES && !eof {
+	if c.Panic == CMD_OPT_YES && !eof {
 		// Not correct, we should have panicked
+		c.Status = COMMAND_STATUS_INCORRECT
+		return
+	} else if c.TimesOut == CMD_OPT_YES && !c.TimedOut {
+		// Not correct, we should have timed out
 		c.Status = COMMAND_STATUS_INCORRECT
 		return
 	} else if len(c.ExpectedOutput) == 0 {

@@ -391,15 +391,17 @@ func explain(tg *test161.TestGroup) {
 		for _, cmd := range test.Commands {
 			// Instantiate the command so we get the expected output
 			cmd.Instantiate(env)
-			fmt.Println("    Cmd Line :", cmd.Input.Line)
-			fmt.Println("      Panics :", cmd.Panic)
-			fmt.Println("      Points :", cmd.PointsAvailable)
+			fmt.Println("    Cmd Line    :", cmd.Input.Line)
+			fmt.Println("      Panics    :", cmd.Panic)
+			fmt.Println("      Times Out :", cmd.TimesOut)
+			fmt.Println("      Timeout   :", cmd.Timeout)
+			fmt.Println("      Points    :", cmd.PointsAvailable)
 			if len(cmd.ExpectedOutput) > 0 {
-				fmt.Println("      Output :")
+				fmt.Println("      Output    :")
 				for _, output := range cmd.ExpectedOutput {
-					fmt.Println("          Text     :", output.Text)
-					fmt.Println("          Trusted  :", output.Trusted)
-					fmt.Println("          KeyID    :", output.KeyName)
+					fmt.Println("            Text     :", output.Text)
+					fmt.Println("            Trusted  :", output.Trusted)
+					fmt.Println("            KeyID    :", output.KeyName)
 				}
 			}
 		}

@@ -327,8 +327,10 @@ func (t *Test) initCommands() (err error) {
 		Input: InputLine{
 			Line: "boot",
 		},
-		Status: COMMAND_STATUS_NONE,
-		Panic:  PANIC_NO,
+		Status:   COMMAND_STATUS_NONE,
+		Panic:    CMD_OPT_NO,
+		TimesOut: CMD_OPT_NO,
+		Timeout:  0.0,
 	})
 
 	// Set all confs including kernel and shell
@@ -416,8 +418,10 @@ func (t *Test) initCommands() (err error) {
 				Input: InputLine{
 					Line: commandLine,
 				},
-				Status: COMMAND_STATUS_NONE,
-				Panic:  PANIC_NO,
+				Status:   COMMAND_STATUS_NONE,
+				Panic:    CMD_OPT_NO,
+				TimesOut: CMD_OPT_NO,
+				Timeout:  0.0,
 			})
 			commandLines = commandLines[1:]
 		}
