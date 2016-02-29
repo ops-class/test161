@@ -1,0 +1,53 @@
+_test161() 
+{
+    local cur prev opts 
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    opts="run submit list config version"
+
+    case "$prev" in
+    version) 
+        COMPREPLY=()
+        return 0
+        ;;
+
+    run)
+        local runopts
+        runopts="-dry-run -explain -sequential -no-dependencies -verbose -tag"
+        COMPREPLY=( $(compgen -W "${runopts}" -- $cur) )
+        return 0
+        ;;
+
+    submit)
+        local submitopts
+        submitopts="-debug -verify -no-cache"
+        COMPREPLY=( $(compgen -W "${submitopts}" -- $cur) )
+        return 0
+        ;;
+
+    list)
+        local listopts
+        listopts="targets tags tests"
+        COMPREPLY=( $(compgen -W "${listopts}" -- $cur) )
+        return 0
+        ;;
+
+    targets)
+        COMPREPLY=( $(compgen -W "-remote" -- $cur) )
+        return 0
+        ;;
+
+    -verbose)
+       COMPREPLY=( $(compgen -W "loud quiet whisper" -- $cur) )
+        return 0
+        ;;
+
+    esac
+
+    if [[ ${COMP_CWORD} -eq 1 ]]; then 
+        COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+    fi
+    return 0
+}
+complete -F _test161 test161

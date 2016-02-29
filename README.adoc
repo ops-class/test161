@@ -266,6 +266,7 @@ reason a test is skipped, which helps. Maybe a nice ASCII art tree would work he
 * Better error messages and hints about repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
 (Prevent backend storage DOS attacks.)
+* Add support for targets and tests to the bash completion script
 
 === Key saving
 
