@@ -15,7 +15,7 @@ func envInit() {
 	// Get our bearings
 	clientConf, err = inferConf()
 	if err != nil || clientConf == nil {
-		fmt.Printf("\nUnable to determine your test161 configuration: %v\n\n", err)
+		fmt.Printf("\nUnable to determine your test161 configuration:\n%v\n\n", err)
 		os.Exit(1)
 	}
 
@@ -50,7 +50,7 @@ func envInit() {
 	// Lastly, create the acutal test environment, loading the targets, commands, and
 	// tests.
 	if env, err = test161.NewEnvironment(clientConf.Test161Dir, nil); err != nil {
-		fmt.Printf("\nUnable to create your test161 test environment: %v\n\n", err)
+		fmt.Printf("\nUnable to create your test161 test environment:\n%v\n\n", err)
 		os.Exit(1)
 	}
 

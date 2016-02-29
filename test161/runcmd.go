@@ -299,64 +299,58 @@ func (t testsByID) Less(i, j int) bool { return t[i].DependencyID < t[j].Depende
 
 func printDryRun(tg *test161.TestGroup) {
 
-	deps := make([]*test161.Test, 0)
-	tests := make([]*test161.Test, 0)
-
-	for _, test := range tg.Tests {
-		if test.IsDependency {
-			deps = append(deps, test)
-		} else {
-			tests = append(tests, test)
-		}
+	headers := []*Heading{
+		&Heading{
+			Text:          "Test ID",
+			LeftJustified: true,
+		},
+		&Heading{
+			Text:          "Test Name",
+			LeftJustified: true,
+		},
+		&Heading{
+			Text:          "Points",
+			LeftJustified: false,
+		},
 	}
 
-	sort.Sort(testsByID(deps))
-	sort.Sort(testsByID(tests))
+	sorted := getPrintOrder(tg, true)
+	rows := make([][]string, 0)
+
+	for _, test := range sorted {
+		points := ""
+		if test.IsDependency {
+			points = "(dependency)"
+		} else {
+			points = fmt.Sprintf("%v", test.PointsAvailable)
+		}
+		rows = append(rows, []string{
+			test.DependencyID, test.Name, points,
+		})
+	}
 
 	fmt.Println()
-
-	if len(deps) > 0 {
-		for _, test := range deps {
-			fmt.Printf("%-30v (dependency)\n", test.DependencyID)
-		}
-	}
-
-	for _, test := range tests {
-		if test.PointsAvailable > 0 {
-			fmt.Printf("%-30v (%v points)\n", test.DependencyID, test.PointsAvailable)
-		} else {
-			fmt.Println(test.DependencyID)
-		}
-	}
-
+	printColumns(headers, rows, defaultPrintConf)
 	fmt.Println()
 }
 
 func explain(tg *test161.TestGroup) {
 
-	deps := make([]*test161.Test, 0)
-	tests := make([]*test161.Test, 0)
-
-	for _, test := range tg.Tests {
-		if test.IsDependency {
-			deps = append(deps, test)
-		} else {
-			tests = append(tests, test)
-		}
-	}
-
-	sort.Sort(testsByID(deps))
-	sort.Sort(testsByID(tests))
+	tests := getPrintOrder(tg, true)
 
 	fmt.Println()
 
-	if len(deps) > 0 {
-		for _, test := range deps {
+	for _, test := range tests {
+		if test.IsDependency {
 			fmt.Printf("%-30v (dependency)\n", test.DependencyID)
 		}
 	}
 
 	for _, test := range tests {
+		if test.IsDependency {
+			continue
+		}
+
 		fmt.Println()
 
 		// Test ID
