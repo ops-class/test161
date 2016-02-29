@@ -38,6 +38,11 @@ _test161()
         return 0
         ;;
 
+    config)
+        COMPREPLY=( $(compgen -W "add-user del-user change-token" -- $cur) )
+        return 0
+        ;;
+
     -verbose)
        COMPREPLY=( $(compgen -W "loud quiet whisper" -- $cur) )
         return 0
