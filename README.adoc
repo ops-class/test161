@@ -91,8 +91,9 @@ There are several command line flags that can be specified to customize how `tes
 * `-dry-run` (`-r`): Show the tests that would be run, but don't run them.
 * `-sequential` (`-s`): By default the output of all tests are interleaved, which can be hard to debug.
 Specify this option to run tests one at a time.
-* `-dependencies` (`-d`): Run the given tests and their dependencies. In test files, you can specify a
-test's dependencies, and the test will be skipped if the dependency fails.
+* `-no-dependencies` (`-n`): Run the given tests without also running their dependencies. In test files, you can specify a
+test's dependencies, and the test will be skipped if the dependency fails. The default behevior is to run all dependencies
+along with each test specified on the command line. This option does not apply for targets.
 * `-verbose` (`-v`): There are 3 levels of output: `loud` (default), `quiet` (no test output), and `whisper` (only final summary, no
 per test status).
 
@@ -256,8 +257,6 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 
 * Handle missing newline correctly. Test with shll for lossy shell support.
 * sys161 version checks
-* Tracking dependencies should be the default and ignoring them the command
-line option.
 * Order the test output in some meaningful way, probably by depth in the
 dependency graph. (That way all skipped tests should be shown last.)
 ** Not necessarily true. You could have a long, unrelated branch that

@@ -2,12 +2,15 @@ package main
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/ops-class/test161"
 	"github.com/parnurzeal/gorequest"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -23,8 +26,6 @@ var (
 	submitTargetName string
 )
 
-const CACHE_DIR = ".test161/cache"
-
 const SubmitMsg = `
 The CSE 421/521 Collaboration Guidelines for this assignment are as follows:%v
 
@@ -33,6 +34,8 @@ Your submission will receive an estimated score of %v/%v points.
 Do you certify that you have followed the collaboration guidelines and wish to submit now?
 `
 
+// Run the submission locally, but as close to how the server would do it
+// as possible
 func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, errs []error) {
 
 	score = 0
@@ -42,17 +45,13 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 
 	// Cache builds for performance, unless we're told not to
 	if !submitNoCache {
-		dir, err := getAndCreateCacheDir()
-		if err != nil {
-			fmt.Println("Skipping build directory cache:", err)
-		} else {
-			env.CacheDir = dir
-		}
+		env.CacheDir = CACHE_DIR
 	}
 
+	env.KeyDir = KEYS_DIR
 	env.Persistence = &ConsolePersistence{}
-	submission, errs = test161.NewSubmission(req, env)
 
+	submission, errs = test161.NewSubmission(req, env)
 	if len(errs) > 0 {
 		return
 	}
@@ -74,12 +73,27 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 	return
 }
 
+// test161 submit ...
 func doSubmit() (exitcode int) {
 
 	collabMsg := ""
 	exitcode = 1
 
-	// Parse args
+	// Early sanity checks
+	if len(clientConf.Users) == 0 {
+		printDefaultConf()
+		return
+	}
+
+	// Check the version of git to figure out if we can even build locally
+	if ok, err := checkGitVersionAndComplain(); err != nil {
+		err = fmt.Errorf("Unable to check Git version: %v", err)
+		return
+	} else if !ok {
+		return
+	}
+
+	// Parse args and verify the target
 	if targetInfo, err := getSubmitArgs(); err != nil {
 		printRunError(err)
 		return
@@ -90,21 +104,30 @@ func doSubmit() (exitcode int) {
 	req := &test161.SubmissionRequest{
 		Target:        submitTargetName,
 		Users:         clientConf.Users,
-		Repository:    clientConf.Repository,
+		Repository:    clientConf.git.remoteURL,
 		CommitID:      submitCommit,
 		ClientVersion: test161.Version,
 	}
 
-	// Validate before running locally
-	if ok := submitOrValidate(req, true); !ok {
-		return
+	// Get the current hash of our test161 private key
+	for _, user := range req.Users {
+		user.KeyHash = getKeyHash(user.Email)
 	}
 
-	if submitVerfiy {
+	// Validate before running locally (and install their keys)
+	if err := validateUsers(req); err != nil {
+		fmt.Printf("\n%v\n\n", err)
+		if submitVerfiy {
+			return
+		}
+	} else if submitVerfiy {
+		// If only -verify, we're done.
+		exitcode = 0
 		fmt.Println("OK")
 		return
 	}
 
+	// We've verified what we can. Time to test things locally before submission.
 	score, avail := uint(0), uint(0)
 
 	// Local build
@@ -137,17 +160,75 @@ func doSubmit() (exitcode int) {
 		}
 	}
 
-	// Submit
-	if ok := submitOrValidate(req, false); ok {
+	// Finally, submit
+	if err := submit(req); err == nil {
+		fmt.Println("\nYour submission has been created and is being processed by the test161 server\n")
 		exitcode = 0
+	} else {
+		fmt.Printf("\n%v\n", err)
 	}
 
 	return
 }
 
+// Validate the user info on the server, and update the users' private keys
+// that are returned by the server. Fail if the user hasn't set up a key yet.
+func validateUsers(req *test161.SubmissionRequest) error {
+	body, err := submitOrValidate(req, true)
+	if err != nil {
+		return err
+	}
+
+	// All keys are up-to-date and exist
+	if len(body) == 0 {
+		return nil
+	}
+
+	// Handle the response from the server, specifically, handle
+	// the test161 private keys that are returned.
+	keyData := make([]*test161.RequestKeyResonse, 0)
+	if err := json.Unmarshal([]byte(body), &keyData); err != nil {
+		return fmt.Errorf("Unable to parse server response (validate): %v", err)
+	}
+
+	emptyCount := 0
+
+	for _, data := range keyData {
+		if data.Key != "" {
+			studentDir := path.Join(KEYS_DIR, data.User)
+			if _, err := os.Stat(studentDir); err != nil {
+				err = os.Mkdir(studentDir, 0770)
+				if err != nil {
+					return fmt.Errorf("Error creating user's key directory: %v", err)
+				}
+			}
+			file := path.Join(KEYS_DIR, data.User, "id_rsa")
+			if err := ioutil.WriteFile(file, []byte(data.Key), 0600); err != nil {
+				return fmt.Errorf("Error creating private key: %v", err)
+			}
+		} else {
+			emptyCount += 1
+			fmt.Println("Warning: No test161 key exists for", data.User)
+		}
+	}
+
+	// Check if no keys have been set up
+	if emptyCount == len(clientConf.Users) && emptyCount > 0 {
+		return errors.New(`test161 requires you to add a test161 deployment key to your Git repository. To create a new key pair, 
+login to https://test161.ops-class.org and go to your settings page.`)
+	}
+
+	return nil
+}
+
+func submit(req *test161.SubmissionRequest) error {
+	_, err := submitOrValidate(req, false)
+	return err
+}
+
 // Return true if OK, false otherwise
-func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (ok bool) {
-	ok = false
+func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (string, error) {
+
 	endpoint := clientConf.Server
 	if validateOnly {
 		endpoint += "/api-v1/validate"
@@ -157,8 +238,7 @@ func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (ok boo
 
 	remoteRequest := gorequest.New()
 	if reqbytes, err := json.Marshal(req); err != nil {
-		printRunError(err)
-		return
+		return "", err
 	} else {
 		resp, body, errs := remoteRequest.Post(
 			endpoint).
@@ -166,25 +246,19 @@ func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (ok boo
 			End()
 
 		if len(errs) > 0 {
-			printRunErrors(errs)
+			// Just return one of them
+			return "", errs[0]
 		} else {
-			if resp.StatusCode == http.StatusOK {
-				ok = true
-				return
-			} else if resp.StatusCode == http.StatusCreated {
-				fmt.Println("\nYour submission has been created and is being processed by the test161 server\n")
-				ok = true
-				return
+			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+				return body, nil
 			} else if resp.StatusCode == http.StatusNotAcceptable {
-				fmt.Println("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit")
+				return "", fmt.Errorf("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit.")
 			} else {
-				printRunError(fmt.Errorf("\nThe server could not process your request: %v. \nData: %v\n",
-					resp.Status, body))
+				return "", fmt.Errorf("\nThe server could not process your request: %v. \nData: %v\n",
+					resp.Status, body)
 			}
 		}
 	}
-
-	return
 }
 
 func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
@@ -221,7 +295,7 @@ func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
 }
 
 func getSubmitArgs() (*test161.TargetListItem, error) {
-	submitFlags := flag.NewFlagSet("test161 run", flag.ExitOnError)
+	submitFlags := flag.NewFlagSet("test161 submit", flag.ExitOnError)
 	submitFlags.Usage = usage
 
 	submitFlags.BoolVar(&submitDebug, "debug", false, "")
@@ -270,20 +344,43 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 		return nil, err
 	}
 
-	clientConf.Repository = git.remoteURL
+	clientConf.git = git
 	submitCommit = commit
 	submitRef = ref
 
 	return serverVersion, nil
 }
 
-func getAndCreateCacheDir() (string, error) {
-	cache := path.Join(os.Getenv("HOME"), CACHE_DIR)
-	if _, err := os.Stat(cache); err != nil {
-		if err := os.MkdirAll(cache, 0770); err != nil {
-			return "", err
+// Initialize the cache and key directories in HOME/.test161
+func init() {
+	if _, err := os.Stat(CACHE_DIR); err != nil {
+		if err := os.MkdirAll(CACHE_DIR, 0770); err != nil {
+			fmt.Println("Error creating cache directory:", err)
+			os.Exit(1)
 		}
 	}
 
-	return cache, nil
+	if _, err := os.Stat(KEYS_DIR); err != nil {
+		if err := os.MkdirAll(KEYS_DIR, 0770); err != nil {
+			fmt.Println("Error creating keys directory:", err)
+			os.Exit(1)
+		}
+	}
+}
+
+func getKeyHash(user string) string {
+	file := path.Join(KEYS_DIR, user, "id_rsa")
+	if _, err := os.Stat(file); err != nil {
+		return ""
+	}
+
+	data, err := ioutil.ReadFile(file)
+	if err != nil {
+		return ""
+	}
+
+	raw := md5.Sum(data)
+	hash := strings.ToLower(hex.EncodeToString(raw[:]))
+
+	return hash
 }

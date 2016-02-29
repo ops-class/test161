@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/ops-class/test161"
 	"github.com/parnurzeal/gorequest"
-	yaml "gopkg.in/yaml.v2"
 	"net/http"
 	"os"
 	"sort"
@@ -29,8 +28,6 @@ func doListCommand() int {
 		return doListTags()
 	case "tests":
 		return doListTests()
-	case "conf":
-		return doListConf()
 	default:
 		fmt.Println("Invalid option to 'test161 list'.  Must be one of (targets, tags, tests)")
 		return 1
@@ -240,48 +237,6 @@ func doListTests() int {
 
 	fmt.Println()
 	printColumns(headers, data, defaultPrintConf)
-	fmt.Println()
-
-	return 0
-}
-
-func doListConf() int {
-	text, err := yaml.Marshal(clientConf)
-	if err != nil {
-		printRunError(err)
-		return 1
-	}
-
-	fmt.Println("\nConfiguration:")
-	fmt.Println("--------------------------------")
-
-	fmt.Println(string(text))
-	fmt.Println()
-
-	debug := false
-	if len(os.Args) == 4 && os.Args[3] == "-debug" {
-		debug = true
-	}
-
-	// Infer git info and print it
-	git, err := gitRepoFromDir(clientConf.SrcDir, debug)
-	if err != nil {
-		fmt.Println(err)
-		return 1
-	}
-
-	// Print git info
-	fmt.Println("Git Repository Detail:")
-	fmt.Println("--------------------------------")
-	fmt.Println("Directory    :", git.dir)
-	fmt.Println("Remote Name  :", git.remoteName)
-	fmt.Println("Remote Ref   :", git.remoteRef)
-	fmt.Println("Remote URL   :", git.remoteURL)
-	if git.localRef == "HEAD" {
-		fmt.Println("Local Ref    :", "(detached HEAD)")
-	} else {
-		fmt.Println("Local Ref    :", git.localRef)
-	}
 	fmt.Println()
 
 	return 0

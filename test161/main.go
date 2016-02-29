@@ -4,56 +4,22 @@ import (
 	"fmt"
 	"github.com/ops-class/test161"
 	"os"
-	"path"
 )
 
 var env *test161.TestEnvironment
 var clientConf *ClientConf
 
-const configOpt = OptionLenient
-
-func getConfFromFile() (*ClientConf, error) {
-
-	conf := &ClientConf{}
+func envInit() {
 	var err error
 
-	// Find and load .test161.conf.  Check the current directory, then $HOME
-	search := []string{
-		CONF_FILE,
-		path.Join(os.Getenv("HOME"), CONF_FILE),
-	}
-
-	file := ""
-	for _, f := range search {
-		if _, err2 := os.Stat(f); err2 == nil {
-			file = f
-			break
-		}
-	}
-
-	if file == "" {
-		return nil, nil
-	} else if info, err := os.Stat(file); err != nil || info.Size() == 0 {
-		return nil, nil
-	}
-
-	if conf, err = ClientConfFromFile(file); err != nil {
-		return nil, err
-	}
-
-	return conf, nil
-}
-
-func envInit() {
-
-	// Try to infer the config file first
-	inferred, err := inferConf()
-	if err != nil && configOpt == OptionStrict {
-		fmt.Println("Unable to determine your test161 configuration:", err)
+	// Get our bearings
+	clientConf, err = inferConf()
+	if err != nil || clientConf == nil {
+		fmt.Printf("\nUnable to determine your test161 configuration: %v\n\n", err)
 		os.Exit(1)
 	}
 
-	// Now load their actual conf file
+	// Now load their actual conf file to get user info.
 	confFile, err := getConfFromFile()
 	if err != nil {
 		// An error here means we couldn't load the file, either bad yaml or I/O problem
@@ -61,100 +27,143 @@ func envInit() {
 		os.Exit(1)
 	}
 
-	if inferred != nil && confFile != nil {
-		// Merge the two, favoring the inferred file
-		if err = inferred.mergeConf(confFile); err != nil {
-			fmt.Println("test161 was unable to merge your default configuration:", err)
-			os.Exit(1)
-		}
-		clientConf = inferred
-	} else if inferred != nil {
-		clientConf = inferred
-	} else {
-		clientConf = confFile
+	// OK if confFile is nil, but they won't be able to submit.
+	if confFile != nil {
+		// The user info is all we store in .test161.conf at this point
+		clientConf.Users = confFile.Users
 	}
 
-	// Test all the paths before trying to load the environment
+	// Environment variable overrides
+	clientConf.OverlayDir = os.Getenv("TEST161_OVERLAY")
+	if server := os.Getenv("TEST161_SERVER"); server != "" {
+		clientConf.Server = server
+	}
+
+	// Test all the paths before trying to load the environment. Only the overlay
+	// should really be a problem since we're figuring everything else out from
+	// the cwd.
 	if err = clientConf.checkPaths(); err != nil {
-		fmt.Println()
-		fmt.Println("The following paths are incorrect in your configuration:", err)
-		fmt.Println()
-		printDefaultConf()
+		fmt.Printf("\nThe following paths are incorrect in your configuration: %v\n\n", err)
 		os.Exit(1)
 	}
 
+	// Lastly, create the acutal test environment, loading the targets, commands, and
+	// tests.
 	if env, err = test161.NewEnvironment(clientConf.Test161Dir, nil); err != nil {
-		fmt.Println("Unable to create your test161 test environment:", err)
+		fmt.Printf("\nUnable to create your test161 test environment: %v\n\n", err)
 		os.Exit(1)
 	}
 
 	env.RootDir = clientConf.RootDir
 	env.OverlayRoot = clientConf.OverlayDir
-
-	// The server in the conf file has to override the default one for local testing
-	if confFile.Server != "" {
-		clientConf.Server = confFile.Server
-	}
-
 }
 
 func usage() {
 
 	fmt.Println(`
-    usage: test161  <command> <flags> <args>
  
-           test161 run [-dry-run | -r] [-explain | -x] [sequential | -s]
-                       [-dependencies | -d] [-verbose | -v (whisper|quiet|loud*)]
-                       [-tag] <names>
+usage:
+    test161  <command> <flags> <args>
 
-           test161 explain [-tag] <names>
+    test161 run [-dry-run | -d] [-explain | -x] [sequential | -s]
+                [-no-dependencies | -n] [-verbose | -v (whisper|quiet|loud*)]
+                [-tag] <names>
 
-           test161 submit [-debug] [-verify] [-no-cache] <target> <commit>
+    test161 submit [-debug] [-verify] [-no-cache] <target> <commit>
 
-           test161 list (targets|tags|tests|conf) [-debug] [-remote | -r]
+    test161 list (targets|tags|tests) [-remote | -r]
 
-           test161 version
+    test161 config [-debug] [(add-user|del-user|change-token)] <username> <token>
 
-           test161 help for a detailed description
+    test161 version
+
+    test161 help for a detailed description
 `)
 }
 
-func help() {
+func doHelp() int {
 	usage()
 	fmt.Println(`
-    commands:
-           'test161 run' runs a single target, or a collection of tests. Specify
-           -dependencies to also run all tests' dependencies, which is done
-           automatically for targets.  Tests may be specified by name,
-           doublestar globbing, or by tag. If -tag is specified with a single
-           positional argument, it is interpretted as tag.  This flag can be
-           safely omitted as long there as there are no conflicts between tag
-           and target name.
+Commands Description:
 
-           Unless specified by -sequential, all output is interleaved with a summary
-           at the end.  You can turn off the output lines with -v quiet, and hide
-           everything except pass/fail with -v whisper. Specifying -dry-run will
-           show you the tests that would be run, without running them. Similarly,
-           -explain will give you more detailed information about the tests and
-           what they expect, without running them. This option is very useful when
-           writing your own tests.
+'test161 run' runs a single target, or a group of tests. By default, all
+dependencies for the test group will also be run. For single tests and tags,
+specifying -no-dependencies will only run the test and tags given on the command
+line.
 
-           'test161' submit will create a submission for <target> and using commit
-           <commit>.  This command will return a status, but will not block while
-           grading. Specifying -verify will verify that the submission will be accepted
-           by the server, without submitting it. This is useful for debugging username
-           and token issues. Adding -debug will print the git commands that submit uses
-           to determine the status of your repository. Adding -no-cache will clone the
-           repo locally instead of using a previously cached copy.
+Specififying Tests: Individual tests may be specified by name, doublestar
+globbing, or by tag. Because naming conflicts could arise between tags and
+targets, adding the -tag flag forces test161 to interpet a single positional
+argument as a tag. This flag can be safely omitted as long there as there are no
+conflicts between tag and target name.
 
-           'test161 list targets' will print a list of available targets.  Specifying
-           -r will query the test161 server for this list.
+Output: Unless specified by -sequential, all output is interleaved with a
+summary at the end.  You can disable test output lines with -v quiet, and hide
+everything except pass/fail with -v whisper. Specifying -dry-run will show you
+the tests that would be run, without running them. Similarly, -explain will show
+you more detailed information about the tests and what they expect, without
+running them. This option is very useful when writing your own tests.
 
-           'test161 list (tags|tests)' prints the list of local tags or tests.
 
-           'test161 list conf [-debug] prints the configuration and Git repository
-           information. Adding -debug will print the individual Git commands used.
+'test161 submit' creates a submission for <target> on the test161.ops-class.org
+server. This command will return a status, but will not block while evaluating
+the target on the server.
+
+Specifying a Commit: 'test161 submit' needs to send a Git commit id to the
+server so that it can run your kernel. If omitted, test161 will use the commit
+id corresponding the tip of your current branch. The submit command will also
+recognize sha commit ids, branches, and tags. For example, the following are all
+valid:
+		 test161 submit asst1 origin/master    # origin/master
+		 test161 submit asst1 asst1            # asst1 is a tag
+
+Debugging: Adding the -verify flag will validate the submission will by checking
+for local and remote issues, without submitting. This is useful for debugging
+username and token, deployment key, and repository issues. Adding -debug will
+print the git commands that submit uses to determine the status of your
+repository.  Adding -no-cache will clone the repo locally instead of using a
+previously cached copy.
+
+
+'test161 list' prints a variety of useful information. 'test161 list targets'
+shows the local targets available to test161; adding -r will show the remote
+targets instead. 'test161 list tags' shows a listing of tags with the tests in
+each tag. 'test161 list tests' lists all tests available to test161 along with
+their descriptions.
+
+
+'test161 config' is used to view and change test161 configuration. When run with
+no arguments, this command shows test161 path, user, and Git repository
+information. Add -debug to  see the Git commands that are run.
+
+User Configuration: 'test161 config' can also edit user/token data. There are
+three commands available to modify user configuration:
+
+	  'test161 config add-user <email> <token>'
+	  'test161 config del-user <email>'
+	  'test161 config change-token <email> <new-token>'
 	`)
+
+	return 0
+}
+
+type test161Command struct {
+	cmd    func() int
+	reqEnv bool
+}
+
+var cmdTable = map[string]*test161Command{
+	"run":     &test161Command{doRun, true},
+	"submit":  &test161Command{doSubmit, true},
+	"list":    &test161Command{doListCommand, true},
+	"config":  &test161Command{doConfig, true},
+	"version": &test161Command{doVersion, false},
+	"help":    &test161Command{doHelp, false},
+}
+
+func doVersion() int {
+	fmt.Printf("test161 version: %v\n", test161.Version)
+	return 0
 }
 
 func main() {
@@ -164,24 +173,14 @@ func main() {
 		usage()
 	} else {
 		// Get the sub-command
-		if os.Args[1] == "help" {
-			help()
-		} else {
-			// For the rest, we need a TestEnvironment
-			envInit() // This might exit
-			switch os.Args[1] {
-			case "run":
-				exitcode = doRun()
-			case "submit":
-				exitcode = doSubmit()
-			case "list":
-				exitcode = doListCommand()
-			case "version":
-				fmt.Printf("test161 version: %v\n", test161.Version)
-				exitcode = 0
-			default:
-				usage()
+		if cmd, ok := cmdTable[os.Args[1]]; ok {
+			if cmd.reqEnv {
+				envInit() // This might exit
 			}
+			exitcode = cmd.cmd()
+		} else {
+			fmt.Printf("\n\"%v\" is not a reconized test161 command", os.Args[1])
+			usage()
 		}
 	}
 	os.Exit(exitcode)

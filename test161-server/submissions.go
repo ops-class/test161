@@ -197,7 +197,15 @@ func validateSubmission(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%v", err)
 	}
 
+	keyInfo := request.CheckUserKeys(serverEnv)
+	w.Header().Set("Content-Type", JsonHeader)
 	w.WriteHeader(http.StatusOK)
+
+	if len(keyInfo) > 0 {
+		if err := json.NewEncoder(w).Encode(keyInfo); err != nil {
+			logger.Println("Encoding error (Validate Response):", err)
+		}
+	}
 }
 
 // getStats returns the current manager statistics
@@ -269,7 +277,7 @@ func loadServerConfig() (*SubmissionServerConfig, error) {
 	file := ""
 
 	for _, f := range search {
-		if _, err2 := os.Stat(f); err2 == nil {
+		if _, err := os.Stat(f); err == nil {
 			file = f
 			break
 		}

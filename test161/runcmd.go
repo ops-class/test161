@@ -15,7 +15,7 @@ var runCommandVars struct {
 	dryRun     bool
 	explain    bool
 	sequential bool
-	deps       bool
+	nodeps     bool
 	verbose    string
 	isTag      bool
 	tests      []string
@@ -66,13 +66,13 @@ func getRunArgs() error {
 	runFlags.Usage = usage
 
 	runFlags.BoolVar(&runCommandVars.dryRun, "dry-run", false, "")
-	runFlags.BoolVar(&runCommandVars.dryRun, "r", false, "")
+	runFlags.BoolVar(&runCommandVars.dryRun, "d", false, "")
 	runFlags.BoolVar(&runCommandVars.explain, "explain", false, "")
 	runFlags.BoolVar(&runCommandVars.explain, "x", false, "")
 	runFlags.BoolVar(&runCommandVars.sequential, "sequential", false, "")
 	runFlags.BoolVar(&runCommandVars.sequential, "s", false, "")
-	runFlags.BoolVar(&runCommandVars.deps, "dependencies", false, "")
-	runFlags.BoolVar(&runCommandVars.deps, "d", false, "")
+	runFlags.BoolVar(&runCommandVars.nodeps, "no-dependencies", false, "")
+	runFlags.BoolVar(&runCommandVars.nodeps, "n", false, "")
 	runFlags.StringVar(&runCommandVars.verbose, "verbose", "loud", "")
 	runFlags.StringVar(&runCommandVars.verbose, "v", "loud", "")
 	runFlags.BoolVar(&runCommandVars.isTag, "tag", false, "")
@@ -270,7 +270,7 @@ func runTests() (int, []error) {
 	// Not a target, run as a regular (ungraded) TestGroup
 	config := &test161.GroupConfig{
 		Name:    "test",
-		UseDeps: runCommandVars.deps,
+		UseDeps: !runCommandVars.nodeps,
 		Tests:   runCommandVars.tests,
 		Env:     env,
 	}

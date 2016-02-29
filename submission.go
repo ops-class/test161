@@ -1,6 +1,8 @@
 package test161
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,13 +11,15 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"sync"
 	"time"
 )
 
 type SubmissionUserInfo struct {
-	Email string `yaml:"email"`
-	Token string `yaml:"token"`
+	Email   string `yaml:"email"`
+	Token   string `yaml:"token"`
+	KeyHash string `yaml:"-"`
 }
 
 // SubmissionRequests are created by clients and used to generate Submissions.
@@ -560,4 +564,51 @@ func KeyGen(email, token string, env *TestEnvironment) (string, error) {
 	}
 
 	return keytext, nil
+}
+
+// RequestKeyResonse is the repsonse we send back during validation if the keys
+// aren't up-to-date.
+type RequestKeyResonse struct {
+	User string
+	Key  string
+}
+
+// Check if the local copy of the key is up-to-date.
+// Return an empty key if the user's key has not been created, or the
+// new key if the hash is different.
+func (req *SubmissionRequest) CheckUserKeys(env *TestEnvironment) []*RequestKeyResonse {
+
+	res := []*RequestKeyResonse{}
+
+	for _, user := range req.Users {
+		studentDir := path.Join(env.KeyDir, user.Email)
+		privkey := path.Join(studentDir, "id_rsa")
+		if _, err := os.Stat(privkey); err != nil {
+			// No key, inform
+			res = append(res, &RequestKeyResonse{
+				User: user.Email,
+				Key:  "",
+			})
+			continue
+		}
+
+		// Get hash
+		data, err := ioutil.ReadFile(privkey)
+		if err != nil {
+			env.Log.Printf("Error reading private key (%v): %v", privkey, err)
+			continue
+		}
+
+		raw := md5.Sum(data)
+		hash := strings.ToLower(hex.EncodeToString(raw[:]))
+
+		if hash != user.KeyHash {
+			res = append(res, &RequestKeyResonse{
+				User: user.Email,
+				Key:  string(data),
+			})
+		}
+	}
+
+	return res
 }

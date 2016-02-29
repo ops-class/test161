@@ -94,13 +94,13 @@ func (t *Target) fixDefaults() {
 func TargetFromFile(file string) (*Target, error) {
 	var err error
 
-	data, err := ioutil.ReadFile(file)
-	if err != nil {
+	var info os.FileInfo
+	if info, err = os.Stat(file); err != nil {
 		return nil, err
 	}
 
-	var info os.FileInfo
-	if info, err = os.Stat(file); err != nil {
+	data, err := ioutil.ReadFile(file)
+	if err != nil {
 		return nil, err
 	}
 

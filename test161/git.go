@@ -3,8 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/ops-class/test161"
+	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -15,13 +18,34 @@ type gitRepo struct {
 	remoteURL     string
 	localRef      string
 	remoteUpdated bool
+
+	// Set this if your want GIT_SSH_COMMAND set for 'git remote update'
+	keyfile string
 }
+
+var minGitVersion = test161.ProgramVersion{
+	Major:    2,
+	Minor:    3,
+	Revision: 0,
+}
+
+const GitUpgradeInst = `
+Your version of Git must be at least 2.3.0 (you're running %v).
+
+To upgrade on Ubuntu, perform the following commands to add the Git stable ppa, and
+install the latest version of Git:
+
+    sudo add-apt-repository ppa:git-core/ppa
+    sudo apt-get update
+    sudo apt-get install -y git
+
+`
 
 func (git *gitRepo) setRemoteInfo(debug bool) error {
 
 	// Infer the remote name and branch. We can get what we need if they're on a branch
 	// and it's set up to track a remote.
-	if remoteInfo, err := doOneCommand("git rev-parse --abbrev-ref --symbolic-full-name @{u}", git.dir, false, debug); err == nil {
+	if remoteInfo, err := git.doOneCommand("git rev-parse --abbrev-ref --symbolic-full-name @{u}", false, debug); err == nil {
 		where := strings.Index(remoteInfo, "/")
 		if where < 0 {
 			// This shouldn't happen, but you never know
@@ -32,7 +56,7 @@ func (git *gitRepo) setRemoteInfo(debug bool) error {
 
 		// Get the URL of the remote
 		cmd := fmt.Sprintf("git ls-remote --get-url %v", git.remoteName)
-		if url, err := doOneCommand(cmd, git.dir, false, debug); err != nil {
+		if url, err := git.doOneCommand(cmd, false, debug); err != nil {
 			fmt.Println(url, err)
 			return err
 		} else {
@@ -47,23 +71,18 @@ func (git *gitRepo) setRemoteInfo(debug bool) error {
 
 const remoteErr = `
 Your current branch is not set up to track a remote, and there is no repository specified
-in your .test161.conf file. Use 'git branch -u' to set the upstream for this branch.
+in your .test161.conf file. Use 'git branch -u <upstream>' to set the upstream for this branch.
 `
 
 const remoteWarning = `
-WARNING: Your current branch is not set up to track a remote Use 'git branch -u' to set
-the upstream for this branch. Submit will use the repository URL found in your .test161.conf
-file
+WARNING: Your current branch is not set up to track a remote Use 'git branch -u' to set the
+upstream for this branch. Submit will use the repository URL found in your .test161.conf file
 `
 
 func (git *gitRepo) canSubmit() bool {
-	if git.remoteURL == "" && clientConf.Repository == "" {
+	if git.remoteURL == "" {
 		fmt.Println(remoteErr)
 		return false
-	} else if git.remoteURL == "" {
-		git.remoteURL = clientConf.Repository
-		fmt.Println(remoteWarning)
-		// OK, but not advised
 	}
 	return true
 }
@@ -103,7 +122,7 @@ func (git *gitRepo) commitFromHEAD(debug bool) (commit, ref string, err error) {
 	}
 
 	// Finally, get the commit id from the ref
-	if commit, err = doOneCommand("git rev-parse "+ref, git.dir, false, debug); err != nil {
+	if commit, err = git.doOneCommand("git rev-parse "+ref, false, debug); err != nil {
 		err = fmt.Errorf("Cannot rev-parse ref %v: %v", ref, err)
 	}
 
@@ -149,7 +168,7 @@ func (git *gitRepo) commitFromTreeish(treeish string, debug bool) (commit, ref s
 
 		// Get the commit id
 		ref = treeish
-		commit, err = doOneCommand("git rev-parse "+ref, git.dir, false, debug)
+		commit, err = git.doOneCommand("git rev-parse "+ref, false, debug)
 		if err != nil {
 			err = fmt.Errorf("Cannot rev-parse ref %v: %v", ref, err)
 		}
@@ -164,7 +183,7 @@ func gitRepoFromDir(src string, debug bool) (*gitRepo, error) {
 	git.dir = src
 
 	// Verify that we're in a git repo
-	if res, err := doOneCommand("git status", src, true, false); err != nil {
+	if res, err := git.doOneCommand("git status", true, false); err != nil {
 		return nil, fmt.Errorf("%v", res)
 	}
 
@@ -175,17 +194,24 @@ func gitRepoFromDir(src string, debug bool) (*gitRepo, error) {
 
 	// Get the local branch (or HEAD if detached). We'll need this if submitting without
 	// specifying the branch/tag/commit.
-	if branch, err := doOneCommand("git rev-parse --abbrev-ref HEAD", src, false, debug); err == nil {
+	if branch, err := git.doOneCommand("git rev-parse --abbrev-ref HEAD", false, debug); err == nil {
 		git.localRef = branch
 	}
+
+	// Finally, set the keyfile for this git repo
+	git.keyfile = clientConf.getKeyFile()
 
 	return git, nil
 }
 
-func doOneCommand(cmdline, srcDir string, allowEmpty, verbose bool) (string, error) {
+func (git *gitRepo) doOneCommand(cmdline string, allowEmpty, verbose bool) (string, error) {
 	args := strings.Split(cmdline, " ")
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = srcDir
+	cmd.Dir = git.dir
+
+	if git.keyfile != "" {
+		cmd.Env = append(os.Environ(), fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -i %v`, git.keyfile))
+	}
 
 	if verbose {
 		fmt.Println(cmdline)
@@ -208,7 +234,7 @@ func doOneCommand(cmdline, srcDir string, allowEmpty, verbose bool) (string, err
 
 func (git *gitRepo) updateRemote(debug bool) error {
 	// Update the local refs
-	_, err := doOneCommand("git remote update "+git.remoteName, git.dir, true, debug)
+	_, err := git.doOneCommand("git remote update "+git.remoteName, true, debug)
 	if err != nil {
 		git.remoteUpdated = true
 	}
@@ -216,7 +242,7 @@ func (git *gitRepo) updateRemote(debug bool) error {
 }
 
 func (git *gitRepo) lookForRef(cmd, ref string, debug bool) (bool, error) {
-	res, err := doOneCommand(cmd, git.dir, true, debug)
+	res, err := git.doOneCommand(cmd, true, debug)
 	if err != nil {
 		return false, err
 	}
@@ -251,7 +277,7 @@ func (git *gitRepo) verifyRemoteRef(ref string, debug bool) (bool, error) {
 // Determine if the working directory has uncommitted work
 func (git *gitRepo) isLocalDirty(debug bool) (bool, error) {
 	// Just check if git status --porcelain outputs anything
-	if res, err := doOneCommand("git status --porcelain", git.dir, true, debug); err != nil {
+	if res, err := git.doOneCommand("git status --porcelain", true, debug); err != nil {
 		return false, err
 	} else {
 		return len(res) > 0, nil
@@ -272,17 +298,60 @@ func (git *gitRepo) isRemoteUpToDate(debug bool) (bool, error) {
 	}
 
 	// Get our local commit
-	localCommit, err := doOneCommand("git rev-parse HEAD", git.dir, false, debug)
+	localCommit, err := git.doOneCommand("git rev-parse HEAD", false, debug)
 	if err != nil {
 		return false, err
 	}
 
 	// Get the remote commit
 	cmdLine := fmt.Sprintf("git rev-parse %v/%v", git.remoteName, git.remoteRef)
-	remoteCommit, err := doOneCommand(cmdLine, git.dir, false, debug)
+	remoteCommit, err := git.doOneCommand(cmdLine, false, debug)
 	if err != nil {
 		return false, err
 	}
 
 	return localCommit == remoteCommit, nil
+}
+
+var gitVersionRegexp *regexp.Regexp = regexp.MustCompile(`^git version (\d+)\.(\d+)\.(\d+)$`)
+
+func gitVersion() (ver test161.ProgramVersion, err error) {
+
+	var verText string
+
+	git := &gitRepo{}
+	if verText, err = git.doOneCommand("git version", false, false); err != nil {
+		return
+	}
+
+	if res := gitVersionRegexp.FindStringSubmatch(verText); len(res) == 4 {
+		maj, _ := strconv.Atoi(res[1])
+		min, _ := strconv.Atoi(res[2])
+		rev, _ := strconv.Atoi(res[3])
+		ver.Major = uint(maj)
+		ver.Minor = uint(min)
+		ver.Revision = uint(rev)
+	} else {
+		err = fmt.Errorf("`git version` does not match expected output: %v", verText)
+	}
+
+	return
+}
+
+// Compare the current version of git vs. our required version. Return true
+// if the current version meets our requirement, false otherwise. If the verison
+// is not recent enough, tell the user how to upgrade.
+func checkGitVersionAndComplain() (bool, error) {
+	ver, err := gitVersion()
+	if err != nil {
+		return false, err
+	}
+
+	// At least min version
+	if ver.CompareTo(minGitVersion) >= 0 {
+		return true, nil
+	} else {
+		fmt.Printf(GitUpgradeInst, ver)
+		return false, nil
+	}
 }
