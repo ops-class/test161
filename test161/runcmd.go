@@ -27,7 +27,7 @@ func __printRunError(err error) {
 
 func printRunError(err error) {
 	__printRunError(err)
-	fmt.Println()
+	fmt.Fprintln(os.Stderr, "\n")
 }
 
 func printRunErrors(errs []error) {
@@ -35,7 +35,7 @@ func printRunErrors(errs []error) {
 		for _, e := range errs {
 			__printRunError(e)
 		}
-		fmt.Println()
+		fmt.Fprintln(os.Stderr, "\n")
 	}
 }
 

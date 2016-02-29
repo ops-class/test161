@@ -116,7 +116,7 @@ func doSubmit() (exitcode int) {
 
 	// Validate before running locally (and install their keys)
 	if err := validateUsers(req); err != nil {
-		fmt.Printf("\n%v\n\n", err)
+		fmt.Fprintf(os.Stderr, "\n%v\n\n", err)
 		if submitVerfiy {
 			return
 		}
@@ -208,7 +208,7 @@ func validateUsers(req *test161.SubmissionRequest) error {
 			}
 		} else {
 			emptyCount += 1
-			fmt.Println("Warning: No test161 key exists for", data.User)
+			fmt.Fprintf(os.Stderr, "Warning: No test161 key exists for", data.User)
 		}
 	}
 
@@ -355,14 +355,14 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 func init() {
 	if _, err := os.Stat(CACHE_DIR); err != nil {
 		if err := os.MkdirAll(CACHE_DIR, 0770); err != nil {
-			fmt.Println("Error creating cache directory:", err)
+			fmt.Fprintf(os.Stderr, "Error creating cache directory: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
 	if _, err := os.Stat(KEYS_DIR); err != nil {
 		if err := os.MkdirAll(KEYS_DIR, 0770); err != nil {
-			fmt.Println("Error creating keys directory:", err)
+			fmt.Fprintf(os.Stderr, "Error creating keys directory: %v\n", err)
 			os.Exit(1)
 		}
 	}

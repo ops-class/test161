@@ -15,7 +15,7 @@ func envInit() {
 	// Get our bearings
 	clientConf, err = inferConf()
 	if err != nil || clientConf == nil {
-		fmt.Printf("\nUnable to determine your test161 configuration:\n%v\n\n", err)
+		fmt.Fprintf(os.Stderr, "\nUnable to determine your test161 configuration:\n%v\n\n", err)
 		os.Exit(1)
 	}
 
@@ -23,7 +23,7 @@ func envInit() {
 	confFile, err := getConfFromFile()
 	if err != nil {
 		// An error here means we couldn't load the file, either bad yaml or I/O problem
-		fmt.Printf("An error occurred reading your %v file: \n", CONF_FILE, err)
+		fmt.Fprintf(os.Stderr, "An error occurred reading your %v file: \n", CONF_FILE, err)
 		os.Exit(1)
 	}
 
@@ -43,14 +43,14 @@ func envInit() {
 	// should really be a problem since we're figuring everything else out from
 	// the cwd.
 	if err = clientConf.checkPaths(); err != nil {
-		fmt.Printf("\nThe following paths are incorrect in your configuration: %v\n\n", err)
+		fmt.Fprintf(os.Stderr, "\nThe following paths are incorrect in your configuration: %v\n\n", err)
 		os.Exit(1)
 	}
 
 	// Lastly, create the acutal test environment, loading the targets, commands, and
 	// tests.
 	if env, err = test161.NewEnvironment(clientConf.Test161Dir, nil); err != nil {
-		fmt.Printf("\nUnable to create your test161 test environment:\n%v\n\n", err)
+		fmt.Fprintf(os.Stderr, "\nUnable to create your test161 test environment:\n%v\n\n", err)
 		os.Exit(1)
 	}
 
@@ -60,7 +60,7 @@ func envInit() {
 
 func usage() {
 
-	fmt.Println(`
+	fmt.Fprintf(os.Stderr, `
  
 usage:
     test161  <command> <flags> <args>
@@ -83,7 +83,7 @@ usage:
 
 func doHelp() int {
 	usage()
-	fmt.Println(`
+	fmt.Fprintf(os.Stderr, `
 Commands Description:
 
 'test161 run' runs a single target, or a group of tests. By default, all
@@ -179,7 +179,7 @@ func main() {
 			}
 			exitcode = cmd.cmd()
 		} else {
-			fmt.Printf("\n\"%v\" is not a reconized test161 command", os.Args[1])
+			fmt.Fprintf(os.Stderr, "\n\"%v\" is not a reconized test161 command", os.Args[1])
 			usage()
 		}
 	}

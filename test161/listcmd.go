@@ -13,11 +13,10 @@ import (
 )
 
 var listRemoteFlag bool
-var tagDetailFlag bool
 
 func doListCommand() int {
 	if len(os.Args) < 3 {
-		fmt.Println("Missing argument to list command")
+		fmt.Fprintf(os.Stderr, "\nMissing argument to list command\n")
 		return 1
 	}
 
@@ -28,8 +27,10 @@ func doListCommand() int {
 		return doListTags()
 	case "tests":
 		return doListTests()
+	case "all":
+		return doListAll()
 	default:
-		fmt.Println("Invalid option to 'test161 list'.  Must be one of (targets, tags, tests)")
+		fmt.Fprintf(os.Stderr, "Invalid option to 'test161 list'.  Must be one of (targets, tags, tests)")
 		return 1
 	}
 }
@@ -239,5 +240,34 @@ func doListTests() int {
 	printColumns(headers, data, defaultPrintConf)
 	fmt.Println()
 
+	return 0
+}
+
+func doListAll() int {
+	// Load every test file
+	tests, errs := getAllTests()
+	if len(errs) > 0 {
+		printRunErrors(errs)
+		return 1
+	}
+
+	tags := make(map[string]bool)
+
+	for _, test := range tests {
+		fmt.Println(test.DependencyID)
+		for _, tag := range test.Tags {
+			tags[tag] = true
+		}
+	}
+
+	// Print tags
+	for key, _ := range tags {
+		fmt.Println(key)
+	}
+
+	// Print targets
+	for _, target := range env.Targets {
+		fmt.Println(target.Name)
+	}
 	return 0
 }

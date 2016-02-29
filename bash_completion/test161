@@ -1,31 +1,58 @@
 _test161() 
 {
-    local cur prev opts 
+    local cur prev opts cmd
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
+	cmd="${COMP_WORDS[1]}"
     opts="run submit list config version"
 
-    case "$prev" in
+    case "$cmd" in
     version) 
         COMPREPLY=()
         return 0
         ;;
 
     run)
-        local runopts
-        runopts="-dry-run -explain -sequential -no-dependencies -verbose -tag"
-        COMPREPLY=( $(compgen -W "${runopts}" -- $cur) )
-        return 0
+        case "$cur" in
+        -*)
+            local runopts tests
+            runopts="-dry-run -explain -sequential -no-dependencies -verbose -tag"
+            COMPREPLY=( $(compgen -W "${runopts}" -- $cur) )
+            return 0
+            ;;
+
+        *)
+            local tests
+            tests=$(test161 list all 2>/dev/null)
+            COMPREPLY=( $(compgen -W "${tests}" -- $cur) )
+            return 0
+            ;;
+        esac
         ;;
 
     submit)
-        local submitopts
-        submitopts="-debug -verify -no-cache"
-        COMPREPLY=( $(compgen -W "${submitopts}" -- $cur) )
-        return 0
-        ;;
+        case "$cur" in
+        -*)
+            local submitopts
+            submitopts="-debug -verify -no-cache"
+            COMPREPLY=( $(compgen -W "${submitopts}" -- $cur) )
+            return 0
+            ;;
+        esac
 
+        case "$prev" in
+        submit|-debug|-verify|-no-cache)
+            local targets
+            targets=$(test161 list targets | awk 'NR>3' | cut -f 1 -d " ")
+            COMPREPLY=( $(compgen -W "${targets}" -- $cur) )
+            return 0
+            ;;
+        esac
+        ;;
+    esac
+
+    case "$prev" in
     list)
         local listopts
         listopts="targets tags tests"
