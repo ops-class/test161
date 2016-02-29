@@ -101,11 +101,11 @@ func TargetFromFile(file string) (*Target, error) {
 
 	data, err := ioutil.ReadFile(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error reading file %v: %v", file, err)
 	}
 
 	if t, err := TargetFromString(string(data)); err != nil {
-		return t, err
+		return t, fmt.Errorf("Error loading target file %v: %v", file, err)
 	} else {
 		// Save file version and hash
 		t.FileName = info.Name()
@@ -267,7 +267,7 @@ func (t *Target) Instance(env *TestEnvironment) (*TestGroup, []error) {
 	}
 
 	if total != t.Points {
-		return nil, []error{errors.New("Target points do not match sum(test points)")}
+		return nil, []error{fmt.Errorf("Target points (%v) do not match sum(test points) (%v)", t.Points, total)}
 	}
 
 	return group, nil

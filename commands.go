@@ -3,6 +3,7 @@ package test161
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	yaml "gopkg.in/yaml.v2"
 	"io/ioutil"
 	"math/rand"
@@ -222,6 +223,7 @@ func (c *Command) Id() string {
 // Instantiate the command (input, expected output) using the command template.
 // This needs to be must be done prior to executing the command.
 func (c *Command) Instantiate(env *TestEnvironment) error {
+
 	pfx, id, args := (&c.Input).splitCommand()
 	tmpl, ok := env.Commands[id]
 	if !ok {
@@ -245,6 +247,20 @@ func (c *Command) Instantiate(env *TestEnvironment) error {
 			} else {
 				args = append(args, temp...)
 			}
+		}
+	} else if len(args) > 0 {
+		// Expand the provided arguments as well
+		argLine := ""
+		for i, arg := range args {
+			if i > 0 {
+				argLine += " "
+			}
+			argLine += arg
+		}
+		if temp, err := expandLine(argLine, "No data"); err != nil {
+			return err
+		} else {
+			args = temp
 		}
 	}
 
@@ -287,10 +303,14 @@ type CommandTemplates struct {
 func CommandTemplatesFromFile(file string) (*CommandTemplates, error) {
 	data, err := ioutil.ReadFile(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error reading commands file %v: %v", file, err)
 	}
 
-	return CommandTemplatesFromString(string(data))
+	c, err := CommandTemplatesFromString(string(data))
+	if err != nil {
+		err = fmt.Errorf("Error loading commands file %v: %v", file, err)
+	}
+	return c, err
 }
 
 func CommandTemplatesFromString(text string) (*CommandTemplates, error) {

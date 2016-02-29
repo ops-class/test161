@@ -138,9 +138,13 @@ func confFromString(data string) (*Test, error) {
 func TestFromFile(filename string) (*Test, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error reading file %v: %v", filename, err)
 	}
-	return TestFromString(string(data))
+	test, err := TestFromString(string(data))
+	if err != nil {
+		err = fmt.Errorf("Error loading test file %v: %v", filename, err)
+	}
+	return test, err
 }
 
 // TestFromFile parses the test string and sets configuration defaults.

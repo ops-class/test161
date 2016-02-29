@@ -666,6 +666,8 @@ func (l *InputLine) replaceArgs(args []string) {
 
 	if len(prefix) > 0 {
 		l.Line = prefix + " "
+	} else {
+		l.Line = ""
 	}
 
 	l.Line += base
