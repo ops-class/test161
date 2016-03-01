@@ -19,6 +19,7 @@ import (
 
 var secprintfExp = regexp.MustCompile(`.*secprintf\(SECRET, .+, "(.+)"\);.*`)
 var successExp = regexp.MustCompile(`.*success\(.+, SECRET, "(.+)"\);.*`)
+var partialExp = regexp.MustCompile(`.*partial_credit\(SECRET, "(.+)",.+\);.*`)
 
 // BuildTest is a variant of a Test, and specifies how the build process should work.
 // We obey the same schema so the front end tools can treat this like any other test.
@@ -403,7 +404,9 @@ func (t *BuildTest) doSecureOverlayFile(filename string, done chan error) {
 		// Try secprintf and success (single lines only).
 		var res []string
 		if res = secprintfExp.FindStringSubmatch(line); len(res) == 0 {
-			res = successExp.FindStringSubmatch(line)
+			if res = successExp.FindStringSubmatch(line); len(res) == 0 {
+				res = partialExp.FindStringSubmatch(line)
+			}
 		}
 
 		// Get the key and replace SECRET.
@@ -431,7 +434,7 @@ func (t *BuildTest) doSecureOverlayFile(filename string, done chan error) {
 	// Finally, rename the temp file
 	file.Close()
 	out.Close()
-	os.Remove(filename)
+	os.Remove(path.Join(t.srcDir, filename))
 	err = os.Rename(outfile, path.Join(t.srcDir, filename))
 
 	done <- err
