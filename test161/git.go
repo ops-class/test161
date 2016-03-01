@@ -70,13 +70,7 @@ func (git *gitRepo) setRemoteInfo(debug bool) error {
 }
 
 const remoteErr = `
-Your current branch is not set up to track a remote, and there is no repository specified
-in your .test161.conf file. Use 'git branch -u <upstream>' to set the upstream for this branch.
-`
-
-const remoteWarning = `
-WARNING: Your current branch is not set up to track a remote Use 'git branch -u' to set the
-upstream for this branch. Submit will use the repository URL found in your .test161.conf file
+Your current branch is not set up to track a remote, Use 'git branch -u <upstream>' to set the upstream for this branch.
 `
 
 func (git *gitRepo) canSubmit() bool {
