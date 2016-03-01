@@ -140,7 +140,7 @@ func doSubmit() (exitcode int) {
 
 	// Don't bother proceeding if no points earned
 	if score == 0 && avail > 0 {
-		fmt.Println("\nNo points will be earned for this submission, cancelling submission.")
+		fmt.Println("\nNo points will be earned for this submission, cancelling submission.\n")
 		return
 	}
 
