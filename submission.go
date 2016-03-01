@@ -216,8 +216,10 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 	// Get the TestGroup. The root dir won't be set yet, but that's OK.  We'll
 	// change it after the build
 	tg, errs := target.Instance(env)
-	if err != nil {
-		return nil, errs
+	if len(errs) > 0 {
+		// this should work unless the server is broken
+		env.Log.Printf("Errors loading target: %v\n", errs)
+		return nil, []error{errors.New("Errors loading target on the server")}
 	}
 
 	s := &Submission{
