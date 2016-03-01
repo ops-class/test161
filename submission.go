@@ -26,11 +26,12 @@ type SubmissionUserInfo struct {
 // A SubmissionRequest represents the data required to run a test161 target
 // for evaluation by the test161 server.
 type SubmissionRequest struct {
-	Target        string                // Name of the target
-	Users         []*SubmissionUserInfo // Email addresses of users
-	Repository    string                // Git repository to clone
-	CommitID      string                // Git commit id to checkout after cloning
-	ClientVersion ProgramVersion        // The version of test161 the client is running
+	Target         string                // Name of the target
+	Users          []*SubmissionUserInfo // Email addresses of users
+	Repository     string                // Git repository to clone
+	CommitID       string                // Git commit id to checkout after cloning
+	ClientVersion  ProgramVersion        // The version of test161 the client is running
+	EstimatedScore uint                  // The local score test161 computed
 }
 
 const (
@@ -57,11 +58,12 @@ type Submission struct {
 	TargetType      string `bson:"target_type"`
 
 	// Results
-	Status      string   `bson:"status"`
-	Score       uint     `bson:"score"`
-	Performance float64  `bson:"performance"`
-	TestIDs     []string `bson:"tests"`
-	Errors      []string `bson:"errors"`
+	Status         string   `bson:"status"`
+	Score          uint     `bson:"score"`
+	Performance    float64  `bson:"performance"`
+	TestIDs        []string `bson:"tests"`
+	Errors         []string `bson:"errors"`
+	EstimatedScore uint     `bson:"estimated_score"`
 
 	SubmissionTime time.Time `bson:"submission_time"`
 	CompletionTime time.Time `bson:"completion_time"`
@@ -226,6 +228,7 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 		ID:              uuid.NewV4().String(),
 		Repository:      request.Repository,
 		CommitID:        request.CommitID,
+		EstimatedScore:  request.EstimatedScore,
 		TargetID:        target.ID,
 		TargetName:      target.Name,
 		TargetVersion:   target.Version,

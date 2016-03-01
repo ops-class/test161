@@ -160,6 +160,9 @@ func doSubmit() (exitcode int) {
 		}
 	}
 
+	// Let the server know what we think we're going to get
+	req.EstimatedScore = score
+
 	// Finally, submit
 	if err := submit(req); err == nil {
 		fmt.Println("\nYour submission has been created and is being processed by the test161 server\n")
