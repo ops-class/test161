@@ -31,9 +31,13 @@ const (
 	TEST_SCORING_PARTIAL = "partial"
 )
 
+// Make sure to update isChangeAllowed with any new fields that need to be versioned.
 type Target struct {
 	ID               string        `yaml:"-" bson:"_id"`
 	Name             string        `yaml:"name"`
+	PrintName        string        `yaml:"print_name" bson:"print_name"`
+	Description      string        `yaml:"description"`
+	Active           string        `yaml:"active"`
 	Version          uint          `yaml:"version"`
 	Type             string        `yaml:"type"`
 	Points           uint          `yaml:"points"`
@@ -61,13 +65,16 @@ type TargetCommand struct {
 
 // TargetListItem is the target detail we send to remote clients about a target
 type TargetListItem struct {
-	Name      string
-	Type      string
-	Version   uint
-	Points    uint
-	FileName  string
-	FileHash  string
-	CollabMsg string
+	Name        string
+	PrintName   string
+	Description string
+	Active      string
+	Type        string
+	Version     uint
+	Points      uint
+	FileName    string
+	FileHash    string
+	CollabMsg   string
 }
 
 // TargetList is the JSON blob sent to clients
@@ -88,6 +95,9 @@ func (t *Target) fixDefaults() {
 		if test.Scoring != TEST_SCORING_PARTIAL {
 			test.Scoring = TEST_SCORING_ENTIRE
 		}
+	}
+	if t.Active != "false" {
+		t.Active = "true"
 	}
 }
 
@@ -271,4 +281,58 @@ func (t *Target) Instance(env *TestEnvironment) (*TestGroup, []error) {
 	}
 
 	return group, nil
+}
+
+// Determine whether or not we'll allow the target to replaced in the DB. If we change
+// things like the print name, active flag, etc. we should just update it in the DB.
+// But, if we chahnge the tests or points, we should be creating a new version.
+func (old *Target) isChangeAllowed(other *Target) error {
+
+	if old.Version != other.Version {
+		return errors.New("Mismatched target versions. isChangeAllowed only applies to targets with the same version number.")
+	}
+
+	// The ID will be different, and that's OK, as long as we update the right one in the DB.
+	if old.Name != other.Name {
+		return errors.New("Changing the target name requires a version change")
+	}
+	if old.Type != other.Type {
+		return errors.New("Changing the target type requires a version change")
+	}
+	if old.Points != other.Points {
+		return errors.New("Changing the target points requires a version change")
+	}
+
+	// TODO: Relying on no duplicate tests
+
+	// We do care about the tests, just not the order
+	if len(old.Tests) != len(other.Tests) {
+		return errors.New("Changing the number of tests requiers a version change")
+	}
+
+	oldMap := make(map[string]*TargetTest)
+
+	for _, t := range old.Tests {
+		oldMap[t.Id] = t
+	}
+
+	for _, t := range other.Tests {
+		if oldVer, ok := oldMap[t.Id]; !ok {
+			return fmt.Errorf("Test %v was removed from the new target, which requires a version change", t.Id)
+		} else if oldVer.Points != t.Points {
+			return fmt.Errorf("The point distribution for %v changed from the new target, which requires a version change", t.Id)
+		} else if oldVer.Scoring != t.Scoring {
+			return fmt.Errorf("The scoring method for %v changed from the new target, which requires a version change", t.Id)
+		}
+	}
+
+	// Fields we don't care about:
+	//
+	// PrintName, Description, Active, RequiredCommit
+	// KConfig is set based on the Name
+	// RequiresUserland: if this was broken, tests would have failed
+	// FileHash: this will change
+	// FileName: OK if if moves
+
+	return nil
 }

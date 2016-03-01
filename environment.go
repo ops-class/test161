@@ -66,10 +66,12 @@ func envTargetHandler(env *TestEnvironment, f string) error {
 	if t, err := TargetFromFile(f); err != nil {
 		return err
 	} else {
-		// Only track the most recent version
-		prev, ok := env.Targets[t.Name]
-		if !ok || t.Version > prev.Version {
-			env.Targets[t.Name] = t
+		// Only track the most recent version, and only track active targets.
+		if t.Active == "true" {
+			prev, ok := env.Targets[t.Name]
+			if !ok || t.Version > prev.Version {
+				env.Targets[t.Name] = t
+			}
 		}
 		if env.Persistence != nil {
 			return env.Persistence.Notify(t, MSG_TARGET_LOAD, 0)
@@ -134,13 +136,16 @@ func (env *TestEnvironment) TargetList() *TargetList {
 
 	for _, t := range env.Targets {
 		list.Targets = append(list.Targets, &TargetListItem{
-			Name:      t.Name,
-			Version:   t.Version,
-			Points:    t.Points,
-			Type:      t.Type,
-			FileName:  t.FileName,
-			FileHash:  t.FileHash,
-			CollabMsg: collabMsgs[t.Name],
+			Name:        t.Name,
+			Version:     t.Version,
+			PrintName:   t.PrintName,
+			Description: t.Description,
+			Active:      t.Active,
+			Points:      t.Points,
+			Type:        t.Type,
+			FileName:    t.FileName,
+			FileHash:    t.FileHash,
+			CollabMsg:   collabMsgs[t.Name],
 		})
 	}
 	return list

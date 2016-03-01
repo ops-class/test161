@@ -205,21 +205,20 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 					target.ID = uuid.NewV4().String()
 					err = m.insertDocument(session, COLLECTION_TARGETS, target)
 				} else if len(targets) == 1 {
-
 					target.ID = targets[0].ID
-
-					// Sanity checks to make sure no one changed a target we know about.
-					// (If this happens in testing, just clear the DB manually)
 					if target.FileHash != targets[0].FileHash {
+						// Sanity checks to make sure no one changed a target that has a submission.
+						// (If this happens in testing, just clear the DB manually)
+						changeErr := targets[0].isChangeAllowed(target)
+
 						// Figure out if there are any submissions with this id.  If so, fail.
 						var submissions []*Submission
 						subColl := session.DB(m.dbName).C(COLLECTION_SUBMISSIONS)
 						err = subColl.Find(bson.M{"target_id": target.ID}).Limit(1).All(&submissions)
-						fmt.Println(len(submissions), err)
 						if err == nil {
-							if len(submissions) > 0 {
-								err = errors.New(
-									"Target details changed and previous submissions exist. Increment the version number of the new target.")
+							if len(submissions) > 0 && changeErr != nil {
+								err = fmt.Errorf(
+									"Target details changed and previous submissions exist. Increment the version number of the new target.\n%v", changeErr)
 							} else {
 								// Just update it with the new version
 								err = m.updateDocumentByID(session, COLLECTION_TARGETS, target.ID, target)

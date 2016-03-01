@@ -743,7 +743,6 @@ func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 						if avail, err := strconv.Atoi(res[2]); err == nil && avail > 0 {
 							totalAvail += avail
 							totalEarned += earned
-							fmt.Println(totalEarned, totalAvail)
 						}
 					}
 					// Only one partial credit line allowed.
