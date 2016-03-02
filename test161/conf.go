@@ -348,6 +348,20 @@ func getConfFromFile() (*ClientConf, error) {
 	return conf, nil
 }
 
+func getConfFromFileSafe() (*ClientConf, error) {
+	conf, err := getConfFromFile()
+	if err != nil {
+		return conf, err
+	}
+	// In case .test161.conf doesn't exist...
+	if conf == nil {
+		conf = &ClientConf{
+			Users: make([]*test161.SubmissionUserInfo, 0),
+		}
+	}
+	return conf, nil
+}
+
 // test161 config add-user
 func addUser(email, token string) error {
 	if email == "" {
@@ -356,7 +370,7 @@ func addUser(email, token string) error {
 		return errors.New("Must specify a token in 'test161 config add-user`")
 	}
 
-	conf, err := getConfFromFile()
+	conf, err := getConfFromFileSafe()
 	if err != nil {
 		return err
 	}
@@ -379,7 +393,7 @@ func delUser(email string) error {
 		return errors.New("Must specify an email in 'test161 config del-user`")
 	}
 
-	conf, err := getConfFromFile()
+	conf, err := getConfFromFileSafe()
 	if err != nil {
 		return err
 	}
@@ -401,7 +415,7 @@ func changeToken(email, token string) error {
 		return errors.New("Must specify a token in 'test161 config change-token`")
 	}
 
-	conf, err := getConfFromFile()
+	conf, err := getConfFromFileSafe()
 	if err != nil {
 		return err
 	}
