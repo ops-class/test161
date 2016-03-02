@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 )
 
 // This file has everything for creating command instances from command templates.
@@ -366,4 +367,9 @@ func (t *CommandTemplate) fixDefaults() {
 			}
 		}
 	}
+}
+
+// Seed random for the random input templates and sys161
+func init() {
+	rand.Seed(time.Now().UnixNano())
 }
