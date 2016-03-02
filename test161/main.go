@@ -59,10 +59,7 @@ func envInit() {
 }
 
 func usage() {
-
-	fmt.Fprintf(os.Stderr, `
- 
-usage:
+	fmt.Fprintf(os.Stdout, `usage:
     test161  <command> <flags> <args>
 
     test161 run [-dry-run | -d] [-explain | -x] [sequential | -s]
@@ -77,13 +74,13 @@ usage:
 
     test161 version
 
-    test161 help for a detailed description
+    test161 help for a detailed commands description
 `)
 }
 
 func doHelp() int {
 	usage()
-	fmt.Fprintf(os.Stderr, `
+	fmt.Fprintf(os.Stdout, `
 Commands Description:
 
 'test161 run' runs a single target, or a group of tests. By default, all
@@ -142,7 +139,7 @@ three commands available to modify user configuration:
 	  'test161 config add-user <email> <token>'
 	  'test161 config del-user <email>'
 	  'test161 config change-token <email> <new-token>'
-	`)
+`)
 
 	return 0
 }
