@@ -8,10 +8,14 @@ Build-Depends: debhelper (>= 9),
                golang-go,
                golang-github-bmatcuk-doublestar-dev,
                golang-github-ericaro-frontmatter-dev,
+               golang-github-gorilla-mux-dev,
                golang-github-imdario-mergo-dev,
                golang-github-kr-pty-dev,
+               golang-github-parnurzeal-gorequest-dev,
+               golang-github-satori-go.uuid-dev,
                golang-github-stretchr-testify-dev,
                golang-github-termie-go-shutil-dev,
+               golang-gopkg-mgo.v2-dev,
                golang-gopkg-yaml.v2-dev
 Standards-Version: 3.9.6
 Homepage: https://github.com/ops-class/test161
