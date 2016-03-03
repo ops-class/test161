@@ -11,6 +11,7 @@ Vcs-Git: git://github.com/ops-class/test161.git
 
 Package: test161
 Architecture: i386 amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: OS/161 testing tool
 	test161 is a command line tool and server for automated testing of OS/161
 	operating system kernels.
