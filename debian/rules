@@ -14,6 +14,7 @@ PKGDIR=debian/test161
 
 clean:
 	dh_clean
+	rm -rf $(BUILDDIR)
 
 binary-arch: clean
 	dh_prep
