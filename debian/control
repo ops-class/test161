@@ -3,7 +3,7 @@ Maintainer: Scott Haseley <shaseley@buffalo.edu>
 Uploaders: Geoffrey Challen <geoffrey.challen@gmail.com>
 Section: utils
 Priority: optional
-Build-Depends: debhelper (>= 9), wget, git-core, ca-certificates
+Build-Depends: debhelper (>= 9), wget, git-core (>= 2.3), ca-certificates, golang (= 1.5.3), 
 Standards-Version: 3.9.5
 Homepage: https://test161.ops-class.org
 Vcs-Browser: https://github.com/ops-class/test161
