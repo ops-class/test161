@@ -1,2 +1,2 @@
-test161y: hardening-no-relro
-test161: binary-without-manpage
+test161 binary: hardening-no-relro
+test161 binary: binary-without-manpage

@@ -1,2 +1,0 @@
-test161 binary: hardening-no-relro usr/bin/test161
-test161 binary: binary-without-manpage usr/bin/test161
