@@ -149,18 +149,17 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder bool) {
 	headers := []*Heading{
 		&Heading{
-			Text:          "Test",
-			MinWidth:      30,
-			LeftJustified: true,
+			Text:     "Test",
+			MinWidth: 30,
 		},
 		&Heading{
-			Text:          "Result",
-			MinWidth:      10,
-			LeftJustified: true,
-		},
-		&Heading{
-			Text:     "Score",
+			Text:     "Result",
 			MinWidth: 10,
+		},
+		&Heading{
+			Text:           "Score",
+			MinWidth:       10,
+			RightJustified: true,
 		},
 	}
 
@@ -301,16 +300,15 @@ func printDryRun(tg *test161.TestGroup) {
 
 	headers := []*Heading{
 		&Heading{
-			Text:          "Test ID",
-			LeftJustified: true,
+			Text:     "Test ID",
+			MinWidth: 30,
 		},
 		&Heading{
-			Text:          "Test Name",
-			LeftJustified: true,
+			Text: "Test Name",
 		},
 		&Heading{
-			Text:          "Points",
-			LeftJustified: false,
+			Text:           "Points",
+			RightJustified: true,
 		},
 	}
 

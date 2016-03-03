@@ -10,13 +10,14 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 )
 
 var listRemoteFlag bool
 
 func doListCommand() int {
 	if len(os.Args) < 3 {
-		fmt.Fprintf(os.Stderr, "\nMissing argument to list command\n")
+		fmt.Fprintf(os.Stderr, "Missing argument to list command\n")
 		return 1
 	}
 
@@ -30,7 +31,7 @@ func doListCommand() int {
 	case "all":
 		return doListAll()
 	default:
-		fmt.Fprintf(os.Stderr, "Invalid option to 'test161 list'.  Must be one of (targets, tags, tests)")
+		fmt.Fprintf(os.Stderr, "Invalid option to 'test161 list'.  Must be one of (targets, tags, tests)\n")
 		return 1
 	}
 }
@@ -94,20 +95,18 @@ func printTargets(list *test161.TargetList) {
 
 	headers := []*Heading{
 		&Heading{
-			Text:          desc,
-			LeftJustified: true,
-			MinWidth:      20,
+			Text:     desc,
+			MinWidth: 20,
 		},
 		&Heading{
-			Text:          "Type",
-			LeftJustified: true,
+			Text: "Type",
 		},
 		&Heading{
-			Text:          "Version",
-			LeftJustified: true,
+			Text: "Version",
 		},
 		&Heading{
-			Text: "Points",
+			Text:           "Points",
+			RightJustified: true,
 		},
 	}
 
@@ -206,16 +205,13 @@ func doListTests() int {
 
 	headers := []*Heading{
 		&Heading{
-			Text:          "Test ID",
-			LeftJustified: true,
+			Text: "Test ID",
 		},
 		&Heading{
-			Text:          "Name",
-			LeftJustified: true,
+			Text: "Name",
 		},
 		&Heading{
-			Text:          "Description",
-			LeftJustified: true,
+			Text: "Description",
 		},
 	}
 
@@ -232,7 +228,7 @@ func doListTests() int {
 		data = append(data, []string{
 			test.DependencyID,
 			test.Name,
-			test.Description,
+			strings.TrimSpace(test.Description),
 		})
 	}
 
