@@ -1,10 +1,10 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: test161
+Source: https://github.com/ops-class/test161
 
 Files: *
-Copyright: 2016 Scott Haseley
-License: MIT
-
-License: MIT
+Copyright: 2016, Scott Haseley <shaseley@buffalo.edu>
+License:
 	The MIT License (MIT)
 
 	Copyright (c) 2016 Scott Haseley
