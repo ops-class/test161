@@ -23,12 +23,14 @@ binary-arch: clean
 	if [ ! -d $(BUILDDIR)/go ]; then cd $(BUILDDIR) && tar xf go1.5.3.linux-amd64.tar.gz; fi
 	mkdir -p $(GOPATH)/src/github.com/ops-class/
 	ln -sf $(CURDIR) $(GOPATH)/src/github.com/ops-class/test161 || true
-	cd $(GOPATH)/src/github.com/ops-class/test161/test161 && $(GOROOT)/bin/go get && $(GOROOT)/bin/go install
+	cd $(GOPATH)/src/github.com/ops-class/test161/test161 && $(GOROOT)/bin/go clean && $(GOROOT)/bin/go get && $(GOROOT)/bin/go install
 	mkdir -p $(PKGDIR)/usr/bin
 	cp $(GOPATH)/bin/test161 $(PKGDIR)/usr/bin/
 	mkdir -p $(PKGDIR)/usr/share/doc/test161/
 	gzip -9 debian/changelog -c > $(PKGDIR)/usr/share/doc/test161/changelog.gz
 	cp LICENSE $(PKGDIR)/usr/share/doc/test161/copyright
+	mkdir -p $(PKGDIR)/etc/bash_completion.d/
+	cp bash_completion/test161 $(PKGDIR)/etc/bash_completion.d/
 	dh_strip
 	dh_compress
 	dh_fixperms
