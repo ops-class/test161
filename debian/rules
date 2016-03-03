@@ -6,12 +6,11 @@ export DH_VERBOSE=1
 export GOPATH=$(CURDIR)
 PKGDIR=debian/test161
 
-%
+%:
 	dh $@ 
 
 clean:
 	dh_clean
-	rm -rf $(GOPATH)/src $(GOPATH)/pkg $(GOPATH)/bin
 
 binary-arch: clean
 	dh_prep
