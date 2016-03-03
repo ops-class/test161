@@ -1,0 +1,2 @@
+test161y: hardening-no-relro
+test161: binary-without-manpage

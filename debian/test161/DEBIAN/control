@@ -1,0 +1,12 @@
+Package: test161
+Version: 1.2.0
+Architecture: amd64
+Maintainer: Scott Haseley <shaseley@buffalo.edu>
+Installed-Size: 7102
+Depends: libc6 (>= 2.3.2)
+Section: utils
+Priority: optional
+Homepage: https://test161.ops-class.org
+Description: OS/161 testing tool
+ test161 is a command line tool and server for automated testing of OS/161
+ operating system kernels.
