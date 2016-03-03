@@ -1,0 +1,36 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+export GOPATH=$(CURDIR)
+export GOROOT=$(CURDIR)/go/
+
+%:
+	dh $@ 
+
+clean:
+	dh_clean
+	rm -rf $(GOPATH)/bin/* $(GOPATH)/pkg/*
+	rm -rf $(GOROOT)
+	rm -f $(GOPATH)/goinstall.log
+
+binary-arch: clean
+	dh_prep
+	dh_installdirs
+	wget https://storage.googleapis.com/golang/go1.5.3.linux-amd64.tar.gz
+	tar xf go1.5.3.linux-amd64.tar.gz
+	cd $(CURDIR)/test161 && go get && go install
+	# cd $(GOPATH)/src && find * -name '*.go' -exec dirname {} \; | xargs -n1 go install
+	mkdir -p $(PKGDIR)/usr/bin
+	cp $(GOPATH)/bin/* $(PKGDIR)/usr/bin/
+	dh_strip
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-arch
