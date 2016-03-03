@@ -22,9 +22,10 @@ binary-arch: clean
 	dh_installdirs
 	wget https://storage.googleapis.com/golang/go1.5.3.linux-amd64.tar.gz
 	tar xf go1.5.3.linux-amd64.tar.gz
-	cd $(CURDIR)/test161 && go get && go install
-	# cd $(GOPATH)/src && find * -name '*.go' -exec dirname {} \; | xargs -n1 go install
+	cd $(CURDIR)/test161 && $(CURDIR)/go/bin/go get && $(CURDIR)/go/bin/go install
+	rm -rf $(GOROOT) go1.5.3.linux-amd64.tar.gz
 	mkdir -p $(PKGDIR)/usr/bin
+	rm -rf $(GOPATH)/bin/* $(GOPATH)/pkg/*
 	cp $(GOPATH)/bin/* $(PKGDIR)/usr/bin/
 	dh_strip
 	dh_compress
