@@ -6,6 +6,7 @@
 
 export GOPATH=$(CURDIR)
 export GOROOT=$(CURDIR)/go/
+PKGDIR=debian/test161
 
 %:
 	dh $@ 
