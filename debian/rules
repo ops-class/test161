@@ -2,7 +2,7 @@
 # -*- makefile -*-
 
 # Uncomment this to turn on verbose mode.
-#export DH_VERBOSE=1
+export DH_VERBOSE=1
 
 export BUILDDIR=$(CURDIR)/.build
 export GOPATH=$(BUILDDIR)/gopath
@@ -14,7 +14,6 @@ PKGDIR=debian/test161
 
 clean:
 	dh_clean
-	#rm -rf $(BUILDDIR)
 
 binary-arch: clean
 	dh_prep
@@ -27,11 +26,15 @@ binary-arch: clean
 	ln -sf $(CURDIR) $(GOPATH)/src/github.com/ops-class/test161 || true
 	cd $(GOPATH)/src/github.com/ops-class/test161/test161 && $(GOROOT)/bin/go get && $(GOROOT)/bin/go install
 	mkdir -p $(PKGDIR)/usr/bin
-	cp $(GOPATH)/bin/* $(PKGDIR)/usr/bin/
+	cp $(GOPATH)/bin/test161 $(PKGDIR)/usr/bin/
+	mkdir -p $(PKGDIR)/usr/share/doc/test161/
+	gzip -9 debian/changelog -c > $(PKGDIR)/usr/share/doc/test161/changelog.gz
+	cp LICENSE $(PKGDIR)/usr/share/doc/test161/copyright
 	dh_strip
 	dh_compress
 	dh_fixperms
 	dh_installdeb
+	dpkg-shlibdeps -e$(PKGDIR)/usr/bin/test161 -Tdebian/test161.substvars
 	dh_gencontrol
 	dh_md5sums
 	dh_builddeb
