@@ -19,7 +19,7 @@ binary-arch: clean
 	dh_installdirs
 	if [ ! -d $(BUILDDIR) ]; then mkdir $(BUILDDIR); fi
 	if [ ! -d $(GOPATH) ]; then mkdir $(GOPATH); fi
-	if [ ! -f $(BUILDDIR)/go1.5.3.linux-amd64.tar.gz ]; then cd $(BUILDDIR) && wget https://storage.googleapis.com/golang/go1.5.3.linux-amd64.tar.gz; fi
+	if [ ! -f $(BUILDDIR)/go1.5.3.linux-amd64.tar.gz ]; then cd $(BUILDDIR) && wget http://storage.googleapis.com/golang/go1.5.3.linux-amd64.tar.gz; fi
 	if [ ! -d $(BUILDDIR)/go ]; then cd $(BUILDDIR) && tar xf go1.5.3.linux-amd64.tar.gz; fi
 	mkdir -p $(GOPATH)/src/github.com/ops-class/
 	ln -sf $(CURDIR) $(GOPATH)/src/github.com/ops-class/test161 || true
