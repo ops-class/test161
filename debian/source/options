@@ -1,3 +1,0 @@
-extend-diff-ignore = bin/*
-tar-ignore = bin
-tar-ignore = .git
