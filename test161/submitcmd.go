@@ -41,6 +41,8 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 	score = 0
 	available = 0
 
+	return 0, 0, nil
+
 	var submission *test161.Submission
 
 	// Cache builds for performance, unless we're told not to
@@ -71,6 +73,19 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 	available = submission.PointsAvailable
 
 	return
+}
+
+func getYesOrNo() string {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		text, _ := reader.ReadString('\n')
+		text = strings.TrimSpace(text)
+		if text == "no" || text == "yes" {
+			return text
+		} else {
+			fmt.Println("\nPlease answer 'yes' or 'no'")
+		}
+	}
 }
 
 // test161 submit ...
@@ -116,7 +131,7 @@ func doSubmit() (exitcode int) {
 
 	// Validate before running locally (and install their keys)
 	if err := validateUsers(req); err != nil {
-		fmt.Fprintf(os.Stderr, "\n%v\n\n", err)
+		fmt.Fprintf(os.Stderr, "%v", err)
 		if submitVerfiy {
 			return
 		}
@@ -140,23 +155,24 @@ func doSubmit() (exitcode int) {
 
 	// Don't bother proceeding if no points earned
 	if score == 0 && avail > 0 {
-		fmt.Println("\nNo points will be earned for this submission, cancelling submission.\n")
+		fmt.Println("No points will be earned for this submission, cancelling submission.")
 		return
 	}
 
 	// Show score and collab policy, and give them a chance to cancel
 	fmt.Printf(SubmitMsg, collabMsg, score, avail)
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		text, _ := reader.ReadString('\n')
-		text = strings.TrimSpace(text)
-		if text == "no" {
+	if text := getYesOrNo(); text == "no" {
+		fmt.Println("\nSubmission request cancelled\n")
+		return
+	}
+
+	// Confirm the users
+	for i, u := range req.Users {
+		fmt.Printf("\n(%v of %v): You are submitting on behalf of %v. Is this correct?\n",
+			i+1, len(req.Users), u.Email)
+		if text := getYesOrNo(); text == "no" {
 			fmt.Println("\nSubmission request cancelled\n")
 			return
-		} else if text == "yes" {
-			break
-		} else {
-			fmt.Println("\nPlease answer 'yes' or 'no'")
 		}
 	}
 
@@ -165,10 +181,10 @@ func doSubmit() (exitcode int) {
 
 	// Finally, submit
 	if err := submit(req); err == nil {
-		fmt.Println("\nYour submission has been created and is being processed by the test161 server\n")
+		fmt.Println("Your submission has been created and is being processed by the test161 server")
 		exitcode = 0
 	} else {
-		fmt.Printf("\n%v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
 
 	return
@@ -257,7 +273,7 @@ func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (string
 			} else if resp.StatusCode == http.StatusNotAcceptable {
 				return "", fmt.Errorf("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit.")
 			} else {
-				return "", fmt.Errorf("\nThe server could not process your request: %v. \nData: %v\n",
+				return "", fmt.Errorf("The server could not process your request: %v. \nData: %v",
 					resp.Status, body)
 			}
 		}
@@ -270,7 +286,7 @@ func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
 	var ok bool
 	ourVersion, ok = env.Targets[name]
 	if !ok {
-		return nil, fmt.Errorf("Target '%v' does not exist locally.  Please update your os161 sources.", name)
+		return nil, fmt.Errorf("Target '%v' does not exist locally. Please update your os161 sources.", name)
 	}
 
 	// Verfiy it exists on the sever, and is up to date

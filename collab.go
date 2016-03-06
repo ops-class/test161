@@ -23,7 +23,6 @@ const CollabMsgAsst1 = `
    them as your own is cheating.
 
  - You may not refer to or incorporate any external sources without explicit permission.
-
 `
 
 const CollabMsgAsst2 = `
@@ -52,5 +51,4 @@ const CollabMsgAsst2 = `
    them as your own is cheating.
 
  - You may not refer to or incorporate any external sources without explicit permission.
-
 `

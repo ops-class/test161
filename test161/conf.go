@@ -465,9 +465,14 @@ func doConfig() int {
 				return 1
 			}
 			err = changeToken(args[1], args[2])
+		default:
+			fmt.Fprintf(os.Stderr, "Invalid option for config\n")
+			usage()
+			return 1
 		}
+
 		if err != nil {
-			fmt.Println(err)
+			fmt.Fprintf(os.Stderr, "%v\n", err)
 			return 1
 		} else {
 			return 0

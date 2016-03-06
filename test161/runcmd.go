@@ -22,12 +22,11 @@ var runCommandVars struct {
 }
 
 func __printRunError(err error) {
-	fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 }
 
 func printRunError(err error) {
 	__printRunError(err)
-	fmt.Fprintln(os.Stderr, "\n")
 }
 
 func printRunErrors(errs []error) {
@@ -35,7 +34,6 @@ func printRunErrors(errs []error) {
 		for _, e := range errs {
 			__printRunError(e)
 		}
-		fmt.Fprintln(os.Stderr, "\n")
 	}
 }
 
@@ -236,7 +234,7 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 	}
 
 	if totalAvail > 0 {
-		fmt.Printf("\n%-15v: %v/%v\n", "Total Score", totalPoints, totalAvail)
+		fmt.Printf("%-15v: %v/%v\n", "Total Score", totalPoints, totalAvail)
 	}
 
 	fmt.Println()

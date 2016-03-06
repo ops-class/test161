@@ -98,7 +98,7 @@ func (git *gitRepo) commitFromHEAD(debug bool) (commit, ref string, err error) {
 	}
 
 	if git.localRef == "HEAD" {
-		fmt.Fprintf(os.Stderr, "Warning: your are in a detached HEAD state, submitting HEAD commit\n")
+		fmt.Fprintf(os.Stderr, "Warning: You are in a detached HEAD state, submitting HEAD commit\n")
 		ref = "HEAD"
 	} else if git.remoteName == "" || git.remoteRef == "" {
 		fmt.Fprintf(os.Stderr, "Warning: No remote name or ref, submitting HEAD commit\n")
