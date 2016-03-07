@@ -32,4 +32,4 @@ templates:
   - name: /testbin/factorial
     output:
       - text: "{{$n:= index .Args 0 | atoi}}{{factorial $n}}\n"
-
+  - name: /testbin/forktest

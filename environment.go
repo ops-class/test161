@@ -10,8 +10,9 @@ import (
 	"strings"
 )
 
-// Global Environment Cofiguration
-
+// TestEnvironment encapsultes the environment tests runs in. Much of the
+// environment is global - commands, targets, etc. However, some state
+// is local, such as the secure keyMap and OS/161 root directory.
 type TestEnvironment struct {
 	// These do not depend on the TestGroup/Target
 	TestDir  string
@@ -32,9 +33,8 @@ type TestEnvironment struct {
 	RootDir string
 }
 
-// Create a new TestEnvironment by copying the global state
-// from an existing environment.  Local test state will
-// be initialized to default values.
+// Create a new TestEnvironment by copying the global state from an existing
+// environment.  Local test state will be initialized to default values.
 func (env *TestEnvironment) CopyEnvironment() *TestEnvironment {
 
 	// Global
@@ -47,6 +47,7 @@ func (env *TestEnvironment) CopyEnvironment() *TestEnvironment {
 	return &copy
 }
 
+// Handle a single commands file (.tc) and load it into the TestEnvironment.
 func envCommandHandler(env *TestEnvironment, f string) error {
 	if templates, err := CommandTemplatesFromFile(f); err != nil {
 		return err
@@ -62,6 +63,7 @@ func envCommandHandler(env *TestEnvironment, f string) error {
 	}
 }
 
+// Handle a single targets file (.tt) and load it into the TestEnvironment.
 func envTargetHandler(env *TestEnvironment, f string) error {
 	if t, err := TargetFromFile(f); err != nil {
 		return err
@@ -81,7 +83,11 @@ func envTargetHandler(env *TestEnvironment, f string) error {
 	}
 }
 
-func (env *TestEnvironment) envReadLoop(searchDir, ext string, handler func(env *TestEnvironment, f string) error) error {
+// envReadLoop searches a directory for files with a certain extention. When it
+// finds one, it calls handler().
+func (env *TestEnvironment) envReadLoop(searchDir, ext string,
+	handler func(env *TestEnvironment, f string) error) error {
+
 	dir, err := ioutil.ReadDir(searchDir)
 	if err != nil {
 		return err
@@ -119,11 +125,27 @@ func NewEnvironment(test161Dir string, pm PersistenceManager) (*TestEnvironment,
 		Persistence: pm,
 	}
 
-	if err := env.envReadLoop(targetDir, ".tt", envTargetHandler); err != nil {
-		return nil, err
+	resChan := make(chan error)
+
+	go func() {
+		resChan <- env.envReadLoop(targetDir, ".tt", envTargetHandler)
+	}()
+
+	go func() {
+		resChan <- env.envReadLoop(cmdDir, ".tc", envCommandHandler)
+	}()
+
+	// Get the results
+	err := <-resChan
+
+	if err != nil {
+		// Let the other finish, but just return one error
+		<-resChan
+	} else {
+		err = <-resChan
 	}
 
-	if err := env.envReadLoop(cmdDir, ".tc", envCommandHandler); err != nil {
+	if err != nil {
 		return nil, err
 	}
 

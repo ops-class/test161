@@ -31,8 +31,13 @@ const (
 	TEST_SCORING_PARTIAL = "partial"
 )
 
-// Make sure to update isChangeAllowed with any new fields that need to be versioned.
+// A test161 Target is the sepcification for group of related tests. Currently,
+// we support two types of Targets with special meaning: asst and perf. The main
+// difference between Targets and TestGroups is that Targets can have a
+// scoring component, either points or performance. The test161 submission system
+// operates in terms of Targets.
 type Target struct {
+	// Make sure to update isChangeAllowed with any new fields that need to be versioned.
 	ID               string        `yaml:"-" bson:"_id"`
 	Name             string        `yaml:"name"`
 	PrintName        string        `yaml:"print_name" bson:"print_name"`
@@ -49,6 +54,8 @@ type Target struct {
 	FileName         string        `yaml:"-" bson:"file_name"`
 }
 
+// A TargetTest is the specification for a single Test contained in the Target.
+// Currently, the Test can only appear in the Target once.
 type TargetTest struct {
 	Id       string           `yaml:"id" bson:"test_id"`
 	Scoring  string           `yaml:"scoring"`
@@ -56,6 +63,9 @@ type TargetTest struct {
 	Commands []*TargetCommand `yaml:"commands"`
 }
 
+// TargetCommands (optionally) specify information about the commands contained
+// in TargetTests. TargetCommands allow you to the points for an individual command
+// or override the input arguments.
 type TargetCommand struct {
 	Id     string   `yaml:"id" bson:cmd_id"` // ID, must match ID in test file
 	Index  int      `yaml:"index"`           // Index > 0 => match to index in test
@@ -82,6 +92,7 @@ type TargetList struct {
 	Targets []*TargetListItem
 }
 
+// NewTarget creates a new, empty Target with the default type of "asst"
 func NewTarget() *Target {
 	t := &Target{
 		Type: TARGET_ASST,
@@ -89,8 +100,8 @@ func NewTarget() *Target {
 	return t
 }
 
-// Ugly, but we need to merge defaults within inner structs
 func (t *Target) fixDefaults() {
+	// Ugly, but we need to merge defaults within inner structs
 	for _, test := range t.Tests {
 		if test.Scoring != TEST_SCORING_PARTIAL {
 			test.Scoring = TEST_SCORING_ENTIRE
@@ -101,6 +112,7 @@ func (t *Target) fixDefaults() {
 	}
 }
 
+// TargetFromFile creates a Target object from a yaml file
 func TargetFromFile(file string) (*Target, error) {
 	var err error
 
@@ -125,6 +137,7 @@ func TargetFromFile(file string) (*Target, error) {
 	}
 }
 
+// TargetFromString creates a Target object from a yaml string
 func TargetFromString(text string) (*Target, error) {
 	t := NewTarget()
 	err := yaml.Unmarshal([]byte(text), t)
@@ -143,24 +156,24 @@ func (tt *TargetTest) applyTo(test *Test) error {
 	test.PointsAvailable = tt.Points
 	test.ScoringMethod = tt.Scoring
 
-	// We (may) need to apply arguments and points to each command.
-	// For "entire" scoring, all commands must complete successfully
-	// in order to gain any (and all) points. In this case, we still
-	// need to apply the args, but we that's it. For partial scoring,
-	// each command that receives points must be specified.
-
-	// Before we do that, we need to be able to find the commands.
-	// Moreover, we need to make sure the input is sane.  We allow
-	// a single instance of a command to apply to multiple command
-	// instances, and also a per-instance 1-1 mapping. For example,
-	// we may have a test that consists of:
+	// We may need to apply arguments and points to each command. In the simplest
+	// case, the Target doesn't override command behavior or points and maps all
+	// points to the entire test ("entire" scoring). With this method of scoring,
+	// all commands must complete successfully in order to gain any (and all)
+	// points. In this case, we still need to apply the args, but that's it. For
+	// partial scoring, points must be specified for each command that receives any.
+	//
+	// Before we do that, we need to be able to find the commands. Moreover, we
+	// need to make sure the input is sane.  We allow a single instance of a
+	// command to apply to multiple command instances, and also a per-instance
+	// 1-1 mapping. For example, we may have a test that consists of:
 	//		/testbin/forktest
 	//		/testbin/forktest
 	//		/testbin/forktest
-	// If /testbin/forktest is specified once (with no index) in the
-	// target, then its point mapping applies to all 3 instances.
-	// But, one can also specify different point values for each
-	// test.  In this case, we require a 1-1 mapping.
+	// If /testbin/forktest is specified once in the TargetTest, with no index,
+	// then its point mapping applies to all 3 instances. But, one can also
+	// specify different point values for each test.  In this case, we require
+	// a 1-1 mapping.
 
 	// Store a mapping of id -> list of command instances so we can (1) verify
 	// all instances have been accounted for if indexes are specified and (2)

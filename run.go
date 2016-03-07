@@ -616,42 +616,50 @@ func (t *Test) addStatus(status string, message string) {
 	t.L.Unlock()
 }
 
-// Split a command line into its base command and args.
-func (l *InputLine) splitCommand() (prefix, base string, args []string) {
-	command := l.Line
+// Split a line into a slice of words, but allow quoted words and escaped
+// quotes
+func splitArgs(line string) []string {
 	var pos, start int = 0, 0
 	var inQuote, escape = false, false
-	args = make([]string, 0)
-	prefix = ""
-
-	// Special case: "p <command>"
-	if strings.HasPrefix(command, "p ") {
-		prefix = "p"
-		start, pos = 0, 2
-		command = command[2:]
-	}
+	args := make([]string, 0)
 
 	// We're looking for the first unescaped space that isn't in quotes,
 	// or the end of the string.
-	for pos < len(command) {
-		if command[pos] == '"' && !escape {
+	for pos < len(line) {
+		if line[pos] == '"' && !escape {
 			inQuote = !inQuote
-		} else if escape || command[pos] == '\\' {
+		} else if escape || line[pos] == '\\' {
 			escape = !escape
-		} else if !inQuote && command[pos] == ' ' {
-			// We have the command/next arg
-			args = append(args, command[start:pos])
+		} else if !inQuote && line[pos] == ' ' {
+			// We have the line/next arg
+			args = append(args, line[start:pos])
 			start = pos + 1 //skip the space
 		}
 		pos++
 	}
 
 	// Add the last argument
-	if start < len(command) {
-		args = append(args, command[start:len(command)])
+	if start < len(line) {
+		args = append(args, line[start:len(line)])
 	}
 
+	return args
+}
+
+// Split a command line into its base command and args.
+func (l *InputLine) splitCommand() (prefix, base string, args []string) {
+	command := l.Line
+	prefix = ""
+
+	// Special case: "p <command>"
+	if strings.HasPrefix(command, "p ") {
+		prefix = "p"
+		command = command[2:]
+	}
+
+	args = splitArgs(command)
 	base = args[0]
+
 	if len(args) == 1 {
 		args = nil
 	} else {
@@ -684,6 +692,16 @@ var partialCreditExp *regexp.Regexp = regexp.MustCompile(`^.*PARTIAL CREDIT ([0-
 // Evaluate a single command, setting its status and points
 func (c *Command) evaluate(keyMap map[string]string, eof bool) {
 	c.PointsEarned = 0
+
+	// The test already checks these two, but this is handy for unit testing the
+	// grading logic.
+	if c.TimesOut == CMD_OPT_NO && c.TimedOut {
+		c.Status = COMMAND_STATUS_INCORRECT
+		return
+	} else if c.Panic == CMD_OPT_NO && eof && !(c.TimesOut != CMD_OPT_NO && c.TimedOut) {
+		c.Status = COMMAND_STATUS_INCORRECT
+		return
+	}
 
 	if c.Panic == CMD_OPT_YES && !eof {
 		// Not correct, we should have panicked

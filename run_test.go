@@ -280,15 +280,370 @@ q
 	t.Log(test.OutputString())
 }
 
-func TestRunTT3(t *testing.T) {
+/////////////////    Grading tests   /////////////////
+
+// Create a fake command complete with output lines.
+func commandFromOutput(test *Test, cmd, output string) *Command {
+
+	for _, c := range test.Commands {
+		if c.Input.Line == cmd {
+			lines := strings.Split(output, "\n")
+			for _, l := range lines {
+				test.currentOutput = &OutputLine{
+					Line: l,
+				}
+				test.outputLineComplete()
+				c.Output = append(c.Output, test.currentOutput)
+			}
+			return c
+		}
+	}
+
+	return nil
+}
+
+func TestRunGradingCorrectOutput(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	test, err := TestFromString("tt3")
-	assert.Nil(err)
-	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run(defaultEnv))
+	// Forktest with correct, unsecured output
+	test, err := TestFromString("p /testbin/forktest")
+	test.env = defaultEnv
+	if err != nil {
+		t.FailNow()
+		t.Log(err)
+	}
 
-	t.Log(test.OutputJSON())
-	t.Log(test.OutputString())
+	assert.NotNil(t)
+
+	c := commandFromOutput(test, "p /testbin/forktest", `/testbin/forktest: Starting. Expect this many:
+|----------------------------|
+AABBBBCCCCCDCDDDDCDDDCDDDDDDDD
+/testbin/forktest: SUCCESS
+/testbin/forktest: Complete.
+Program (pid 2) exited with status 0
+Operation took 1.215512161 seconds
+`)
+
+	if c == nil {
+		t.Log("Command not found in Test")
+		t.FailNow()
+	}
+
+	err = c.Instantiate(defaultEnv)
+	assert.Nil(err)
+	assert.True(len(c.ExpectedOutput) > 0)
+
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+
+	// Correct output, but an unexpected exit
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+
+	// Correct output, with an expected exit
+	c.Panic = CMD_OPT_YES
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+	c.Panic = CMD_OPT_MAYBE
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+
+	// Expected panic that we don't get
+	c.Panic = CMD_OPT_YES
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+
+	c.Panic = CMD_OPT_NO
+
+	// Same as panic, but with a timeout
+	c.TimesOut = CMD_OPT_YES
+	c.TimedOut = true
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+	c.TimesOut = CMD_OPT_MAYBE
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+
+	c.TimesOut = CMD_OPT_YES
+	c.TimedOut = false
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+}
+
+func TestRunGradingIncorrectOutput(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// This is similar to the correct output case, but everything should fail
+
+	// Forktest with correct, unsecured output
+	test, err := TestFromString("p /testbin/forktest")
+	test.env = defaultEnv
+	if err != nil {
+		t.FailNow()
+		t.Log(err)
+	}
+
+	assert.NotNil(t)
+
+	c := commandFromOutput(test, "p /testbin/forktest", `/testbin/forktest: Starting. Expect this many:
+|----------------------------|
+AABBBBCCCCCDCDDDDCDDDCDDDDDDDD
+/testbin/forktest: SUCCESSSSSSS
+/testbin/forktest: Complete.
+Program (pid 2) exited with status 0
+Operation took 1.215512161 seconds
+`)
+
+	if c == nil {
+		t.Log("Command not found in Test")
+		t.FailNow()
+	}
+
+	err = c.Instantiate(defaultEnv)
+	assert.Nil(err)
+	assert.True(len(c.ExpectedOutput) > 0)
+
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+
+	// Correct output, but an unexpected exit
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+
+	// Correct output, with an expected exit
+	c.Panic = CMD_OPT_YES
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	c.Panic = CMD_OPT_MAYBE
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+
+	// Expected panic that we don't get
+	c.Panic = CMD_OPT_YES
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+
+	c.Panic = CMD_OPT_NO
+
+	// Same as panic, but with a timeout
+	c.TimesOut = CMD_OPT_YES
+	c.TimedOut = true
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	c.TimesOut = CMD_OPT_MAYBE
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+
+	c.TimesOut = CMD_OPT_YES
+	c.TimedOut = false
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+}
+
+func TestRunGradingPartialCredit(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// This is similar to the correct output case, but everything should fail
+
+	// Forktest with correct, unsecured output
+	test, err := TestFromString("p /testbin/forktest")
+	test.env = defaultEnv
+	if err != nil {
+		t.FailNow()
+		t.Log(err)
+	}
+
+	assert.NotNil(t)
+
+	c := commandFromOutput(test, "p /testbin/forktest", `/testbin/forktest: Starting. Expect this many:
+|----------------------------|
+AABBBBCCCCCDCDDDDCDDDCDDDDDDDD
+/testbin/forktest: PARTIAL CREDIT 6 OF 10
+/testbin/forktest: Complete.
+Program (pid 2) exited with status 0
+Operation took 1.215512161 seconds
+`)
+
+	if c == nil {
+		t.Log("Command not found in Test")
+		t.FailNow()
+	}
+
+	err = c.Instantiate(defaultEnv)
+	assert.Nil(err)
+	assert.True(len(c.ExpectedOutput) > 0)
+
+	c.PointsAvailable = 5
+
+	// Partial credit is never correct unless they get all the points
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(3), c.PointsEarned)
+
+	// Correct output, but an unexpected exit
+	c.Status = COMMAND_STATUS_RUNNING
+	c.PointsEarned = 0
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(0), c.PointsEarned)
+
+	// Correct output, with an expected exit
+	c.Panic = CMD_OPT_YES
+	c.Status = COMMAND_STATUS_RUNNING
+	c.PointsEarned = 0
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(3), c.PointsEarned)
+
+	c.Panic = CMD_OPT_MAYBE
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(3), c.PointsEarned)
+
+	// Expected panic that we don't get
+	c.Panic = CMD_OPT_YES
+	c.PointsEarned = 0
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(0), c.PointsEarned)
+
+	c.Panic = CMD_OPT_NO
+
+	// Same as panic, but with a timeout
+	c.TimesOut = CMD_OPT_YES
+	c.TimedOut = true
+	c.Status = COMMAND_STATUS_RUNNING
+	c.PointsEarned = 0
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(3), c.PointsEarned)
+
+	c.TimesOut = CMD_OPT_MAYBE
+	c.Status = COMMAND_STATUS_RUNNING
+	c.PointsEarned = 0
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(3), c.PointsEarned)
+
+	// Didn't get the timeout
+	c.PointsEarned = 0
+	c.TimesOut = CMD_OPT_YES
+	c.TimedOut = false
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(0), c.PointsEarned)
+}
+
+func TestRunGradingFullPartialCredit(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// This is similar to the correct output case, but everything should fail
+
+	// Forktest with correct, unsecured output
+	test, err := TestFromString("p /testbin/forktest")
+	test.env = defaultEnv
+	if err != nil {
+		t.FailNow()
+		t.Log(err)
+	}
+
+	assert.NotNil(t)
+
+	c := commandFromOutput(test, "p /testbin/forktest", `/testbin/forktest: Starting. Expect this many:
+|----------------------------|
+AABBBBCCCCCDCDDDDCDDDCDDDDDDDD
+/testbin/forktest: PARTIAL CREDIT 10 OF 10
+/testbin/forktest: Complete.
+Program (pid 2) exited with status 0
+Operation took 1.215512161 seconds
+`)
+
+	if c == nil {
+		t.Log("Command not found in Test")
+		t.FailNow()
+	}
+
+	err = c.Instantiate(defaultEnv)
+	assert.Nil(err)
+	assert.True(len(c.ExpectedOutput) > 0)
+
+	c.PointsAvailable = 5
+
+	// Getting all partial credit -> correct
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+	assert.Equal(uint(5), c.PointsEarned)
+
+	// Correct output, but an unexpected exit
+	c.Status = COMMAND_STATUS_RUNNING
+	c.PointsEarned = 0
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(0), c.PointsEarned)
+
+	// Correct output, with an expected exit
+	c.Panic = CMD_OPT_YES
+	c.Status = COMMAND_STATUS_RUNNING
+	c.PointsEarned = 0
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+	assert.Equal(uint(5), c.PointsEarned)
+
+	c.Panic = CMD_OPT_MAYBE
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, true)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+	assert.Equal(uint(5), c.PointsEarned)
+
+	// Expected panic that we don't get
+	c.Panic = CMD_OPT_YES
+	c.PointsEarned = 0
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(0), c.PointsEarned)
+
+	c.Panic = CMD_OPT_NO
+
+	// Same as panic, but with a timeout
+	c.TimesOut = CMD_OPT_YES
+	c.TimedOut = true
+	c.Status = COMMAND_STATUS_RUNNING
+	c.PointsEarned = 0
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+	assert.Equal(uint(5), c.PointsEarned)
+
+	c.TimesOut = CMD_OPT_MAYBE
+	c.Status = COMMAND_STATUS_RUNNING
+	c.PointsEarned = 0
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_CORRECT, c.Status)
+	assert.Equal(uint(5), c.PointsEarned)
+
+	// Didn't get the timeout
+	c.PointsEarned = 0
+	c.TimesOut = CMD_OPT_YES
+	c.TimedOut = false
+	c.Status = COMMAND_STATUS_RUNNING
+	c.evaluate(nil, false)
+	assert.Equal(COMMAND_STATUS_INCORRECT, c.Status)
+	assert.Equal(uint(0), c.PointsEarned)
 }

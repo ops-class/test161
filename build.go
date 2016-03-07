@@ -17,9 +17,13 @@ import (
 	"sync"
 )
 
-var secprintfExp = regexp.MustCompile(`.*secprintf\(SECRET, .+, "(.+)"\);.*`)
-var successExp = regexp.MustCompile(`.*success\(.+, SECRET, "(.+)"\);.*`)
-var partialExp = regexp.MustCompile(`.*partial_credit\(SECRET, "(.+)",.+\);.*`)
+// Regular expressions for secure output. Only lines that match these expressions in
+// files that we trust will have SECRET replaced with the actual key.
+var (
+	secprintfExp = regexp.MustCompile(`.*secprintf\(SECRET, .+, "(.+)"\);.*`)
+	successExp   = regexp.MustCompile(`.*success\(.+, SECRET, "(.+)"\);.*`)
+	partialExp   = regexp.MustCompile(`.*partial_credit\(SECRET, "(.+)",.+\);.*`)
+)
 
 // BuildTest is a variant of a Test, and specifies how the build process should work.
 // We obey the same schema so the front end tools can treat this like any other test.
@@ -84,17 +88,18 @@ type BuildCommand struct {
 
 // BuildConf specifies the configuration for building os161.
 type BuildConf struct {
-	Repo             string // The git repository to clone
-	CommitID         string // The git commit id (HEAD, hash, etc.) to check out
-	KConfig          string // The os161 kernel config file for the build
-	RequiredCommit   string // A commit required to be in git log
-	CacheDir         string // Cache for previous builds
-	RequiresUserland bool   // Does userland need to be built?
-	Overlay          string // The overlay to use (append to overlay dir in env)
-	Users            []string
+	Repo             string   // The git repository to clone
+	CommitID         string   // The git commit id (HEAD, hash, etc.) to check out
+	KConfig          string   // The os161 kernel config file for the build
+	RequiredCommit   string   // A commit required to be in git log
+	CacheDir         string   // Cache for previous builds
+	RequiresUserland bool     // Does userland need to be built?
+	Overlay          string   // The overlay to use (append to overlay dir in env)
+	Users            []string // The users who own the repo. Needed for the finding the key.
 }
 
 // Use the BuildConf to create a sequence of commands that will build an os161 kernel
+// and userspace binaries (ASST2+).
 func (b *BuildConf) ToBuildTest(env *TestEnvironment) (*BuildTest, error) {
 
 	t := &BuildTest{
@@ -128,6 +133,7 @@ func (t *BuildTest) RootDir() string {
 	return t.rootDir
 }
 
+// Convert a command's raw output into individual OutputLines
 func makeLines(rawoutput []byte) []*OutputLine {
 	lines := strings.Split(string(rawoutput), "\n")
 	output := make([]*OutputLine, len(lines))
@@ -142,6 +148,7 @@ func makeLines(rawoutput []byte) []*OutputLine {
 	return output
 }
 
+// Execute an individual BuildTest command
 func (cmd *BuildCommand) Run(env *TestEnvironment) error {
 	tokens := strings.Split(cmd.Input.Line, " ")
 	if len(tokens) < 1 {
@@ -198,8 +205,7 @@ type BuildResults struct {
 	TempDir string
 }
 
-// Figure out the build directory location, create it if it doesn't exist, and
-// lock it.
+// Figure out the build directory location, create it if it doesn't exist.
 func (t *BuildTest) initDirs() (err error) {
 
 	buildDir := ""
@@ -236,6 +242,7 @@ func (t *BuildTest) initDirs() (err error) {
 	return
 }
 
+// Run builds the OS/161 kernel and userspace binaries
 func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 	var err error
 
@@ -273,10 +280,10 @@ func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 
 	t.Result = TEST_RESULT_CORRECT
 
+	// Package up the results for the caller
 	res := &BuildResults{
 		RootDir: t.rootDir,
 	}
-
 	if t.isTempDir {
 		res.TempDir = t.dir
 	}
@@ -284,6 +291,7 @@ func (t *BuildTest) Run(env *TestEnvironment) (*BuildResults, error) {
 	return res, nil
 }
 
+// Handler function for finding a required commit.
 func commitCheckHandler(t *BuildTest, command *BuildCommand) error {
 	for _, l := range command.Output {
 		if t.conf.RequiredCommit == l.Line {
@@ -294,6 +302,9 @@ func commitCheckHandler(t *BuildTest, command *BuildCommand) error {
 	return errors.New("Cannot find required commit id")
 }
 
+// Set up the command environment. Specifically, we need to set the GIT_SSH_COMMAND
+// env variable based users' repo we're building. This forces git to use a specific
+// key file, which we need because each user generates a deployment key for test161.
 func (t *BuildTest) setCommandEnv() {
 	keyfile := ""
 	studentDir := ""
@@ -313,9 +324,13 @@ func (t *BuildTest) setCommandEnv() {
 
 	if keyfile != "" {
 		t.cmdEnv = append(t.cmdEnv, fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -i %v`, keyfile))
+	} else {
+		t.env.Log.Println("Missing key file for", t.conf.Users)
 	}
 }
 
+// Add all the Git commands needed to update the repo and checkout the right
+// commit.
 func (t *BuildTest) addGitCommands() {
 
 	// If we have the repo cached, fetch instead of clone.
@@ -339,6 +354,7 @@ func (t *BuildTest) addGitCommands() {
 
 const KEYBYTES = 32
 
+// Generate a new key for test161 secure output
 func newKey(numbytes int) (string, error) {
 	bytes := make([]byte, numbytes)
 	_, err := rand.Read(bytes)
@@ -440,6 +456,9 @@ func (t *BuildTest) doSecureOverlayFile(filename string, done chan error) {
 	done <- err
 }
 
+// This gets called when the rsync overlay command is executed. This function
+// is in charge of substituting SECRET with a per-test key for secure output
+// testing.
 func overlayHandler(t *BuildTest, command *BuildCommand) error {
 
 	// Read the SECRET file to figure out what we need to overwrite.
@@ -500,6 +519,8 @@ func overlayHandler(t *BuildTest, command *BuildCommand) error {
 	return nil
 }
 
+// Add the commands required when there is an overlay present. This should always
+// happen on the server, but rarely for clients (except testing).
 func (t *BuildTest) addOverlayCommand() {
 	if len(t.conf.Overlay) == 0 {
 		t.env.Log.Println("Warning: no overlay in build configuration")
@@ -518,6 +539,7 @@ func (t *BuildTest) addOverlayCommand() {
 	cmd.handler = overlayHandler
 }
 
+// Add the chunk of commands needed to build OS/161
 func (t *BuildTest) addBuildCommands() error {
 	confDir := path.Join(t.srcDir, "kern/conf")
 	compDir := path.Join(path.Join(t.srcDir, "kern/compile"), t.conf.KConfig)
@@ -541,6 +563,8 @@ func (t *BuildTest) addBuildCommands() error {
 	return nil
 }
 
+// Add an individual build command by specifying the command line and
+// directory to run from.
 func (t *BuildTest) addCommand(cmdLine string, dir string) *BuildCommand {
 	cmd := &BuildCommand{
 		Type:     "build",
