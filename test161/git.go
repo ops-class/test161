@@ -93,7 +93,7 @@ func (git *gitRepo) commitFromHEAD(debug bool) (commit, ref string, err error) {
 		err = fmt.Errorf("Cannot determine local status: %v", err)
 		return
 	} else if dirty {
-		err = errors.New("Submission not permitted while changes exist in your working directory")
+		err = errors.New("Submission not permitted while changes exist in your working directory\nRun git status to see what files have changed.")
 		return
 	}
 
@@ -204,7 +204,7 @@ func (git *gitRepo) doOneCommand(cmdline string, allowEmpty, verbose bool) (stri
 	cmd.Dir = git.dir
 
 	if git.keyfile != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -i %v`, git.keyfile))
+		cmd.Env = append(os.Environ(), fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i %v`, git.keyfile))
 	}
 
 	if verbose {

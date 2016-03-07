@@ -323,7 +323,7 @@ func (t *BuildTest) setCommandEnv() {
 	t.cmdEnv = os.Environ()
 
 	if keyfile != "" {
-		t.cmdEnv = append(t.cmdEnv, fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -i %v`, keyfile))
+		t.cmdEnv = append(t.cmdEnv, fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i %v`, keyfile))
 	} else {
 		t.env.Log.Println("Missing key file for", t.conf.Users)
 	}
