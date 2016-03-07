@@ -195,6 +195,7 @@ func validateSubmission(w http.ResponseWriter, r *http.Request) {
 
 		// Send back a string.
 		fmt.Fprintf(w, "%v", err)
+		return
 	}
 
 	keyInfo := request.CheckUserKeys(serverEnv)

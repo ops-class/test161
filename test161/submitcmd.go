@@ -129,10 +129,8 @@ func doSubmit() (exitcode int) {
 
 	// Validate before running locally (and install their keys)
 	if err := validateUsers(req); err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
-		if submitVerfiy {
-			return
-		}
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return
 	} else if submitVerfiy {
 		// If only -verify, we're done.
 		exitcode = 0
