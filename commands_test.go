@@ -3,6 +3,7 @@ package test161
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"strings"
 	"testing"
 )
 
@@ -366,14 +367,62 @@ func TestCommandID(t *testing.T) {
 		[]string{
 			`"/bin/space test" 1 2 3`, `"/bin/space test"`,
 		},
+		[]string{
+			`p /bin/something 1 2 3`, `/bin/something`,
+		},
+		[]string{
+			`p s 1 2 3`, `s`,
+		},
 	}
 
 	for _, test := range tests {
 		line := &InputLine{Line: test[0]}
-		_, base, args := line.splitCommand()
+		pfx, base, args := line.splitCommand()
 		assert.Equal(test[1], base)
+		if strings.HasPrefix(test[0], "p ") {
+			assert.Equal("p", pfx)
+		}
 		t.Log(base, test[1])
 		t.Log(args)
 	}
 
+}
+
+func TestCommandReplaceArgs(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	type replaceTest struct {
+		original string
+		newArgs  []string
+		expected string
+	}
+
+	tests := []*replaceTest{
+		&replaceTest{
+			"/hello/world", []string{"arg1"}, "/hello/world arg1",
+		},
+		&replaceTest{
+			"/foo/bar *", []string{"-r", "25"}, "/foo/bar -r 25",
+		},
+		&replaceTest{
+			"/foo/bar -t 100", []string{}, "/foo/bar",
+		},
+		&replaceTest{
+			"p /hello/world", []string{"arg1"}, "p /hello/world arg1",
+		},
+		&replaceTest{
+			"p /foo/bar *", []string{"-r", "25"}, "p /foo/bar -r 25",
+		},
+		&replaceTest{
+			"p /foo/bar -t 100", []string{}, "p /foo/bar",
+		},
+	}
+
+	for _, test := range tests {
+		line := &InputLine{Line: test.original}
+		line.replaceArgs(test.newArgs)
+		assert.Equal(line.Line, test.expected)
+		t.Log(test.original, test.newArgs, test.expected)
+	}
 }
