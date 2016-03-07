@@ -41,8 +41,6 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 	score = 0
 	available = 0
 
-	return 0, 0, nil
-
 	var submission *test161.Submission
 
 	// Cache builds for performance, unless we're told not to
