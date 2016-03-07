@@ -106,7 +106,8 @@ func doSubmit() (exitcode int) {
 		return
 	}
 
-	// Parse args and verify the target
+	// Parse args and verify the target. This sets the Git commit and will return
+	// an error if we don't like what we see.
 	if targetInfo, err := getSubmitArgs(); err != nil {
 		printRunError(err)
 		return
@@ -335,6 +336,7 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 	}
 
 	// Get the commit ID and ref
+
 	git, err := gitRepoFromDir(clientConf.SrcDir, submitDebug)
 	if err != nil {
 		return nil, err

@@ -244,7 +244,7 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 	}
 
 	if totalAvail > 0 {
-		fmt.Printf("%-15v: %v/%v\n", "Total Score", totalPoints, totalAvail)
+		fmt.Printf("\n%-15v: %v/%v\n", "Total Score", totalPoints, totalAvail)
 	}
 
 	fmt.Println()
