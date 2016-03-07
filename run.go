@@ -72,6 +72,12 @@ type Test struct {
 	PointsEarned    uint   `json:"points_earned" bson:"points_earned"`
 	ScoringMethod   string `json:"scoring_method" bson:"scoring_method"`
 
+	// Memory leak detection
+	MemLeakBytes    int  `json:"mem_leak_bytes" bson:"mem_leak_bytes"`       // How much are they leaking?
+	MemLeakChecked  bool `json:"mem_leak_checked" bson:"mem_leak_checked"`   // Did we even check?
+	MemLeakPoints   uint `json:"mem_leak_points" bson:"mem_leak_points"`     // potential point hit
+	MemLeakDeducted uint `json:"mem_leak_deducted" bson:"mem_leak_deducted"` // actual point hit
+
 	// Unproctected Private fields
 	tempDir     string           // Only set once
 	startTime   int64            // Only set once
@@ -505,6 +511,9 @@ func (t *Test) finishAndEvaluate() {
 	} else {
 		t.Result = TEST_RESULT_INCORRECT
 	}
+
+	// Always look for mem leaks, even if they aren't worth any points
+	t.evaluateMemLeaks()
 }
 
 // sendCommand sends a command persistently. All the retry logic to deal with
@@ -836,4 +845,83 @@ func (t *Test) outputLineComplete() {
 		}
 	}
 
+}
+
+var memLeakRegex *regexp.Regexp = regexp.MustCompile(`^khu: (\d+)$`)
+
+func (t *Test) evaluateMemLeaks() {
+
+	expectedMem := 0
+
+	for _, c := range t.Commands {
+		if c.Id() == "khu" {
+			t.MemLeakChecked = true
+			badOutput := true
+
+			// Check each output line for "khu: <number>"
+			for _, line := range c.Output {
+				_, hasKey := t.env.keyMap["khu"]
+
+				// The output needs to be trusted
+				if !hasKey || (line.Trusted && line.KeyName == "khu") {
+					if res := memLeakRegex.FindStringSubmatch(line.Line); len(res) == 2 {
+						// The regex takes care of the error
+						usedMem, _ := strconv.Atoi(res[1])
+						if expectedMem == 0 {
+							// First instance
+							expectedMem = usedMem
+						} else if expectedMem != usedMem {
+							// Leak!
+							t.deductMemLeakPoints()
+							t.MemLeakBytes = usedMem - expectedMem
+							t.addMemLeakStatus(false)
+							return
+						}
+
+						// There is only one line we're interested in
+						badOutput = false
+						break
+					}
+				}
+			}
+
+			// Either the output was supressed, or wrong. We check this per-khu
+			// command instance.
+			if badOutput {
+				t.deductMemLeakPoints()
+				t.addMemLeakStatus(true)
+				return
+			}
+		}
+	}
+}
+
+// Deduct points for leaking memory, if applicable
+func (t *Test) deductMemLeakPoints() {
+	if t.PointsAvailable > 0 && t.MemLeakPoints > 0 {
+		if t.PointsEarned < t.MemLeakPoints {
+			t.MemLeakDeducted = t.PointsEarned
+			t.PointsEarned = 0
+		} else {
+			t.PointsEarned -= t.MemLeakPoints
+			t.MemLeakDeducted = t.MemLeakPoints
+		}
+	}
+}
+
+// Add a status to the test indicating that a memory leak has occurred.
+// If there was a point deduction, show it; otherwise, give a warning.
+func (t *Test) addMemLeakStatus(badOutput bool) {
+	if badOutput {
+		if t.MemLeakDeducted > 0 {
+			t.addStatus("memory leak", fmt.Sprintf("Unable to determine memory leak, corrupted output. Memory leak deduction: %v points",
+				t.MemLeakDeducted))
+		} else {
+			t.addStatus("memory leak", "Unable to determine memory leak, corrupted output")
+		}
+	} else if t.PointsAvailable > 0 && t.MemLeakPoints > 0 {
+		t.addStatus("memory leak", fmt.Sprintf("Memory leak deduction (%v bytes): %v points", t.MemLeakBytes, t.MemLeakDeducted))
+	} else {
+		t.addStatus("memory leak", fmt.Sprintf("Warning: memory leak detected (%v bytes)", t.MemLeakBytes))
+	}
 }

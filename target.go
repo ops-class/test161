@@ -57,10 +57,11 @@ type Target struct {
 // A TargetTest is the specification for a single Test contained in the Target.
 // Currently, the Test can only appear in the Target once.
 type TargetTest struct {
-	Id       string           `yaml:"id" bson:"test_id"`
-	Scoring  string           `yaml:"scoring"`
-	Points   uint             `yaml:"points"`
-	Commands []*TargetCommand `yaml:"commands"`
+	Id            string           `yaml:"id" bson:"test_id"`
+	Scoring       string           `yaml:"scoring"`
+	Points        uint             `yaml:"points"`
+	MemLeakPoints uint             `yaml:"mem_leak_points"`
+	Commands      []*TargetCommand `yaml:"commands"`
 }
 
 // TargetCommands (optionally) specify information about the commands contained
@@ -155,6 +156,7 @@ func TargetFromString(text string) (*Target, error) {
 func (tt *TargetTest) applyTo(test *Test) error {
 	test.PointsAvailable = tt.Points
 	test.ScoringMethod = tt.Scoring
+	test.MemLeakPoints = tt.MemLeakPoints
 
 	// We may need to apply arguments and points to each command. In the simplest
 	// case, the Target doesn't override command behavior or points and maps all
@@ -331,11 +333,13 @@ func (old *Target) isChangeAllowed(other *Target) error {
 
 	for _, t := range other.Tests {
 		if oldVer, ok := oldMap[t.Id]; !ok {
-			return fmt.Errorf("Test %v was removed from the new target, which requires a version change", t.Id)
+			return fmt.Errorf("Test %v was removed in the new target, which requires a version change", t.Id)
 		} else if oldVer.Points != t.Points {
-			return fmt.Errorf("The point distribution for %v changed from the new target, which requires a version change", t.Id)
+			return fmt.Errorf("The point distribution for %v changed in the new target, which requires a version change", t.Id)
 		} else if oldVer.Scoring != t.Scoring {
-			return fmt.Errorf("The scoring method for %v changed from the new target, which requires a version change", t.Id)
+			return fmt.Errorf("The scoring method for %v changed in the new target, which requires a version change", t.Id)
+		} else if oldVer.MemLeakPoints != t.MemLeakPoints {
+			return errors.New("The memory leak points for %v changed in the new target, which requires a version change")
 		}
 	}
 

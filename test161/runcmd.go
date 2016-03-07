@@ -155,6 +155,10 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 			MinWidth: 10,
 		},
 		&Heading{
+			Text:           "Memory Leaks",
+			RightJustified: true,
+		},
+		&Heading{
 			Text:           "Score",
 			MinWidth:       10,
 			RightJustified: true,
@@ -190,9 +194,15 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 			}
 		}
 
+		leak := "---"
+		if test.MemLeakChecked {
+			leak = fmt.Sprintf("%v bytes", test.MemLeakBytes)
+		}
+
 		row := []string{
 			test.DependencyID,
 			status,
+			leak,
 			fmt.Sprintf("%v/%v", test.PointsEarned, test.PointsAvailable),
 		}
 
