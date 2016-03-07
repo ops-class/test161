@@ -310,6 +310,10 @@ func (t *Test) commandConfFromLine(commandLine string) (string, *CommandConf) {
 	return commandLine, nil
 }
 
+// Don't get stuck in an infinite loop
+
+const MAX_EXPANSION_LOOPS = 1024
+
 func (t *Test) initCommands() (err error) {
 
 	// Check defined command prefixes
@@ -341,7 +345,10 @@ func (t *Test) initCommands() (err error) {
 	allConfs := append(t.CommandConf, *SHELL_COMMAND_CONF, *KERNEL_COMMAND_CONF)
 
 	commandLines := strings.Split(strings.TrimSpace(t.Content), "\n")
-	for {
+	for i := 0; i <= MAX_EXPANSION_LOOPS; i++ {
+		if i == MAX_EXPANSION_LOOPS {
+			return errors.New("test161: infinite loop expanding command list")
+		}
 		if len(commandConfStack) == 0 {
 			if len(commandLines) != 0 {
 				return errors.New("test161: premature exit in command list")
@@ -377,7 +384,7 @@ func (t *Test) initCommands() (err error) {
 				}
 			}
 			if found {
-				commandLines = append([]string{strings.TrimSpace(commandConf.Prefix + " " + commandConf.End)}, commandLines...)
+				commandLines = append([]string{strings.TrimSpace(currentConf.Prefix + " " + currentConf.End)}, commandLines...)
 			} else {
 				commandLines = append([]string{commandConf.Start}, commandLines...)
 			}
