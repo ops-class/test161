@@ -152,6 +152,10 @@ func (req *SubmissionRequest) Validate(env *TestEnvironment) ([]*Student, error)
 	students := []*Student{}
 	var err error
 
+	if strings.HasPrefix(req.Repository, "http") {
+		return students, errors.New("test161 must access your repository via SSH and does not accept submissions from http/https URLs")
+	}
+
 	if _, ok := env.Targets[req.Target]; !ok {
 		return students, errors.New("Invalid target: " + req.Target)
 	}
