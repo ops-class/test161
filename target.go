@@ -49,6 +49,7 @@ type Target struct {
 	KConfig          string        `yaml:"kconfig"`
 	RequiredCommit   string        `yaml:"required_commit" bson:"required_commit"`
 	RequiresUserland bool          `yaml:"userland" bson:"userland"`
+	Leaderboard      string        `yaml:"leaderboard" bson:"leaderboard"`
 	Tests            []*TargetTest `yaml:"tests"`
 	FileHash         string        `yaml:"-" bson:"file_hash"`
 	FileName         string        `yaml:"-" bson:"file_name"`
@@ -108,8 +109,13 @@ func (t *Target) fixDefaults() {
 			test.Scoring = TEST_SCORING_ENTIRE
 		}
 	}
+
 	if t.Active != "false" {
 		t.Active = "true"
+	}
+
+	if t.Leaderboard != "false" {
+		t.Leaderboard = "true"
 	}
 }
 
