@@ -46,11 +46,12 @@ const (
 type Submission struct {
 
 	// Configuration
-	ID         string   `bson:"_id,omitempty"`
-	Users      []string `bson:"users"`
-	Repository string   `bson:"repository"`
-	CommitID   string   `bson:"commit_id"`
-	CommitRef  string   `bson:"commit_ref"` // Just informational
+	ID            string   `bson:"_id,omitempty"`
+	Users         []string `bson:"users"`
+	Repository    string   `bson:"repository"`
+	CommitID      string   `bson:"commit_id"`
+	CommitRef     string   `bson:"commit_ref"`     // Just informational
+	ClientVersion string   `bson:"client_version"` // Just informational
 
 	// Target details
 	TargetID        string `bson:"target_id"`
@@ -234,6 +235,8 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 		ID:              uuid.NewV4().String(),
 		Repository:      request.Repository,
 		CommitID:        request.CommitID,
+		CommitRef:       request.CommitRef,
+		ClientVersion:   request.ClientVersion.String(),
 		EstimatedScore:  request.EstimatedScore,
 		TargetID:        target.ID,
 		TargetName:      target.Name,
