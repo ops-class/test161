@@ -30,6 +30,7 @@ type SubmissionRequest struct {
 	Users          []*SubmissionUserInfo // Email addresses of users
 	Repository     string                // Git repository to clone
 	CommitID       string                // Git commit id to checkout after cloning
+	CommitRef      string                // The ref they're submitting with, if one is set
 	ClientVersion  ProgramVersion        // The version of test161 the client is running
 	EstimatedScore uint                  // The local score test161 computed
 }
@@ -49,6 +50,7 @@ type Submission struct {
 	Users      []string `bson:"users"`
 	Repository string   `bson:"repository"`
 	CommitID   string   `bson:"commit_id"`
+	CommitRef  string   `bson:"commit_ref"` // Just informational
 
 	// Target details
 	TargetID        string `bson:"target_id"`
