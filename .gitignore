@@ -1,2 +1,5 @@
 *.swo
 *.swp
+/src
+/pkg
+/bin

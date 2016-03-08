@@ -2,6 +2,7 @@ package test161
 
 import (
 	"github.com/stretchr/testify/assert"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -42,6 +43,9 @@ func TestConfDefaults(t *testing.T) {
 }
 
 func TestConfOverrides(t *testing.T) {
+	if _, err := os.Stat("./fixtures/sys161/sys161-2.0.5"); os.IsNotExist(err) {
+		t.Skip("skipping configuration override test without fixtures/sys161/sys161-2.0.5")
+	}
 	t.Parallel()
 	assert := assert.New(t)
 
