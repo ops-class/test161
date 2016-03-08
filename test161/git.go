@@ -40,12 +40,30 @@ install the latest version of Git:
     sudo apt-get install -y git
 
 `
+const (
+	DoNotUseDeployKey = iota
+	UseDeployKeyOnly
+	TryDeployKey
+)
+
+type gitCmdSpec struct {
+	cmdline    string
+	allowEmpty bool
+	debug      bool
+	deployKey  int // Defaults to not use
+}
 
 func (git *gitRepo) setRemoteInfo(debug bool) error {
 
 	// Infer the remote name and branch. We can get what we need if they're on a branch
 	// and it's set up to track a remote.
-	if remoteInfo, err := git.doOneCommand("git rev-parse --abbrev-ref --symbolic-full-name @{u}", false, debug); err == nil {
+
+	upstreamCmd := &gitCmdSpec{
+		cmdline: "git rev-parse --abbrev-ref --symbolic-full-name @{u}",
+		debug:   debug,
+	}
+
+	if remoteInfo, err := git.doOneCommand(upstreamCmd); err == nil {
 		where := strings.Index(remoteInfo, "/")
 		if where < 0 {
 			// This shouldn't happen, but you never know
@@ -55,8 +73,12 @@ func (git *gitRepo) setRemoteInfo(debug bool) error {
 		git.remoteRef = remoteInfo[where+1:]
 
 		// Get the URL of the remote
-		cmd := fmt.Sprintf("git ls-remote --get-url %v", git.remoteName)
-		if url, err := git.doOneCommand(cmd, false, debug); err != nil {
+		urlCmd := &gitCmdSpec{
+			cmdline: fmt.Sprintf("git ls-remote --get-url %v", git.remoteName),
+			debug:   debug,
+		}
+
+		if url, err := git.doOneCommand(urlCmd); err != nil {
 			fmt.Println(url, err)
 			return err
 		} else {
@@ -69,13 +91,23 @@ func (git *gitRepo) setRemoteInfo(debug bool) error {
 	return nil
 }
 
-const remoteErr = `
-Your current branch is not set up to track a remote, Use 'git branch -u <upstream>' to set the upstream for this branch.
+const remoteErr = `Your current branch is not set up to track a remote, Use 'git branch -u <upstream>'
+to set the upstream for this branch, if one exists. If this is a new branch, use
+'git push -u <remote> [<branch>]' to push the new branch to your remote. See
+'man git branch' and 'man git push' for more information.
+`
+
+const httpErr = `test161 will not accept submissions with http or https repository URLs. Please
+use 'git remote set-url <remote_name> <url>' to change your upstream, where <url>
+is the SSH URL of your repository (i.e. git@...).
 `
 
 func (git *gitRepo) canSubmit() bool {
 	if git.remoteURL == "" {
-		fmt.Println(remoteErr)
+		fmt.Fprintf(os.Stderr, remoteErr)
+		return false
+	} else if strings.HasPrefix(git.remoteURL, "http") {
+		fmt.Fprintf(os.Stderr, httpErr)
 		return false
 	}
 	return true
@@ -104,9 +136,12 @@ func (git *gitRepo) commitFromHEAD(debug bool) (commit, ref string, err error) {
 		fmt.Fprintf(os.Stderr, "Warning: No remote name or ref, submitting HEAD commit\n")
 		ref = "HEAD"
 	} else {
+		// Try the deploy key, but don't fail if it doesn't exist.
+		// We'll explicitly check later when before we build.
+
 		// Check for changes with the remote
 		ref = git.remoteName + "/" + git.remoteRef
-		if ok, err = git.isRemoteUpToDate(debug); err != nil {
+		if ok, err = git.isRemoteUpToDate(debug, TryDeployKey); err != nil {
 			err = fmt.Errorf("Cannot determine remote status: %v", err)
 			return
 		} else if !ok {
@@ -116,7 +151,12 @@ func (git *gitRepo) commitFromHEAD(debug bool) (commit, ref string, err error) {
 	}
 
 	// Finally, get the commit id from the ref
-	if commit, err = git.doOneCommand("git rev-parse "+ref, false, debug); err != nil {
+	commitCmd := &gitCmdSpec{
+		cmdline: "git rev-parse " + ref,
+		debug:   debug,
+	}
+
+	if commit, err = git.doOneCommand(commitCmd); err != nil {
 		err = fmt.Errorf("Cannot rev-parse ref %v: %v", ref, err)
 	}
 
@@ -152,7 +192,7 @@ func (git *gitRepo) commitFromTreeish(treeish string, debug bool) (commit, ref s
 		} else if !ok {
 			err = fmt.Errorf("Unable to verify local ref '%v'", treeish)
 			return
-		} else if ok, err = git.verifyRemoteRef(git.remoteRef, debug); err != nil {
+		} else if ok, err = git.verifyRemoteRef(git.remoteRef, debug, TryDeployKey); err != nil {
 			err = fmt.Errorf("Error verifying remote ref '%v': %v", treeish, err)
 			return
 		} else if !ok {
@@ -162,7 +202,11 @@ func (git *gitRepo) commitFromTreeish(treeish string, debug bool) (commit, ref s
 
 		// Get the commit id
 		ref = treeish
-		commit, err = git.doOneCommand("git rev-parse "+ref, false, debug)
+		commitCmd := &gitCmdSpec{
+			cmdline: "git rev-parse " + ref,
+			debug:   debug,
+		}
+		commit, err = git.doOneCommand(commitCmd)
 		if err != nil {
 			err = fmt.Errorf("Cannot rev-parse ref %v: %v", ref, err)
 		}
@@ -177,7 +221,12 @@ func gitRepoFromDir(src string, debug bool) (*gitRepo, error) {
 	git.dir = src
 
 	// Verify that we're in a git repo
-	if res, err := git.doOneCommand("git status", true, false); err != nil {
+	statusCmd := &gitCmdSpec{
+		cmdline:    "git status",
+		allowEmpty: true,
+		debug:      debug,
+	}
+	if res, err := git.doOneCommand(statusCmd); err != nil {
 		return nil, fmt.Errorf("%v", res)
 	}
 
@@ -188,7 +237,12 @@ func gitRepoFromDir(src string, debug bool) (*gitRepo, error) {
 
 	// Get the local branch (or HEAD if detached). We'll need this if submitting without
 	// specifying the branch/tag/commit.
-	if branch, err := git.doOneCommand("git rev-parse --abbrev-ref HEAD", false, debug); err == nil {
+	branchCmd := &gitCmdSpec{
+		cmdline: "git rev-parse --abbrev-ref HEAD",
+		debug:   debug,
+	}
+
+	if branch, err := git.doOneCommand(branchCmd); err == nil {
 		git.localRef = branch
 	}
 
@@ -198,45 +252,72 @@ func gitRepoFromDir(src string, debug bool) (*gitRepo, error) {
 	return git, nil
 }
 
-func (git *gitRepo) doOneCommand(cmdline string, allowEmpty, verbose bool) (string, error) {
-	args := strings.Split(cmdline, " ")
+func (git *gitRepo) doOneCommand(gitCmd *gitCmdSpec) (string, error) {
+	args := strings.Split(gitCmd.cmdline, " ")
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = git.dir
 
-	if git.keyfile != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i %v`, git.keyfile))
+	if git.keyfile != "" && gitCmd.deployKey != DoNotUseDeployKey {
+		git_ssh := fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i %v`, git.keyfile)
+		if gitCmd.debug {
+			fmt.Println("Env:", git_ssh)
+		}
+		cmd.Env = append(os.Environ(), git_ssh)
 	}
 
-	if verbose {
-		fmt.Println(cmdline)
+	if gitCmd.debug {
+		fmt.Println(gitCmd.cmdline)
 	}
 
 	output, err := cmd.CombinedOutput()
 
-	if verbose {
+	if gitCmd.debug {
 		fmt.Println(string(output))
 	}
 
-	if err != nil {
-		return "", fmt.Errorf(`Cannot execute command "%v": %v`, cmdline, err)
-	} else if len(output) == 0 && !allowEmpty {
-		return "", fmt.Errorf(`No output from "%v"`, cmdline)
+	// Just trying, but fall back to local authentication for the command
+	if err != nil && gitCmd.deployKey == TryDeployKey && git.keyfile != "" {
+		if gitCmd.debug {
+			fmt.Println("Git command failed using deployment key:", err)
+			fmt.Println("Falling back to local authentication")
+		}
+		cmdCopy := *(gitCmd)
+		cmdCopy.deployKey = DoNotUseDeployKey
+		return git.doOneCommand(&cmdCopy)
+	} else if err != nil {
+		return "", fmt.Errorf(`Failed executing command "%v": %v`, gitCmd.cmdline, err)
+	} else if len(output) == 0 && !gitCmd.allowEmpty {
+		return "", fmt.Errorf(`No output from "%v"`, gitCmd.cmdline)
 	}
 
 	return strings.TrimSpace(string(output)), err
 }
 
-func (git *gitRepo) updateRemote(debug bool) error {
+func (git *gitRepo) updateRemote(debug bool, deployKey int) error {
 	// Update the local refs
-	_, err := git.doOneCommand("git remote update "+git.remoteName, true, debug)
+	updateCmd := &gitCmdSpec{
+		cmdline:    "git remote update " + git.remoteName,
+		debug:      debug,
+		allowEmpty: true,
+		deployKey:  deployKey,
+	}
+	_, err := git.doOneCommand(updateCmd)
 	if err != nil {
 		git.remoteUpdated = true
 	}
 	return err
 }
 
-func (git *gitRepo) lookForRef(cmd, ref string, debug bool) (bool, error) {
-	res, err := git.doOneCommand(cmd, true, debug)
+func (git *gitRepo) lookForRef(cmd, ref string, debug bool, deployKey int) (bool, error) {
+
+	gitCmd := &gitCmdSpec{
+		cmdline:    cmd,
+		debug:      debug,
+		allowEmpty: true,
+		deployKey:  deployKey,
+	}
+
+	res, err := git.doOneCommand(gitCmd)
 	if err != nil {
 		return false, err
 	}
@@ -260,18 +341,25 @@ func (git *gitRepo) lookForRef(cmd, ref string, debug bool) (bool, error) {
 
 // Verfify a ref exists locally. Ref could be a branch head or tag.
 func (git *gitRepo) verifyLocalRef(ref string, debug bool) (bool, error) {
-	return git.lookForRef("git show-ref", ref, debug)
+	return git.lookForRef("git show-ref", ref, debug, DoNotUseDeployKey)
 }
 
 // Verify a ref exists remotely. Ref could be a branch head or tag.
-func (git *gitRepo) verifyRemoteRef(ref string, debug bool) (bool, error) {
-	return git.lookForRef("git ls-remote "+git.remoteName, ref, debug)
+func (git *gitRepo) verifyRemoteRef(ref string, debug bool, deployKey int) (bool, error) {
+	return git.lookForRef("git ls-remote "+git.remoteName, ref, debug, deployKey)
 }
 
 // Determine if the working directory has uncommitted work
 func (git *gitRepo) isLocalDirty(debug bool) (bool, error) {
 	// Just check if git status --porcelain outputs anything
-	if res, err := git.doOneCommand("git status --porcelain", true, debug); err != nil {
+
+	dirtyCmd := &gitCmdSpec{
+		cmdline:    "git status --porcelain",
+		allowEmpty: true,
+		debug:      debug,
+	}
+
+	if res, err := git.doOneCommand(dirtyCmd); err != nil {
 		return false, err
 	} else {
 		return len(res) > 0, nil
@@ -279,27 +367,35 @@ func (git *gitRepo) isLocalDirty(debug bool) (bool, error) {
 }
 
 // Determine if the remote is up-to-date with the local.
-func (git *gitRepo) isRemoteUpToDate(debug bool) (bool, error) {
+func (git *gitRepo) isRemoteUpToDate(debug bool, deployKey int) (bool, error) {
 
 	if git.remoteName == "" {
 		return false, errors.New("Cannot determine if your remote is up-to-date, undetermined remote name")
 	}
 
 	if !git.remoteUpdated {
-		if err := git.updateRemote(debug); err != nil {
+		if err := git.updateRemote(debug, deployKey); err != nil {
 			return false, err
 		}
 	}
 
 	// Get our local commit
-	localCommit, err := git.doOneCommand("git rev-parse HEAD", false, debug)
+	gitCmd := &gitCmdSpec{
+		cmdline: "git rev-parse HEAD",
+		debug:   debug,
+	}
+	localCommit, err := git.doOneCommand(gitCmd)
 	if err != nil {
 		return false, err
 	}
 
 	// Get the remote commit
-	cmdLine := fmt.Sprintf("git rev-parse %v/%v", git.remoteName, git.remoteRef)
-	remoteCommit, err := git.doOneCommand(cmdLine, false, debug)
+	gitCmd = &gitCmdSpec{
+		cmdline: fmt.Sprintf("git rev-parse %v/%v", git.remoteName, git.remoteRef),
+		debug:   debug,
+	}
+
+	remoteCommit, err := git.doOneCommand(gitCmd)
 	if err != nil {
 		return false, err
 	}
@@ -314,7 +410,7 @@ func gitVersion() (ver test161.ProgramVersion, err error) {
 	var verText string
 
 	git := &gitRepo{}
-	if verText, err = git.doOneCommand("git version", false, false); err != nil {
+	if verText, err = git.doOneCommand(&gitCmdSpec{cmdline: "git version"}); err != nil {
 		return
 	}
 
@@ -348,4 +444,9 @@ func checkGitVersionAndComplain() (bool, error) {
 		fmt.Printf(GitUpgradeInst, ver)
 		return false, nil
 	}
+}
+
+func (git *gitRepo) verifyDeploymentKey(debug bool) error {
+	git.remoteUpdated = false //force
+	return git.updateRemote(debug, UseDeployKeyOnly)
 }

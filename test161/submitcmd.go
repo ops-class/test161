@@ -92,6 +92,11 @@ func doSubmit() (exitcode int) {
 	collabMsg := ""
 	exitcode = 1
 
+	if err := getSubmitArgs(); err != nil {
+		printRunError(err)
+		return
+	}
+
 	// Early sanity checks
 	if len(clientConf.Users) == 0 {
 		printDefaultConf()
@@ -106,34 +111,63 @@ func doSubmit() (exitcode int) {
 		return
 	}
 
-	// Parse args and verify the target. This sets the Git commit and will return
-	// an error if we don't like what we see.
-	if targetInfo, err := getSubmitArgs(); err != nil {
+	// Check that the target exists, both locally and remotely
+	if targetInfo, err := getRemoteTargetAndValidate(submitTargetName); err != nil {
 		printRunError(err)
 		return
 	} else {
 		collabMsg = targetInfo.CollabMsg
 	}
 
+	// Set the Git commit ID and repo info
+	git, err := getSubmitCommitIDAndValidate()
+	if err != nil {
+		printRunError(err)
+		return
+	}
+
+	// At this point we've checked most of the things we can locally. Before we
+	// build, check with the server to make sure this submission is acceptable.
+
 	req := &test161.SubmissionRequest{
 		Target:        submitTargetName,
 		Users:         clientConf.Users,
-		Repository:    clientConf.git.remoteURL,
+		Repository:    git.remoteURL,
 		CommitID:      submitCommit,
+		CommitRef:     submitRef,
 		ClientVersion: test161.Version,
 	}
 
-	// Get the current hash of our test161 private key
+	// Get the current hash of our test161 private key(s). The server will push
+	// down new keys if these differ from what it computes.
 	for _, user := range req.Users {
 		user.KeyHash = getKeyHash(user.Email)
 	}
 
 	// Validate before running locally (and install their keys)
-	if err := validateUsers(req); err != nil {
+	if err := validateSubmission(req); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return
-	} else if submitVerfiy {
-		// If only -verify, we're done.
+	}
+
+	// Finally, explicitly check test the deployment key. Everything before this point
+	// was configured to use either the deployment key or local key. The result of the
+	// user validation may have returned a different key (in case of key change), or
+	// the initial key. Now, explicitly check the key before the build process to provide
+	// a somewhat less cryptic message.
+	git.keyfile = clientConf.getKeyFile()
+	if len(git.keyfile) == 0 {
+		fmt.Fprintf(os.Stderr, "Unable to test your deployment key: no deployment keys found")
+	}
+
+	if err := git.verifyDeploymentKey(submitDebug); err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to verify your deployment key. Please make sure your test161 deployment key is attached to your repository.\n")
+		fmt.Fprintf(os.Stderr, "Err: %v\n", err)
+		return
+	}
+
+	// We've verified what we can at this point, so if only -verify, we're done
+	if submitVerfiy {
 		exitcode = 0
 		fmt.Println("OK")
 		return
@@ -187,9 +221,10 @@ func doSubmit() (exitcode int) {
 	return
 }
 
-// Validate the user info on the server, and update the users' private keys
-// that are returned by the server. Fail if the user hasn't set up a key yet.
-func validateUsers(req *test161.SubmissionRequest) error {
+// Validate the user and submission info on the server, and update the users'
+// private keys that are returned by the server. Fail if the user hasn't set up
+// a key yet.
+func validateSubmission(req *test161.SubmissionRequest) error {
 	body, err := submitOrValidate(req, true)
 	if err != nil {
 		return err
@@ -222,6 +257,7 @@ func validateUsers(req *test161.SubmissionRequest) error {
 			if err := ioutil.WriteFile(file, []byte(data.Key), 0600); err != nil {
 				return fmt.Errorf("Error creating private key: %v", err)
 			}
+			fmt.Println("Installing deployment key for", data.User)
 		} else {
 			emptyCount += 1
 			fmt.Fprintf(os.Stderr, "Warning: No test161 key exists for", data.User)
@@ -310,7 +346,7 @@ func getRemoteTargetAndValidate(name string) (*test161.TargetListItem, error) {
 	return serverVersion, nil
 }
 
-func getSubmitArgs() (*test161.TargetListItem, error) {
+func getSubmitArgs() error {
 	submitFlags := flag.NewFlagSet("test161 submit", flag.ExitOnError)
 	submitFlags.Usage = usage
 
@@ -319,23 +355,26 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 	submitFlags.BoolVar(&submitNoCache, "no-cache", false, "")
 	submitFlags.Parse(os.Args[2:]) // this may exit
 
+	// Handle positional args
 	args := submitFlags.Args()
 
 	if len(args) == 0 {
-		return nil, errors.New("test161 submit: Missing target name. run test161 help for detailed usage")
+		return errors.New("test161 submit: Missing target name. run test161 help for detailed usage")
 	} else if len(args) > 2 {
-		return nil, errors.New("test161 submit: Too many arguments. run test161 help for detailed usage")
+		return errors.New("test161 submit: Too many arguments. run test161 help for detailed usage")
 	}
 
 	submitTargetName = args[0]
-
-	// Get remote target
-	serverVersion, err := getRemoteTargetAndValidate(submitTargetName)
-	if err != nil {
-		return nil, err
+	if len(args) == 2 {
+		submitCommit = args[1]
 	}
 
-	// Get the commit ID and ref
+	return nil
+}
+
+// Translate the ref passed to a commit ID or get the info from the tip of the
+// current branch if nothing was specified.
+func getSubmitCommitIDAndValidate() (*gitRepo, error) {
 
 	git, err := gitRepoFromDir(clientConf.SrcDir, submitDebug)
 	if err != nil {
@@ -349,10 +388,8 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 
 	commit, ref := "", ""
 
-	// Try to get a commit id/ref
-	if len(args) == 2 {
-		treeish := args[1]
-		commit, ref, err = git.commitFromTreeish(treeish, submitDebug)
+	if len(submitCommit) > 0 {
+		commit, ref, err = git.commitFromTreeish(submitCommit, submitDebug)
 	} else {
 		commit, ref, err = git.commitFromHEAD(submitDebug)
 	}
@@ -361,11 +398,10 @@ func getSubmitArgs() (*test161.TargetListItem, error) {
 		return nil, err
 	}
 
-	clientConf.git = git
 	submitCommit = commit
 	submitRef = ref
 
-	return serverVersion, nil
+	return git, nil
 }
 
 // Initialize the cache and key directories in HOME/.test161

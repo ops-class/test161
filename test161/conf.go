@@ -35,8 +35,6 @@ type ClientConf struct {
 	RootDir    string `yaml:"-"`
 	SrcDir     string `yaml:"-"`
 	Test161Dir string `yaml:"-"`
-
-	git *gitRepo
 }
 
 func ClientConfFromFile(file string) (*ClientConf, error) {
@@ -304,8 +302,15 @@ func doShowConf() int {
 
 	fmt.Printf("Remote Status : checking...")
 
-	if ok, err := git.isRemoteUpToDate(configDebug); err != nil {
-		fmt.Println("\rRemote Status :", err)
+	if configDebug {
+		// We replace the line above, but that doesn't work when we're debugging
+		fmt.Println()
+	}
+
+	// Try the deploy key, but fall back to local authentication
+	// in case things aren't set up yet, or the key changed.
+	if ok, err := git.isRemoteUpToDate(configDebug, TryDeployKey); err != nil {
+		fmt.Println("\rRemote Status :", "unknown     ")
 	} else if ok {
 		fmt.Println("\rRemote Status : up-to-date  ")
 	} else {
