@@ -255,6 +255,14 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 
 === Nits
 
+* Replace "0 bytes" with "None!" in the memory leak output for extra
+motivation :-).
+* Colored test output on terminals that support it? (Particularly for correct/incorrect.)
+* Either don't require a `sys161.conf` file or print a better error message
+when it is missing.
+* Support for environments that don't have `.root` or `.src`. Probably just
+don't require these, but this will mean that you have to run `test161 run ...`
+from your root directory and `test161 submit` from your source directory.
 * Handle missing newline correctly. Test with shll for lossy shell support.
 * sys161 version checks
 * Order the test output in some meaningful way, probably by depth in the
@@ -267,6 +275,60 @@ reason a test is skipped, which helps. Maybe a nice ASCII art tree would work he
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
 (Prevent backend storage DOS attacks.)
 * Add support for targets and tests to the bash completion script
+
+=== More Syntactic Sugar
+
+Nice to add "|" as a prefix to wrap a command with memory leak detection. Need
+to also process other prefixes in this case so that:
+
+....
+| cvt1
+....
+
+expands to:
+....
+khu
+cvt1
+khu
+....
+
+and:
+....
+|$ /bin/true
+....
+
+expands to:
+....
+khu
+s
+/bin/true
+exit
+khu
+....
+
+Also it would be useful to add a multiplier syntax so that:
+....
+4x cvt1
+....
+
+expands to:
+....
+cvt1
+cvt1
+cvt1
+cvt1
+....
+
+=== Parallel Testing Output
+
+It would be cool to be able to print serial output from one test while queuing
+the output from other tests. Maybe using curses to maintain a line at the end
+of the screen showing the tests that are being run.
+
+=== Tag Descriptions and Querying
+
+It would be nice to be able to add descriptions to tags and have `test161`
+print all tests that fall into a tag (or target) along with the description.
 
 === Key saving
 
