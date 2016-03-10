@@ -518,6 +518,12 @@ func (t *Test) finishAndEvaluate() {
 
 // sendCommand sends a command persistently. All the retry logic to deal with
 // dropped characters is now here.
+
+// If your system is running the simulator more than this much slower than
+// wall-clock time you are in trouble...
+
+const MAX_RETRY_LOOPS = 16
+
 func (t *Test) sendCommand(commandLine string) error {
 
 	// If t.Misc.CharacterTimeout is set to zero disable the character retry
@@ -532,20 +538,35 @@ func (t *Test) sendCommand(commandLine string) error {
 
 		for _, character := range commandLine {
 			retryCount := uint(0)
+		CharLoop:
 			for ; retryCount < t.Misc.CommandRetries; retryCount++ {
 				err := t.sys161.Send(string(character))
 				if err != nil {
 					return err
 				}
-				_, err = t.sys161.ExpectRegexp(regexp.MustCompile(regexp.QuoteMeta(string(character))))
-				if err == nil {
-					break
-				} else if err == expect.ErrTimeout {
-					t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'", t.ID, commandLine)
-					continue
-				} else {
-					return err
+				t.L.Lock()
+				charStartTime := t.SimTime
+				t.L.Unlock()
+				for i := 0; i < MAX_RETRY_LOOPS; i++ {
+					_, err = t.sys161.ExpectRegexp(regexp.MustCompile(regexp.QuoteMeta(string(character))))
+					if err == nil {
+						break CharLoop
+					} else if err == expect.ErrTimeout {
+						t.L.Lock()
+						charSimTime := t.SimTime - charStartTime
+						t.L.Unlock()
+						if float64(charSimTime*1000) < float64(t.Misc.CharacterTimeout) {
+							continue
+						} else {
+							t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'", t.ID, commandLine)
+							continue CharLoop
+						}
+					} else {
+						return err
+					}
 				}
+				t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'", t.ID, commandLine)
+				continue
 			}
 			if retryCount == t.Misc.CommandRetries {
 				t.env.Log.Printf("Test ID %v  Too many character retries in command line '%v'", t.ID, commandLine)
