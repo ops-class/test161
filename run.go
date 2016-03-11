@@ -217,9 +217,6 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		env.notifyAndLogErr("Test Complete", t, MSG_PERSIST_COMPLETE, 0)
 	}()
 
-	t.Result = TEST_RESULT_RUNNING
-	env.notifyAndLogErr("Test Status Running", t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
-
 	// Set the instance-specific input and expected output
 	for _, c := range t.Commands {
 		if err = c.Instantiate(env); err != nil {
@@ -349,6 +346,11 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	t.allCorrect = true
 
+	// SDH: Moved this to just before we start running so peristence managers have
+	// more accurate test state, i.e. merged config.
+	t.Result = TEST_RESULT_RUNNING
+	env.notifyAndLogErr("Test Status Running", t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
+
 	// Broadcast current command
 	env.notifyAndLogErr("Command Status", t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 
@@ -362,7 +364,12 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
 
 			if err != nil {
-				t.addStatus("expect", "couldn't send a command")
+				// If we can't send the command, it's most likey a broken kernel
+				err = nil
+				t.currentCommand.Status = COMMAND_STATUS_INCORRECT
+				t.allCorrect = false
+				t.currentCommand.PointsEarned = 0
+				t.addStatus("timeout", "couldn't send a command")
 				break
 			}
 			statActive, statErr := t.enableStats()
@@ -558,7 +565,8 @@ func (t *Test) sendCommand(commandLine string) error {
 						if float64(charSimTime*1000) < float64(t.Misc.CharacterTimeout) {
 							continue
 						} else {
-							t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'", t.ID, commandLine)
+							t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'",
+								t.ID, strings.TrimSpace(commandLine))
 							continue CharLoop
 						}
 					} else {
@@ -569,7 +577,8 @@ func (t *Test) sendCommand(commandLine string) error {
 				continue
 			}
 			if retryCount == t.Misc.CommandRetries {
-				t.env.Log.Printf("Test ID %v  Too many character retries in command line '%v'", t.ID, commandLine)
+				t.env.Log.Printf("Test ID %v  Too many character retries in command line '%v'",
+					t.ID, strings.TrimSpace(commandLine))
 				return errors.New("test161: timeout sending command")
 			}
 		}

@@ -367,7 +367,16 @@ func explain(tg *test161.TestGroup) {
 		fmt.Println(test.DependencyID)
 		fmt.Println(strings.Repeat("-", 60))
 		fmt.Println("Name        :", test.Name)
-		fmt.Println("Description :", test.Description)
+		fmt.Println("Description :", strings.TrimSpace(test.Description))
+
+		fmt.Println("\nSys161 Conf:")
+
+		// Merge in test161 defaults for any missing configuration values
+		// FIXME: Can merge when the test is created instead of in Test.Run()?
+		test.MergeConf(test161.CONF_DEFAULTS)
+		conf, _ := test.PrintConf()
+		fmt.Println(strings.TrimSpace(conf))
+		fmt.Println()
 
 		// Points/scoring
 		if test.PointsAvailable > 0 {

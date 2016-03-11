@@ -34,6 +34,10 @@ Your submission will receive an estimated score of %v/%v points.
 Do you certify that you have followed the collaboration guidelines and wish to submit now?
 `
 
+const NoUsersErr = `No users have been configured for test161. Please use 'test161 config add-user' to add users.
+(See 'test161 help' for a more detailed command description).
+`
+
 // Run the submission locally, but as close to how the server would do it
 // as possible
 func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, errs []error) {
@@ -99,7 +103,7 @@ func doSubmit() (exitcode int) {
 
 	// Early sanity checks
 	if len(clientConf.Users) == 0 {
-		printDefaultConf()
+		fmt.Fprintf(os.Stderr, NoUsersErr)
 		return
 	}
 

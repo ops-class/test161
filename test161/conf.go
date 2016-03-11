@@ -71,25 +71,6 @@ func ClientConfToFile(conf *ClientConf) error {
 	return nil
 }
 
-func printDefaultConf() {
-	fmt.Println(`
-test161 needs a configuration file in order to submit to the server.  Create a '.test161.conf' 
-in your $HOME directory, or the directory where you plan to run test161. The following is an 
-example .test161.conf file that you can modify with your group information. Note: the conf file 
-is in yaml format (so no tabs please).
-
-Alternatively, use 'test161 config add-user' to add user information from the command line.
- 
-(Example .test161.conf)
----
-users:
-  - email: "your-email@buffalo.edu"
-    token: "your-token (from test161.ops-class.org)"
-  - email: "your-email@buffalo.edu"
-    token: "your-token (from test161.ops-class.org)"
-`)
-}
-
 func isRootDir(path string) bool {
 	reqs := []string{"kernel", ".src"}
 	err := testPath(path, "root", reqs)
