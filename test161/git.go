@@ -18,9 +18,7 @@ type gitRepo struct {
 	remoteURL     string
 	localRef      string
 	remoteUpdated bool
-
-	// Set this if your want GIT_SSH_COMMAND set for 'git remote update'
-	keyfile string
+	gitSSHCommand string
 }
 
 var minGitVersion = test161.ProgramVersion{
@@ -246,10 +244,23 @@ func gitRepoFromDir(src string, debug bool) (*gitRepo, error) {
 		git.localRef = branch
 	}
 
-	// Finally, set the keyfile for this git repo
-	git.keyfile = clientConf.getKeyFile()
+	// Finally, set the ssh command we'll use for Git
+	git.gitSSHCommand = getGitSSHCommand()
 
 	return git, nil
+}
+
+func getGitSSHCommand() string {
+	users := []string{}
+	for _, user := range clientConf.Users {
+		users = append(users, user.Email)
+	}
+
+	if len(users) > 0 {
+		return test161.GetDeployKeySSHCmd(users, KEYS_DIR)
+	} else {
+		return ""
+	}
 }
 
 func (git *gitRepo) doOneCommand(gitCmd *gitCmdSpec) (string, error) {
@@ -257,12 +268,11 @@ func (git *gitRepo) doOneCommand(gitCmd *gitCmdSpec) (string, error) {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = git.dir
 
-	if git.keyfile != "" && gitCmd.deployKey != DoNotUseDeployKey {
-		git_ssh := fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i %v`, git.keyfile)
+	if git.gitSSHCommand != "" && gitCmd.deployKey != DoNotUseDeployKey {
+		cmd.Env = append(os.Environ(), git.gitSSHCommand)
 		if gitCmd.debug {
-			fmt.Println("Env:", git_ssh)
+			fmt.Println("Env:", git.gitSSHCommand)
 		}
-		cmd.Env = append(os.Environ(), git_ssh)
 	}
 
 	if gitCmd.debug {
@@ -276,7 +286,7 @@ func (git *gitRepo) doOneCommand(gitCmd *gitCmdSpec) (string, error) {
 	}
 
 	// Just trying, but fall back to local authentication for the command
-	if err != nil && gitCmd.deployKey == TryDeployKey && git.keyfile != "" {
+	if err != nil && gitCmd.deployKey == TryDeployKey && git.gitSSHCommand != "" {
 		if gitCmd.debug {
 			fmt.Println("Git command failed using deployment key:", err)
 			fmt.Println("Falling back to local authentication")

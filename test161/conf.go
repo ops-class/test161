@@ -221,18 +221,6 @@ func (conf *ClientConf) checkPaths() (err error) {
 	return
 }
 
-// Get a key to use for git ssh commands. We follow what the server does and pick the
-// first one that exists.
-func (conf *ClientConf) getKeyFile() string {
-	for _, u := range conf.Users {
-		keyfile := path.Join(KEYS_DIR, u.Email, "id_rsa")
-		if _, err := os.Stat(keyfile); err == nil {
-			return keyfile
-		}
-	}
-	return ""
-}
-
 // test161 config (-debug]
 func doShowConf() int {
 
