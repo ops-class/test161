@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -310,6 +311,54 @@ func (t *Test) commandConfFromLine(commandLine string) (string, *CommandConf) {
 	return commandLine, nil
 }
 
+// simplePrefixes handle prefixes that don't change the environment or require
+// special prompts.
+
+var khuPrefixRegexp *regexp.Regexp
+var multiplierPrefixRegexp *regexp.Regexp
+var simplePrefixOnce sync.Once
+
+func simplePrefixes(inputCommands []string) ([]string, error) {
+	outputCommands, err := doSimplePrefixes(inputCommands)
+	if err != nil {
+		return nil, err
+	}
+	outputCommands, err = doSimplePrefixes(outputCommands)
+	if err != nil {
+		return nil, err
+	}
+	return outputCommands, nil
+}
+
+func doSimplePrefixes(inputCommands []string) ([]string, error) {
+	simplePrefixOnce.Do(func() {
+		khuPrefixRegexp = regexp.MustCompile(`^\|(.*)`)
+		multiplierPrefixRegexp = regexp.MustCompile(`^(\d+)x(.*)`)
+	})
+	outputCommands := make([]string, 0, len(inputCommands))
+	for _, command := range inputCommands {
+		command = strings.TrimSpace(command)
+		matches := khuPrefixRegexp.FindStringSubmatch(command)
+		if len(matches) != 0 {
+			outputCommands = append(outputCommands, "khu", matches[1], "khu")
+			continue
+		}
+		matches = multiplierPrefixRegexp.FindStringSubmatch(command)
+		if len(matches) != 0 {
+			multiplier, err := strconv.Atoi(matches[1])
+			if err != nil {
+				return nil, err
+			}
+			for i := 0; i < multiplier; i++ {
+				outputCommands = append(outputCommands, matches[2])
+			}
+			continue
+		}
+		outputCommands = append(outputCommands, command)
+	}
+	return outputCommands, nil
+}
+
 // Don't get stuck in an infinite loop
 
 const MAX_EXPANSION_LOOPS = 1024
@@ -345,6 +394,11 @@ func (t *Test) initCommands() (err error) {
 	allConfs := append(t.CommandConf, *SHELL_COMMAND_CONF, *KERNEL_COMMAND_CONF)
 
 	commandLines := strings.Split(strings.TrimSpace(t.Content), "\n")
+	commandLines, err = simplePrefixes(commandLines)
+	if err != nil {
+		return err
+	}
+
 	for i := 0; i <= MAX_EXPANSION_LOOPS; i++ {
 		if i == MAX_EXPANSION_LOOPS {
 			return errors.New("test161: infinite loop expanding command list")

@@ -255,8 +255,6 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 
 === Nits
 
-* Replace "0 bytes" with "None!" in the memory leak output for extra
-motivation :-).
 * Colored test output on terminals that support it? (Particularly for correct/incorrect.)
 * Either don't require a `sys161.conf` file or print a better error message
 when it is missing.

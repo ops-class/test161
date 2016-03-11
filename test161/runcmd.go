@@ -196,7 +196,11 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 
 		leak := "---"
 		if test.MemLeakChecked {
-			leak = fmt.Sprintf("%v bytes", test.MemLeakBytes)
+			if test.MemLeakBytes == 0 {
+				leak = "None"
+			} else {
+				leak = fmt.Sprintf("%v bytes", test.MemLeakBytes)
+			}
 		}
 
 		row := []string{

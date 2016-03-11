@@ -217,7 +217,7 @@ func TestConfCommandShellExit(t *testing.T) {
 	assert.Nil(err)
 	if err == nil {
 		assert.Equal(len(test.Commands), 6)
-		if len(test.Commands) == 5 {
+		if len(test.Commands) == 6 {
 			assert.Equal(test.Commands[0].Type, "kernel")
 			assert.Equal(test.Commands[0].Input.Line, "boot")
 			assert.Equal(test.Commands[1].Type, "user")
@@ -230,6 +230,156 @@ func TestConfCommandShellExit(t *testing.T) {
 			assert.Equal(test.Commands[4].Input.Line, "khu")
 			assert.Equal(test.Commands[5].Type, "kernel")
 			assert.Equal(test.Commands[5].Input.Line, "q")
+		}
+	}
+}
+
+func TestConfKHUPrefix(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("| cvt1")
+	assert.Nil(err)
+	if err == nil {
+		assert.Equal(len(test.Commands), 5)
+		if len(test.Commands) == 5 {
+			assert.Equal(test.Commands[0].Type, "kernel")
+			assert.Equal(test.Commands[0].Input.Line, "boot")
+			assert.Equal(test.Commands[1].Type, "kernel")
+			assert.Equal(test.Commands[1].Input.Line, "khu")
+			assert.Equal(test.Commands[2].Type, "kernel")
+			assert.Equal(test.Commands[2].Input.Line, "cvt1")
+			assert.Equal(test.Commands[3].Type, "kernel")
+			assert.Equal(test.Commands[3].Input.Line, "khu")
+			assert.Equal(test.Commands[4].Type, "kernel")
+			assert.Equal(test.Commands[4].Input.Line, "q")
+		}
+	}
+
+	test, err = TestFromString("|$ /bin/true")
+	assert.Nil(err)
+	if err == nil {
+		assert.Equal(len(test.Commands), 7)
+		if len(test.Commands) == 7 {
+			assert.Equal(test.Commands[0].Type, "kernel")
+			assert.Equal(test.Commands[0].Input.Line, "boot")
+			assert.Equal(test.Commands[1].Type, "kernel")
+			assert.Equal(test.Commands[1].Input.Line, "khu")
+			assert.Equal(test.Commands[2].Type, "user")
+			assert.Equal(test.Commands[2].Input.Line, "s")
+			assert.Equal(test.Commands[3].Type, "user")
+			assert.Equal(test.Commands[3].Input.Line, "/bin/true")
+			assert.Equal(test.Commands[4].Type, "user")
+			assert.Equal(test.Commands[4].Input.Line, "exit")
+			assert.Equal(test.Commands[5].Type, "kernel")
+			assert.Equal(test.Commands[5].Input.Line, "khu")
+			assert.Equal(test.Commands[6].Type, "kernel")
+			assert.Equal(test.Commands[6].Input.Line, "q")
+		}
+	}
+}
+
+func TestConfMultiplierPrefix(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	test, err := TestFromString("4x cvt1")
+	assert.Nil(err)
+	if err == nil {
+		assert.Equal(len(test.Commands), 6)
+		if len(test.Commands) == 6 {
+			assert.Equal(test.Commands[0].Type, "kernel")
+			assert.Equal(test.Commands[0].Input.Line, "boot")
+			assert.Equal(test.Commands[1].Type, "kernel")
+			assert.Equal(test.Commands[1].Input.Line, "cvt1")
+			assert.Equal(test.Commands[2].Type, "kernel")
+			assert.Equal(test.Commands[2].Input.Line, "cvt1")
+			assert.Equal(test.Commands[3].Type, "kernel")
+			assert.Equal(test.Commands[3].Input.Line, "cvt1")
+			assert.Equal(test.Commands[4].Type, "kernel")
+			assert.Equal(test.Commands[4].Input.Line, "cvt1")
+			assert.Equal(test.Commands[5].Type, "kernel")
+			assert.Equal(test.Commands[5].Input.Line, "q")
+		}
+	}
+
+	test, err = TestFromString("2x| cvt1")
+	assert.Nil(err)
+	if err == nil {
+		assert.Equal(len(test.Commands), 8)
+		if len(test.Commands) == 8 {
+			assert.Equal(test.Commands[0].Type, "kernel")
+			assert.Equal(test.Commands[0].Input.Line, "boot")
+			assert.Equal(test.Commands[1].Type, "kernel")
+			assert.Equal(test.Commands[1].Input.Line, "khu")
+			assert.Equal(test.Commands[2].Type, "kernel")
+			assert.Equal(test.Commands[2].Input.Line, "cvt1")
+			assert.Equal(test.Commands[3].Type, "kernel")
+			assert.Equal(test.Commands[3].Input.Line, "khu")
+			assert.Equal(test.Commands[4].Type, "kernel")
+			assert.Equal(test.Commands[4].Input.Line, "khu")
+			assert.Equal(test.Commands[5].Type, "kernel")
+			assert.Equal(test.Commands[5].Input.Line, "cvt1")
+			assert.Equal(test.Commands[6].Type, "kernel")
+			assert.Equal(test.Commands[6].Input.Line, "khu")
+			assert.Equal(test.Commands[7].Type, "kernel")
+			assert.Equal(test.Commands[7].Input.Line, "q")
+		}
+	}
+
+	test, err = TestFromString("|2x$ /bin/true")
+	assert.Nil(err)
+	if err == nil {
+		assert.Equal(len(test.Commands), 8)
+		if len(test.Commands) == 8 {
+			assert.Equal(test.Commands[0].Type, "kernel")
+			assert.Equal(test.Commands[0].Input.Line, "boot")
+			assert.Equal(test.Commands[1].Type, "kernel")
+			assert.Equal(test.Commands[1].Input.Line, "khu")
+			assert.Equal(test.Commands[2].Type, "user")
+			assert.Equal(test.Commands[2].Input.Line, "s")
+			assert.Equal(test.Commands[3].Type, "user")
+			assert.Equal(test.Commands[3].Input.Line, "/bin/true")
+			assert.Equal(test.Commands[4].Type, "user")
+			assert.Equal(test.Commands[4].Input.Line, "/bin/true")
+			assert.Equal(test.Commands[5].Type, "user")
+			assert.Equal(test.Commands[5].Input.Line, "exit")
+			assert.Equal(test.Commands[6].Type, "kernel")
+			assert.Equal(test.Commands[6].Input.Line, "khu")
+			assert.Equal(test.Commands[7].Type, "kernel")
+			assert.Equal(test.Commands[7].Input.Line, "q")
+		}
+	}
+
+	test, err = TestFromString("2x|$ /bin/true")
+	assert.Nil(err)
+	if err == nil {
+		assert.Equal(len(test.Commands), 12)
+		if len(test.Commands) == 12 {
+			assert.Equal(test.Commands[0].Type, "kernel")
+			assert.Equal(test.Commands[0].Input.Line, "boot")
+			assert.Equal(test.Commands[1].Type, "kernel")
+			assert.Equal(test.Commands[1].Input.Line, "khu")
+			assert.Equal(test.Commands[2].Type, "user")
+			assert.Equal(test.Commands[2].Input.Line, "s")
+			assert.Equal(test.Commands[3].Type, "user")
+			assert.Equal(test.Commands[3].Input.Line, "/bin/true")
+			assert.Equal(test.Commands[4].Type, "user")
+			assert.Equal(test.Commands[4].Input.Line, "exit")
+			assert.Equal(test.Commands[5].Type, "kernel")
+			assert.Equal(test.Commands[5].Input.Line, "khu")
+			assert.Equal(test.Commands[6].Type, "kernel")
+			assert.Equal(test.Commands[6].Input.Line, "khu")
+			assert.Equal(test.Commands[7].Type, "user")
+			assert.Equal(test.Commands[7].Input.Line, "s")
+			assert.Equal(test.Commands[8].Type, "user")
+			assert.Equal(test.Commands[8].Input.Line, "/bin/true")
+			assert.Equal(test.Commands[9].Type, "user")
+			assert.Equal(test.Commands[9].Input.Line, "exit")
+			assert.Equal(test.Commands[10].Type, "kernel")
+			assert.Equal(test.Commands[10].Input.Line, "khu")
+			assert.Equal(test.Commands[11].Type, "kernel")
+			assert.Equal(test.Commands[11].Input.Line, "q")
 		}
 	}
 }
