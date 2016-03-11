@@ -329,7 +329,15 @@ func (s *Submission) validResult() bool {
 	}
 }
 
-// update the
+func (student *Student) getStat(targetName string) *TargetStats {
+	for _, stat := range student.Stats {
+		if stat.TargetName == targetName {
+			return stat
+		}
+	}
+	return nil
+}
+
 func (student *Student) updateStats(submission *Submission) {
 
 	// This might be nil coming out of Mongo
@@ -340,14 +348,7 @@ func (student *Student) updateStats(submission *Submission) {
 	student.TotalSubmissions += 1
 
 	// Find the TargetStats to update, or create a new one
-	var stat *TargetStats
-
-	for _, temp := range student.Stats {
-		if temp.TargetName == submission.TargetName {
-			stat = temp
-			break
-		}
-	}
+	stat := student.getStat(submission.TargetName)
 	if stat == nil {
 		stat = submission.TargetStats()
 		student.Stats = append(student.Stats, stat)
