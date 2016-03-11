@@ -159,8 +159,8 @@ func doSubmit() (exitcode int) {
 	// user validation may have returned a different key (in case of key change), or
 	// the initial key. Now, explicitly check the key before the build process to provide
 	// a somewhat less cryptic message.
-	git.keyfile = clientConf.getKeyFile()
-	if len(git.keyfile) == 0 {
+	git.gitSSHCommand = getGitSSHCommand()
+	if git.gitSSHCommand == "" {
 		fmt.Fprintf(os.Stderr, "Unable to test your deployment key: no deployment keys found")
 	}
 

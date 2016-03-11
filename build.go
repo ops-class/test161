@@ -25,6 +25,32 @@ var (
 	partialExp   = regexp.MustCompile(`.*partial_credit\(SECRET, "(.+)",.+\);.*`)
 )
 
+func GetDeployKeySSHCmd(users []string, keyDir string) string {
+
+	// We try both keys in case only one is setup
+	keyfiles := []string{}
+
+	for _, user := range users {
+		studentDir := path.Join(keyDir, user)
+		temp := path.Join(path.Join(studentDir, "id_rsa"))
+		if _, err := os.Stat(temp); err == nil {
+			// File exists
+			keyfiles = append(keyfiles, temp)
+		}
+	}
+
+	if len(keyfiles) > 0 {
+		cmd := "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes"
+		for _, key := range keyfiles {
+			cmd += fmt.Sprintf(" -i %v", key)
+		}
+		return cmd
+	} else {
+		return ""
+	}
+
+}
+
 // BuildTest is a variant of a Test, and specifies how the build process should work.
 // We obey the same schema so the front end tools can treat this like any other test.
 type BuildTest struct {
@@ -306,26 +332,11 @@ func commitCheckHandler(t *BuildTest, command *BuildCommand) error {
 // env variable based users' repo we're building. This forces git to use a specific
 // key file, which we need because each user generates a deployment key for test161.
 func (t *BuildTest) setCommandEnv() {
-	keyfile := ""
-	studentDir := ""
-
-	// Get env for git clone/fetch. Pick one of the partners that has a key.
-	for _, user := range t.conf.Users {
-		studentDir = path.Join(t.env.KeyDir, user)
-		temp := path.Join(path.Join(studentDir, "id_rsa"))
-		if _, err := os.Stat(temp); err == nil {
-			// File exists
-			keyfile = temp
-			break
-		}
-	}
-
 	t.cmdEnv = os.Environ()
-
-	if keyfile != "" {
-		t.cmdEnv = append(t.cmdEnv, fmt.Sprintf(`GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i %v`, keyfile))
+	if cmd := GetDeployKeySSHCmd(t.conf.Users, t.env.KeyDir); cmd != "" {
+		t.cmdEnv = append(t.cmdEnv, cmd)
 	} else {
-		t.env.Log.Println("Missing key file for", t.conf.Users)
+		t.env.Log.Println("Missing deployment key for", t.conf.Users)
 	}
 }
 
