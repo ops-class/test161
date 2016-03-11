@@ -91,7 +91,7 @@ users:
 }
 
 func isRootDir(path string) bool {
-	reqs := []string{"kernel", ".src", "sys161.conf"}
+	reqs := []string{"kernel", ".src"}
 	err := testPath(path, "root", reqs)
 	return err == nil
 }
