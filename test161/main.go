@@ -176,7 +176,7 @@ func main() {
 			}
 			exitcode = cmd.cmd()
 		} else {
-			fmt.Fprintf(os.Stderr, "'%v' is not a reconized test161 command", os.Args[1])
+			fmt.Fprintf(os.Stderr, "'%v' is not a recognized test161 command\n", os.Args[1])
 			usage()
 		}
 	}
