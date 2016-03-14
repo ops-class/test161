@@ -269,7 +269,13 @@ reason a test is skipped, which helps. Maybe a nice ASCII art tree would work he
 * Better error messages and hints about repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
 (Prevent backend storage DOS attacks.)
-* Add support for targets and tests to the bash completion script
+* Use URL associated with the tree-ish id provided to `test161 submit`
+
+=== Performance Tracking
+
+Most of the infrastructure is in place to handle performance targets, but we still
+need finish this and test it. Specifically, we need set the performance number in
+the Test object and use it properly in the Submission.
 
 === Parallel Testing Output
 
@@ -281,6 +287,16 @@ of the screen showing the tests that are being run.
 
 It would be nice to be able to add descriptions to tags and have `test161`
 print all tests that fall into a tag (or target) along with the description.
+
+=== Output Frequency
+
+For long running tests, OS/161 tests generate periodic output, usually in the
+form of a string of '.' characters. This output is used as a keep-alive
+mechanism, resetting test161's progress timeout. Because this output is in a
+single line, and it would create more unnecessary DB output and server load to
+break these into multiple lines, it would be nice to refactor things in such a
+way that the current output line is periodically persisted. This would give
+students a better indication of progress, as opposed to tests looking "stuck".
 
 === Key saving
 
@@ -298,5 +314,14 @@ think that there is a library for this.
 It should be possible to automate the process of hooking up a debugger and
 running BT on panics.
 
-=== Server Binary
+=== Server
+* Environment inference with environment variable overrides, similar to the test161 client
+** `test161-server config` to both show the configuration and modify it
+* Log the configuration on startup
+* More usablility cleanup
+** Usage
+** Help
+** Bash completion
 * Moving window for stats API
+* Periodically persist server stats, either in MongoDB or through the logger. We currently lose these on restart.
+* Move collaboration messages into their own files instead of hard-coding
