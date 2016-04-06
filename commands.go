@@ -187,7 +187,11 @@ func expandOutput(id string, td *templateData, processed map[string]bool, env *T
 	// Expand each expected output line, possibly referencing external commands
 	for _, origline := range tmpl.Output {
 		if origline.External == "true" {
-			if more, err := expandOutput(origline.Text, td, processed, env); err != nil {
+			copy := make(map[string]bool)
+			for key, _ := range processed {
+				copy[key] = true
+			}
+			if more, err := expandOutput(origline.Text, td, copy, env); err != nil {
 				return nil, err
 			} else {
 				expected = append(expected, more...)
