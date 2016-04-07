@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/imdario/mergo"
 	yaml "gopkg.in/yaml.v2"
 	"io/ioutil"
 	"math/rand"
@@ -164,9 +165,9 @@ func expandLine(t string, templdata interface{}) ([]string, error) {
 // Expand template output lines into the actual expected output. This may be
 // called recursively if the output line references another command.  The
 // 'processed' map takes care of checking for cycles so we don't get stuck.
-func expandOutput(id string, td *templateData, processed map[string]bool, env *TestEnvironment) ([]*ExpectedOutputLine, error) {
+func expandOutput(id string, tmpl *CommandTemplate, td *templateData,
+	processed map[string]bool, env *TestEnvironment) ([]*ExpectedOutputLine, error) {
 
-	var tmpl *CommandTemplate
 	var ok bool
 
 	// Check for cycles
@@ -174,12 +175,6 @@ func expandOutput(id string, td *templateData, processed map[string]bool, env *T
 		return nil, errors.New("Cycle detected in command template output.  ID: " + id)
 	}
 	processed[id] = true
-
-	// Get the template
-	tmpl, ok = env.Commands[id]
-	if !ok {
-		return nil, errors.New("Cannot find " + id + "in command map")
-	}
 
 	// expected output
 	expected := make([]*ExpectedOutputLine, 0)
@@ -191,10 +186,12 @@ func expandOutput(id string, td *templateData, processed map[string]bool, env *T
 			for key, _ := range processed {
 				copy[key] = true
 			}
-			if more, err := expandOutput(origline.Text, td, copy, env); err != nil {
-				return nil, err
-			} else {
-				expected = append(expected, more...)
+			if otherTmpl, ok := env.Commands[origline.Text]; ok {
+				if more, err := expandOutput(origline.Text, otherTmpl, td, copy, env); err != nil {
+					return nil, err
+				} else {
+					expected = append(expected, more...)
+				}
 			}
 		} else {
 			if lines, err := expandLine(origline.Text, td); err != nil {
@@ -246,6 +243,12 @@ func (c *Command) Instantiate(env *TestEnvironment) error {
 		return nil
 	}
 
+	// Individual tests can override the template in the commands files.
+	// This merges the command template on top of the overrides.
+	if err := mergo.Map(&c.Config, tmpl); err != nil {
+		return err
+	}
+	tmpl = &c.Config
 	c.Panic = tmpl.Panic
 	c.TimesOut = tmpl.TimesOut
 	c.Timeout = tmpl.Timeout
@@ -289,7 +292,7 @@ func (c *Command) Instantiate(env *TestEnvironment) error {
 	td := &templateData{args, len(args)}
 	processed := make(map[string]bool)
 
-	if expected, err := expandOutput(id, td, processed, env); err != nil {
+	if expected, err := expandOutput(id, tmpl, td, processed, env); err != nil {
 		return err
 	} else {
 		// Piece back together a command line for the command

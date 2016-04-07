@@ -41,11 +41,12 @@ type Test struct {
 	Depends     []string `yaml:"depends" json:"depends"`
 
 	// Configuration chunks
-	Sys161      Sys161Conf    `yaml:"sys161" json:"sys161"`
-	Stat        StatConf      `yaml:"stat" json:"stat"`
-	Monitor     MonitorConf   `yaml:"monitor" json:"monitor"`
-	CommandConf []CommandConf `yaml:"commandconf" json:"commandconf"`
-	Misc        MiscConf      `yaml:"misc" json:"misc"`
+	Sys161           Sys161Conf         `yaml:"sys161" json:"sys161"`
+	Stat             StatConf           `yaml:"stat" json:"stat"`
+	Monitor          MonitorConf        `yaml:"monitor" json:"monitor"`
+	CommandConf      []CommandConf      `yaml:"commandconf" json:"commandconf"`
+	Misc             MiscConf           `yaml:"misc" json:"misc"`
+	CommandOverrides []*CommandTemplate `yaml:"commandoverrides" json:"-"`
 
 	// Actual test commands to run
 	Content string `fm:"content" yaml:"-" json:"-" bson:"-"`
@@ -128,9 +129,10 @@ type Command struct {
 	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
 	// Set during init
-	Type          string         `json:"type"`
-	PromptPattern *regexp.Regexp `json:"-" bson:"-"`
-	Input         InputLine      `json:"input"`
+	Type          string          `json:"type"`
+	PromptPattern *regexp.Regexp  `json:"-" bson:"-"`
+	Input         InputLine       `json:"input"`
+	Config        CommandTemplate `json:"config"`
 
 	// Set during target init
 	PointsAvailable uint `json:"points_avail" bson:"points_avail"`
