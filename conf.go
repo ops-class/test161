@@ -81,7 +81,7 @@ var CONF_DEFAULTS = Test{
 		CPUs: 8,
 		RAM:  "1M",
 		Disk1: DiskConf{
-			Enabled: "true",
+			Enabled: "false",
 			Bytes:   "32M",
 			RPM:     7200,
 			NoDoom:  "true",
