@@ -82,13 +82,13 @@ var CONF_DEFAULTS = Test{
 		RAM:  "1M",
 		Disk1: DiskConf{
 			Enabled: "true",
-			Bytes:   "4M",
+			Bytes:   "32M",
 			RPM:     7200,
 			NoDoom:  "true",
 		},
 		Disk2: DiskConf{
 			Enabled: "false",
-			Bytes:   "2M",
+			Bytes:   "32M",
 			RPM:     7200,
 			NoDoom:  "false",
 		},
