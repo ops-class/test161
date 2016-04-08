@@ -426,3 +426,84 @@ func TestCommandReplaceArgs(t *testing.T) {
 		t.Log(test.original, test.newArgs, test.expected)
 	}
 }
+
+func TestCommandOverride(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	testString := `---
+commandoverrides:
+  - name: sem1
+    output:
+      - text: "Override SUCCESS"
+---
+sem1
+`
+	test, err := TestFromString(testString)
+	assert.Nil(err)
+
+	// find the sem1 command
+	var cmd *Command
+	for _, c := range test.Commands {
+		if c.Id() == "sem1" {
+			cmd = c
+			break
+		}
+	}
+
+	err = cmd.Instantiate(defaultEnv)
+	assert.Nil(err)
+
+	if cmd == nil {
+		t.Fatalf("cmd == nil)")
+	}
+
+	if len(cmd.ExpectedOutput) != 1 {
+		t.Fatalf("Command output != 1")
+	}
+
+	assert.Equal("Override SUCCESS", cmd.ExpectedOutput[0].Text)
+
+	// These are overrides only, so if these aren't specified, they get the
+	// default values.
+	assert.Equal(false, cmd.ExpectedOutput[0].Trusted)
+	assert.Equal("", cmd.ExpectedOutput[0].KeyName)
+
+	testString = `---
+commandoverrides:
+  - name: sem1
+    timeout: 1000.0
+---
+sem1
+`
+
+	test, err = TestFromString(testString)
+	assert.Nil(err)
+
+	// find the sem1 command
+	cmd = nil
+	for _, c := range test.Commands {
+		if c.Id() == "sem1" {
+			cmd = c
+			break
+		}
+	}
+
+	err = cmd.Instantiate(defaultEnv)
+	assert.Nil(err)
+
+	if cmd == nil {
+		t.Fatalf("cmd == nil)")
+	}
+
+	if len(cmd.ExpectedOutput) != 1 {
+		t.Fatalf("Command output != 1")
+	}
+
+	assert.Equal("sem1: SUCCESS", cmd.ExpectedOutput[0].Text)
+	assert.Equal(true, cmd.ExpectedOutput[0].Trusted)
+	assert.Equal("sem1", cmd.ExpectedOutput[0].KeyName)
+
+	assert.Equal(float32(1000.0), cmd.Timeout)
+
+}

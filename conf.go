@@ -81,14 +81,14 @@ var CONF_DEFAULTS = Test{
 		CPUs: 8,
 		RAM:  "1M",
 		Disk1: DiskConf{
-			Enabled: "true",
-			Bytes:   "4M",
+			Enabled: "false",
+			Bytes:   "32M",
 			RPM:     7200,
 			NoDoom:  "true",
 		},
 		Disk2: DiskConf{
 			Enabled: "false",
-			Bytes:   "2M",
+			Bytes:   "32M",
 			RPM:     7200,
 			NoDoom:  "false",
 		},
@@ -363,6 +363,16 @@ func doSimplePrefixes(inputCommands []string) ([]string, error) {
 
 const MAX_EXPANSION_LOOPS = 1024
 
+func (c *Command) setCommandConfig(test *Test) {
+	myname := c.Id()
+	for _, tmpl := range test.CommandOverrides {
+		if tmpl.Name == myname {
+			c.Config = *(tmpl)
+			return
+		}
+	}
+}
+
 func (t *Test) initCommands() (err error) {
 
 	// Check defined command prefixes
@@ -475,7 +485,7 @@ func (t *Test) initCommands() (err error) {
 			if nextConf != nil {
 				promptPattern = regexp.MustCompile(regexp.QuoteMeta(nextConf.Prompt))
 			}
-			t.Commands = append(t.Commands, &Command{
+			newCmd := &Command{
 				Type:          commandType,
 				ID:            uuid.NewV4().String(),
 				Test:          t,
@@ -487,7 +497,9 @@ func (t *Test) initCommands() (err error) {
 				Panic:    CMD_OPT_NO,
 				TimesOut: CMD_OPT_NO,
 				Timeout:  0.0,
-			})
+			}
+			newCmd.setCommandConfig(t)
+			t.Commands = append(t.Commands, newCmd)
 			commandLines = commandLines[1:]
 		}
 	}

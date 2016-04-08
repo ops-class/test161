@@ -110,6 +110,7 @@ func doSubmit() (exitcode int) {
 	// Check the version of git to figure out if we can even build locally
 	if ok, err := checkGitVersionAndComplain(); err != nil {
 		err = fmt.Errorf("Unable to check Git version: %v", err)
+		printRunError(err)
 		return
 	} else if !ok {
 		return
