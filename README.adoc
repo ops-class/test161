@@ -50,20 +50,61 @@ go get -u github.com/ops-class/test161/test161
 
 == Configuration
 
-In order to run `test161`, it needs to know about which <<tests>>, 
-<<targets>>, and <<commands>> it can run, and what to expect from  each command.
-Additionally, `test161` needs to know where to find your root directory for
-testing and your repository for submission. This information is specified in your
-`.test161.conf` file, which can be located in your `$HOME` directory, or whichever
-directory you plan to run `test161` in. If you run `test161 run` without a config
-file set up, an example will be displayed on screen.  You can redirect this output
-to `.test161.conf` and edit it accordingly.
+Out of the box, `test161` can't do much without a set of <<tests>>, <<targets>>,
+and <<commands>>, as well as an OS/161 `root` directory which contains your
+kernel. If you are starting from the https://github.com/ops-class/os161[ops-class OS/161 sources],
+as soon as you configure, compile, and install your userland binaries and kernel, `test161`
+will work in either your root or source trees.
+
+=== Submission
+
+In order to submit to the https://test161.ops-class.org[test161 server], you
+need to configure your username/token, which can be done with:
 
 [source,bash]
 ----
-test161 run > ~/.test161.conf
-vim ~/.test161.conf
+test161 config add-user <username> <token>
 ----
+
+Removing users and changing configured tokens can be done with:
+
+[source,bash]
+----
+test161 config del-user <username>              // Delete user information
+test161 config change-token <username> <token>  // Change token
+----
+
+=== Custom Configuration
+
+The ops-class sources create symlinks between your OS/161 source directory and
+root directory, which may not always be what you want. To support partial
+environments where either source or root cannot be inferred from the other,
+you can use `test161 config` to set the directory containing tests, targets,
+and commands:
+
+[source,bash]
+----
+test161 config test161dir <path>
+----
+
+This allows you to run `test161 run ...` from your root directory.
+
+==== Secure Overlay
+
+The `test161` server uses an overlay directory, containing an overlay for each
+assignment, which it rsyncs over student submissions before compiling. The
+overlay contains files that we don't trust from students, e.g. make files, anything
+that prints SUCCESS. To enable an overlay for local testing, set the
+`TEST161_OVERLAY` environment variable to the overlay path.
+
+==== Local Server
+
+Set the TEST161_SERVER environment variable for testing submissions with a local
+server.
+
+==== Printing Configuration
+
+To view the current test161 configuration, simply run `test161 config`.
 
 == Usage
 
@@ -89,6 +130,7 @@ test161 run asst1            # Run the asst1 target
 There are several command line flags that can be specified to customize how `test161` runs tests.
 
 * `-dry-run` (`-r`): Show the tests that would be run, but don't run them.
+* `-explain` (`-x`): Show test detail, such as name, descriptions, `sys161 configuration`, commands, and expected output.
 * `-sequential` (`-s`): By default the output of all tests are interleaved, which can be hard to debug.
 Specify this option to run tests one at a time.
 * `-no-dependencies` (`-n`): Run the given tests without also running their dependencies. In test files, you can specify a
@@ -107,7 +149,7 @@ per test status).
 conf:
   cpus: 8
   ram: 1M
-  disk1:
+  disk1: # disabled by default, but should be enabled when you want swap disk
     sectors: min(2 * ram, 8000) # 8000 is a minimum due to a current sys161 bug
     rpm: 7200
     nodoom: true
