@@ -13,7 +13,7 @@ type ProgramVersion struct {
 var Version = ProgramVersion{
 	Major:    1,
 	Minor:    2,
-	Revision: 3,
+	Revision: 4,
 }
 
 func (v ProgramVersion) String() string {
