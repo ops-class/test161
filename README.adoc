@@ -252,8 +252,6 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 
 == TODOs
 
-=== Bugs
-
 === Nits
 
 * Colored test output on terminals that support it? (Particularly for correct/incorrect.)
@@ -265,7 +263,7 @@ dependency graph. (That way all skipped tests should be shown last.)
 succeeds (even leaf nodes), but some unrelated depencency fails early. I made the
 default print order topological sort, but it's still confusing. I added the
 reason a test is skipped, which helps. Maybe a nice ASCII art tree would work here...
-* Better error messages and hints about repository problems:
+* Check for repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
 (Prevent backend storage DOS attacks.)
 * Use URL associated with the tree-ish id provided to `test161 submit`
