@@ -254,8 +254,6 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 
 === Bugs
 
-* We do not currently support `Git` beta versions (rcX).
-
 === Nits
 
 * Colored test output on terminals that support it? (Particularly for correct/incorrect.)

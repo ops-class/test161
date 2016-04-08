@@ -413,7 +413,9 @@ func (git *gitRepo) isRemoteUpToDate(debug bool, deployKey int) (bool, error) {
 	return localCommit == remoteCommit, nil
 }
 
-var gitVersionRegexp *regexp.Regexp = regexp.MustCompile(`^git version (\d+)\.(\d+)\.(\d+)$`)
+// Normally, this is 'git version M.m.r', but we've seen -rcN tacked on for
+// release candidates.
+var gitVersionRegexp *regexp.Regexp = regexp.MustCompile(`^git version (\d+)\.(\d+)\.(\d+).*$`)
 
 func gitVersion() (ver test161.ProgramVersion, err error) {
 
