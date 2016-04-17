@@ -51,6 +51,7 @@ type MonitorConf struct {
 	Kernel          Limits  `yaml:"kernel" json:"kernel"`
 	User            Limits  `yaml:"user" json:"user"`
 	ProgressTimeout float32 `yaml:"progresstimeout" json:"progresstimeout"`
+	CommandTimeout  float32 `yaml:"commandtimeout" json:"commandtimeout"`
 }
 
 type Limits struct {
@@ -111,10 +112,11 @@ var CONF_DEFAULTS = Test{
 			Max:       1.0,
 		},
 		ProgressTimeout: 10.0,
+		CommandTimeout:  300.0,
 	},
 	Misc: MiscConf{
 		CommandRetries:   5,
-		PromptTimeout:    300.0,
+		PromptTimeout:    1800.0,
 		CharacterTimeout: 1000,
 		RetryCharacters:  "true",
 		KillOnExit:       "false",

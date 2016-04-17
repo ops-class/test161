@@ -205,6 +205,33 @@ func (t *Test) getWallTime() TimeFixedPoint {
 	return TimeFixedPoint(float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000))
 }
 
+func (t *Test) SetEnv(env *TestEnvironment) {
+	t.env = env
+}
+
+func (t *Test) MergeAllDefaults() error {
+
+	// Merge in test161 defaults for any missing configuration values. This
+	if err := t.MergeConf(CONF_DEFAULTS); err != nil {
+		return err
+	}
+
+	for _, c := range t.Commands {
+		// Set the instance-specific input and expected output
+		if err := c.Instantiate(t.env); err != nil {
+			return err
+		}
+
+		// If no timeout was specified in the command definition or override
+		// (test), use the default.
+		if c.Timeout == 0.0 {
+			c.Timeout = t.Monitor.CommandTimeout
+		}
+	}
+
+	return nil
+}
+
 // Run a test161 test.
 func (t *Test) Run(env *TestEnvironment) (err error) {
 	// Serialize the current command state.
@@ -219,21 +246,11 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		env.notifyAndLogErr("Test Complete", t, MSG_PERSIST_COMPLETE, 0)
 	}()
 
-	// Set the instance-specific input and expected output
-	for _, c := range t.Commands {
-		if err = c.Instantiate(env); err != nil {
-			t.addStatus("aborted", "")
-			t.Result = TEST_RESULT_ABORT
-			return
-		}
-	}
-
-	// Merge in test161 defaults for any missing configuration values
-	err = t.MergeConf(CONF_DEFAULTS)
+	err = t.MergeAllDefaults()
 	if err != nil {
 		t.addStatus("aborted", "")
 		t.Result = TEST_RESULT_ABORT
-		return err
+		return
 	}
 
 	// Create temp directory.

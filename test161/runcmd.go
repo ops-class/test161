@@ -372,8 +372,8 @@ func explain(tg *test161.TestGroup) {
 		fmt.Println("\nSys161 Conf:")
 
 		// Merge in test161 defaults for any missing configuration values
-		// FIXME: Can merge when the test is created instead of in Test.Run()?
-		test.MergeConf(test161.CONF_DEFAULTS)
+		test.SetEnv(env)
+		test.MergeAllDefaults()
 		conf, _ := test.PrintConf()
 		fmt.Println(strings.TrimSpace(conf))
 		fmt.Println()
@@ -403,7 +403,6 @@ func explain(tg *test161.TestGroup) {
 
 		for _, cmd := range test.Commands {
 			// Instantiate the command so we get the expected output
-			cmd.Instantiate(env)
 			fmt.Println("    Cmd Line    :", cmd.Input.Line)
 			fmt.Println("      Panics    :", cmd.Panic)
 			fmt.Println("      Times Out :", cmd.TimesOut)
