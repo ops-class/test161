@@ -112,7 +112,7 @@ var CONF_DEFAULTS = Test{
 			Max:       1.0,
 		},
 		ProgressTimeout: 10.0,
-		CommandTimeout:  300.0,
+		CommandTimeout:  60.0,
 	},
 	Misc: MiscConf{
 		CommandRetries:   5,
