@@ -131,6 +131,9 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 		if res.Test.Result != test161.TEST_RESULT_CORRECT {
 			allCorrect = false
 		}
+		if res.Err != nil {
+			fmt.Fprint(os.Stderr, "Error running %v: %v\n", res.Test.DependencyID, res.Err)
+		}
 	}
 
 	test161.StopManager()
