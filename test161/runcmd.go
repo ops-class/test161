@@ -366,17 +366,39 @@ func explain(tg *test161.TestGroup) {
 
 		fmt.Println()
 
+		// Merge in test161 defaults for any missing configuration values
+		test.SetEnv(env)
+		test.MergeAllDefaults()
+
 		// Test ID
 		fmt.Println(test.DependencyID)
 		fmt.Println(strings.Repeat("-", 60))
 		fmt.Println("Name        :", test.Name)
 		fmt.Println("Description :", strings.TrimSpace(test.Description))
 
-		fmt.Println("\nSys161 Conf:")
+		// Monitor
+		if test.Monitor.Enabled == "true" {
+			fmt.Println("\ntest161 Monitor Conf:")
+			fmt.Println("  Progress Timeout :", test.Monitor.ProgressTimeout)
+			fmt.Println("  Command Timeout  :", test.Monitor.CommandTimeout)
+			fmt.Println("  Window           :", test.Monitor.Window)
+			if test.Monitor.Kernel.EnableMin == "true" {
+				fmt.Println("  Kernel Min       :", test.Monitor.Kernel.Min)
+			} else {
+				fmt.Println("  Kernel Min       : disabled")
+			}
+			fmt.Println("  Kernel Max       :", test.Monitor.Kernel.Max)
 
-		// Merge in test161 defaults for any missing configuration values
-		test.SetEnv(env)
-		test.MergeAllDefaults()
+			if test.Monitor.User.EnableMin == "true" {
+				fmt.Println("  User Min         :", test.Monitor.User.Min)
+			} else {
+				fmt.Println("  User Min         : disabled")
+			}
+			fmt.Println("  User Max         :", test.Monitor.User.Max)
+		}
+
+		// Sys161
+		fmt.Println("\nsys161 Conf:")
 		conf, _ := test.PrintConf()
 		fmt.Println(strings.TrimSpace(conf))
 		fmt.Println()
