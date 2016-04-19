@@ -329,7 +329,7 @@ func (s *Submission) validResult() bool {
 	}
 }
 
-func (student *Student) getStat(targetName string) *TargetStats {
+func (student *Student) getStat(targetName string, uint targetVersion) *TargetStats {
 	for _, stat := range student.Stats {
 		if stat.TargetName == targetName {
 			return stat
@@ -357,6 +357,15 @@ func (student *Student) updateStats(submission *Submission) {
 	// Always increment submission count, but everything else depends on the
 	// submission result
 	stat.TotalSubmissions += 1
+
+	// If the target changed, like in ASST3 where we're incrementally building it,
+	// update the max score so the front-end displays it correctly.
+	// TODO: We might want to keep multiple version in the stats collection, but
+	// that would require aggregation (slow) on the front-end.
+	if stat.TargetVersion < submission.TargetVersion {
+		stat.MaxScore = submission.MaxScore
+		stat.TargetVersion = submission.TargetVersion
+	}
 
 	if submission.validResult() {
 
