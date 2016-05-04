@@ -347,7 +347,8 @@ func (t *BuildTest) addGitCommands() {
 	// If we have the repo cached, fetch instead of clone.
 	if _, err := os.Stat(t.srcDir); err == nil {
 		// First, reset it so we remove previous overlay changes
-		t.addCommand("git reset --hard", t.srcDir)
+		t.addCommand("git reset --hard", t.srcDir) // tracked files
+		t.addCommand("git clean -d -f", t.srcDir)  // untracked files
 		t.addCommand("git fetch", t.srcDir)
 		t.wasCached = true
 	} else {
