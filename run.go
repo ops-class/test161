@@ -468,7 +468,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 			}
 			break
 		} else if cur.Status == COMMAND_STATUS_INCORRECT {
-			if t.ScoringMethod == "entire" {
+			if t.ScoringMethod == TEST_SCORING_ENTIRE {
 				// No point in continuing, just shut down ungracefully.
 				t.addStatus("shutdown", "short-circuit")
 				break
