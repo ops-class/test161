@@ -69,7 +69,7 @@ other OS/161 sources, see <<Custom Configuration>>.
 The ops-class sources create symlinks footnote:[`.root` is in your source
 directory and points to your root directory, `.src` is in your root directory
 and points to your source directory] between your OS/161 source and root
-directories in order to infer your envirnoment, which may not always be what
+directories in order to infer your environment, which may not always be what
 you want. To support partial environments where either source or root cannot be
 inferred from the other, or you want to use a specific set of `test161`
 configuration files, you can use `test161 config` to set the test161 directory
@@ -92,7 +92,7 @@ In addition to configuring the `test161` directory, `test161` supports
 environment variables that may be useful during development testing and
 in advanced and use cases.
 
-* *`TEST161_SERVER`*: This variable allows you to set a custom backend server,
+* *`TEST161_SERVER`*: This variable allows you to set a custom back-end server,
 for example:
 
 [source,bash]
@@ -136,40 +136,135 @@ test161 config
 
 == Usage
 
-=== Running Tests
+`test161` is designed around two main tasks: running tests and submitting
+targets. Additionally, sub-commands exist for configuring test161 and
+listing existing tests.
 
-To run a tests, group of tests, or target, use the `test161 run <names>` sub-command.
-Here, names can be a single target, a list of tests, or a list of <<tags>>.footnote:[In the case
-that tag and target names conflict, specify `-tag` if you mean tag.] For test files,
-<names> is a list of http://www.linuxjournal.com/content/globstar-new-bash-globbing-option [globstar]
-style file names.  The following are all valid commands:
+Running `test161` with no arguments will print usage information. For a more
+detailed description of `test161` sub-commands, use `test161 help`.
+
+=== Tests, Targets, and Tags
+
+The `test161` sub-commands often take one or more tests, targets, and tags as
+arguments. A *test* consists of one or more OS/161 commands along with
+metadata, `sys161` configuration, and possibly some additional `test161` runtime
+configuration. Tests can include one or more *tags*, which allow related tests
+to be grouped and run together. *Targets* are a set of tests that are run
+together and allow point values to be assigned to tests.
+
+==== Listing Tests, Targets, and Tags
+
+Available tests, targets, and tags can easily be listed with the `test161 list`
+sub-command:
 
 [source,bash]
 ----
-test161 run sync/*.t         # Run all tests in the tests/sync
-test161 run **/l*.t          # Run all tests in all sub-directories beginning with 'l'
-test161 run syncprobs/sp*.t  # Run the syncprobs
-test161 run sync/lt1.t       # Run lock test 1
-test161 run locks            # Run all lock tests (tests tagged with 'locks')
-test161 run asst1            # Run the asst1 target
+test161 list tests        # List all tests with descriptions
+test161 list tags         # List all tags and which tests share each tag
+test161 list targets      # List all targets
+test161 list targets -r   # List all targets available for submission on the server
+----
+
+=== Running Tests
+
+To run a single test, group of tests, or single target, use the `test161 run
+<names>` sub-command. Here, `<names>` can be a single target, one or more tests,
+or one or more tags.footnote:[In the case that tag and target names conflict,
+specify `-tag` if you mean tag.] For test files, `<names>` is a list of
+http://www.linuxjournal.com/content/globstar-new-bash-globbing-option[globstar]
+style file names, with paths specified relative to the root of the test
+directory.  The following are all valid commands:
+
+[source,bash]
+----
+test161 run synch/*.t         # Run all tests in the tests/sync/
+test161 run **/l*.t           # Run all tests in all sub-directories beginning with 'l'
+test161 run synchprobs/sp*.t  # Run the synchprobs
+test161 run synch/lt1.t       # Run lock test 1
+test161 run locks             # Run all lock tests (tests tagged with 'locks')
+test161 run asst1             # Run the asst1 target
+----
+
+==== Test Concurrency
+
+By default, `test161` runs all tests in parallel to speed up processing. As a
+result, the output produced by each test will be interleaved, which can be
+difficult to debug. It is possible to run tests sequentially using the
+`-sequential (-s)` flag.
+
+==== Test Dependencies
+
+Each test specifies a list of dependencies, tests that must pass in order for
+that test to run. For example, our condition variable tests depend on our lock
+tests since locks must work for CVs to work. Internally, `test161` creates a
+dependency graph for all the tests it needs to run and will short-circuit any
+children in the dependency graph in case of failure. By default, all
+dependencies are run when running any group of tests. For targets, this is
+unavoidable. For other groups of tests, this behavior can be suppressed with
+the `-no-dependencies (-n)` flag. This can save a lot of time when debugging a
+particular test that has a lot of dependencies.
+
+==== Command Line Flags
+
+There are several command line flags that can be specified to customize how
+`test161` runs tests.
+
+* `-dry-run` (`-r`): Show the tests that would be run, but don't run them.
+
+* `-explain` (`-x`): Show test detail, such as name, descriptions, `sys161`
+configuration, commands, and expected output.
+
+* `-sequential` (`-s`): By default the output of all tests are interleaved,
+which can be hard to debug. Specify this option to run tests one at a time.
+
+* `-no-dependencies` (`-n`): Run the given tests without also running their
+dependencies. 
+
+* `-verbose` (`-v`): There are three levels of output: `loud` (default), `quiet`
+(no test output), and `whisper` (only final summary, no per-test status).
+
+=== Submitting
+
+Solutions are submitted with the `test161 submit` sub-command. In the most
+common case, you will use the following command from your source or root
+directory, where <target> is the target you wish to submit:
+
+[source,bash]
+----
+test161 submit <target>
+----
+
+By default, `test161 submit` will use the commit associated with the tip of
+your current Git branch. This behavior can be overridden by specifying a
+tree-ish argument after the target argument. For example, all of the following
+are valid commands:
+
+[source,bash]
+----
+test161 submit asst1            # Submit the current branch to the asst1 target
+test161 submit asst2 working    # Submit the working branch/tag to the asst2 target
+test161 submit asst3 3df3dd59a  # Submit the commit 3df3dd59a to the asst3 target
 ----
 
 ==== Command Line Flags
-There are several command line flags that can be specified to customize how `test161` runs tests.
 
-* `-dry-run` (`-r`): Show the tests that would be run, but don't run them.
-* `-explain` (`-x`): Show test detail, such as name, descriptions, `sys161 configuration`, commands, and expected output.
-* `-sequential` (`-s`): By default the output of all tests are interleaved, which can be hard to debug.
-Specify this option to run tests one at a time.
-* `-no-dependencies` (`-n`): Run the given tests without also running their dependencies. In test files, you can specify a
-test's dependencies, and the test will be skipped if the dependency fails. The default behevior is to run all dependencies
-along with each test specified on the command line. This option does not apply for targets.
-* `-verbose` (`-v`): There are 3 levels of output: `loud` (default), `quiet` (no test output), and `whisper` (only final summary, no
-per test status).
+`test161 submit` has a few useful command line flags:
+
+* `-debug`: Print debug output when submitting, namely all Git commands used to
+determine repository details.
+
+* `-verify`: Check for local and remote issues without submitting, i.e. verify
+that the submission would be accepted. This option is useful for verifying that
+your configuration --  users, tokens, keys, etc. -- is correct.
+
+* `-no-cache`: As an optimization, `test161` caches a cloned copy of your repo
+in the same way the server does in order to improve the performance of
+subsequent submissions. In some cases, it is useful to override this behavior.
 
 == Requirements
 
 * `sys161` and `disk161` in the path.
+* Git version >= 2.3.0.
 
 == Default Settings
 
@@ -211,7 +306,7 @@ monitor:
 
 The basic unit in `test161` is a command. such as `lt1` for running Lock Test 1,
 or `sp1` to run the whalemating test.  Information about what to
-expect when running these commands, as well as what input/ouput they expect
+expect when running these commands, as well as what input/output they expect
  is specified in the `commands/` directory in your test161 root directory.
 All .tc (test command) file in this directory will be loaded and commands must
 only be specified once.
@@ -221,7 +316,7 @@ only be specified once.
 Test files (`*.t`) are located in the `tests/` directory in your test161 root
 directory. This directory can contain subdirectories to help organize tests.
 Each test consists of one or more commands, and each test can have its own
-`sys161` configuration.  Tests are run in their own sandboxed envrionment, 
+`sys161` configuration.  Tests are run in their own sandboxed environment, 
 but commands within the test are executed within the same `sys161` session.
 Some tests will consist of multiple commands, and such tests are designed to
 stress test your system.
@@ -330,7 +425,7 @@ a MongoPersistence type which outputs JSON data to our mongo backend server.
 * Order the test output in some meaningful way, probably by depth in the
 dependency graph. (That way all skipped tests should be shown last.)
 ** Not necessarily true. You could have a long, unrelated branch that
-succeeds (even leaf nodes), but some unrelated depencency fails early. I made the
+succeeds (even leaf nodes), but some unrelated dependency fails early. I made the
 default print order topological sort, but it's still confusing. I added the
 reason a test is skipped, which helps. Maybe a nice ASCII art tree would work here...
 * Check for repository problems:
@@ -387,7 +482,7 @@ running BT on panics.
 * Environment inference with environment variable overrides, similar to the test161 client
 ** `test161-server config` to both show the configuration and modify it
 * Log the configuration on startup
-* More usablility cleanup
+* More usability cleanup
 ** Usage
 ** Help
 ** Bash completion
