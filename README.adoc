@@ -7,10 +7,17 @@ https://en.wikipedia.org/wiki/R3000[MIPS R3000] simulator. You are probably
 not interested in `test161` unless you are a student taking or an instructor
 teaching a course that uses OS/161.
 
-== Installing Go
+== Installation and Environment
 
-Many Linux distributions package fairly out-of-date versions of Go. Instead,
-we encourage you to install the https://github.com/moovweb/gvm[Go Version Manager (GVM)]:
+`test161` is written in https://golang.org/[Go], and the instructions below
+assume you are installing from source and/or setting up your development
+environment to work on `test161`. Alternatively, the current stable binary
+version of `test161` is included in the https://www.ops-class.org/asst/toolchain/#ppa[ops-class.org PPA].
+
+=== Installing Go
+
+Many Linux distributions package fairly out-of-date versions of Go. Instead, we
+encourage you to install the https://github.com/moovweb/gvm[Go Version Manager (GVM)]:
 
 [source,bash]
 ----
@@ -32,14 +39,14 @@ gvm install go1.5.3
 gvm use 1.5.3 --default
 ----
 
-=== `GOPATH`
+==== `GOPATH`
 
 Note that `gvm` will set your `GOPATH` and `PATH` variables properly to allow
 you to run Go binaries that you install. However, if you are interested in
 writing Go code you should set a more accessible `GOPATH` as described as https://golang.org/doc/code.html#GOPATH[described
 here.]
 
-== Installing `test161`
+=== Installing `test161`
 
 Once you have Go installed, upgrading or installing `test161` is simple:
 
@@ -48,15 +55,59 @@ Once you have Go installed, upgrading or installing `test161` is simple:
 go get -u github.com/ops-class/test161/test161
 ----
 
-== Configuration
+=== Configuration
 
-Out of the box, `test161` can't do much without a set of <<tests>>, <<targets>>,
-and <<commands>>, as well as an OS/161 `root` directory which contains your
-kernel. If you are starting from the https://github.com/ops-class/os161[ops-class OS/161 sources],
-as soon as you configure, compile, and install your userland binaries and kernel, `test161`
-will work in either your root or source trees.
+Out of the box, `test161` can't do much without a set of test scripts and an
+OS/161 `root` directory which contains your kernel and user binaries. If you
+are starting from the https://github.com/ops-class/os161[ops-class OS/161 sources],
+as soon as you configure, compile, and install your userland binaries and kernel,
+`test161` will work in either your root or source trees. If you are starting from
+other OS/161 sources, see <<Custom Configuration>>.
 
-=== Submission
+==== Custom Configuration
+
+The ops-class sources create symlinks footnote:[`.root` is in your source
+directory and points to your root directory, `.src` is in your root directory
+and points to your source directory] between your OS/161 source and root
+directories in order to infer your envirnoment, which may not always be what
+you want. To support partial environments where either source or root cannot be
+inferred from the other, or you want to use a specific set of `test161`
+configuration files, you can use `test161 config` to set the test161 directory
+footnote:[The directory containing the tests, targets, and commands subdirectories.
+For the ops-class sources, the test161 directory is named `test161` and is a
+subdirectory of the OS/161 source directory.].
+
+[source,bash]
+----
+test161 config test161dir <path>
+----
+
+This allows you to run `test161` tests from your root directory using the test
+files in `test161dir`. If you do not have symlinks created for environment
+inference, submitting will need to be done from your source directory.
+
+===== Environment Variables
+
+In addition to configuring the `test161` directory, `test161` supports
+environment variables that may be useful during development testing and
+in advanced and use cases.
+
+* *`TEST161_SERVER`*: This variable allows you to set a custom backend server,
+for example:
+
+[source,bash]
+----
+export TEST161_SERVER=http://localhost:4000
+----
+
+* *`TEST161_OVERLAY`*: The `test161` server uses an overlay directory
+containing trusted files for each assignment. As a security measure, these
+trusted files -- make files, user and kernel test code -- replace students'
+versions when testing their submissions. Setting this environment variable
+allows you to test an overlay using the `test161` client, allowing you to test
+overlay changes without submitting to a `test161` server.
+
+==== Submission Configuration
 
 In order to submit to the https://test161.ops-class.org[test161 server], you
 need to configure your username/token, which can be done with:
@@ -70,41 +121,18 @@ Removing users and changing configured tokens can be done with:
 
 [source,bash]
 ----
-test161 config del-user <username>              // Delete user information
-test161 config change-token <username> <token>  // Change token
+test161 config del-user <username>              # Delete user information
+test161 config change-token <username> <token>  # Change token
 ----
-
-=== Custom Configuration
-
-The ops-class sources create symlinks between your OS/161 source directory and
-root directory, which may not always be what you want. To support partial
-environments where either source or root cannot be inferred from the other,
-you can use `test161 config` to set the directory containing tests, targets,
-and commands:
-
-[source,bash]
-----
-test161 config test161dir <path>
-----
-
-This allows you to run `test161 run ...` from your root directory.
-
-==== Secure Overlay
-
-The `test161` server uses an overlay directory, containing an overlay for each
-assignment, which it rsyncs over student submissions before compiling. The
-overlay contains files that we don't trust from students, e.g. make files, anything
-that prints SUCCESS. To enable an overlay for local testing, set the
-`TEST161_OVERLAY` environment variable to the overlay path.
-
-==== Local Server
-
-Set the TEST161_SERVER environment variable for testing submissions with a local
-server.
 
 ==== Printing Configuration
 
-To view the current test161 configuration, simply run `test161 config`.
+To view the current test161 configuration, simply run:
+
+[source,bash]
+----
+test161 config
+----
 
 == Usage
 
