@@ -1,5 +1,7 @@
 = `test161`: A Testing Tool for OS/161
 
+:source-highlighter: coderay
+
 `test161` is a command line tool for automated testing of
 http://os161.eecs.harvard.edu[OS/161] instructional operating system kernels
 that run inside the `sys161` (System/161)
@@ -149,7 +151,7 @@ The `test161` sub-commands often take one or more tests, targets, and tags as
 arguments. A *test* consists of one or more OS/161 commands along with
 metadata, `sys161` configuration, and possibly some additional `test161` runtime
 configuration. Tests can include one or more *tags*, which allow related tests
-to be grouped and run together. *Targets* are a set of tests that are run
+to be grouped and run together. *Targets* consist of a set of tests that are run
 together and allow point values to be assigned to tests.
 
 ==== Listing Tests, Targets, and Tags
@@ -266,52 +268,136 @@ subsequent submissions. In some cases, it is useful to override this behavior.
 * `sys161` and `disk161` in the path.
 * Git version >= 2.3.0.
 
-== Default Settings
-
-....
-conf:
-  cpus: 8
-  ram: 1M
-  disk1: # disabled by default, but should be enabled when you want swap disk
-    sectors: min(2 * ram, 8000) # 8000 is a minimum due to a current sys161 bug
-    rpm: 7200
-    nodoom: true
-  disk2: # disabled by default, but uses these defaults if configured
-    sectors: min(2 * ram, 8000)
-    rpm: 7200
-    nodoom: false
-  random: seed=random # random number generated at configuration time
-stat:
-  resolution: 0.01
-  window: 1
-monitor:
-  enabled: "true
-  intervals: 10
-  kernel:
-    enabled: false
-    min: 0.001
-    max: 1.0
-  user:
-    enabled: false
-    min: 0.0001
-    max: 1.0
-  timeouts:
-    prompt: 300
-    progress: 10
-....
 
 == Commands, Tests, and Targets
 
-=== [[commands]]Commands
+`test161` uses a http://yaml.org[YAML]-based configuration system, with
+configuration files located across subdirectories of your `test161`
+directory. The anatomy of this configuration directory is as follows:
 
-The basic unit in `test161` is a command. such as `lt1` for running Lock Test 1,
+* *commands/*: *.tc files containing OS/161 command specification. Each .tc
+file usually contains multiple related commands.
+
+* *targets/*: *.tt files containing target definitions, one per target.
+
+* *tests/*: *.t files containing test specification, one per test. This
+directory will contain subdirectories used to organize related tests.
+
+=== Commands
+
+The basic unit in `test161` is a command, such as `lt1` for running Lock Test 1,
 or `sp1` to run the whalemating test.  Information about what to
 expect when running these commands, as well as what input/output they expect
- is specified in the `commands/` directory in your test161 root directory.
-All .tc (test command) file in this directory will be loaded and commands must
-only be specified once.
+is specified in the `commands` directory in your test161 root directory.
+All .tc files in this directory will be loaded, and commands must only be
+specified once.
 
-=== [[tests]]Tests
+The following is the full syntax for a commands file:
+
+[source,yaml]
+----
+# Each commands file consists of a collection of templates. An * indicates the
+# default option.
+templates:
+   # Command name/id. For userland tests, include the path and binary name.
+ - name: /testbin/true
+
+   # An array of input arguments (optional). This should be included if the
+   # command needs default arguments.
+   input:
+     - arg 1
+     - arg 2
+
+   # An array of expected output lines (optional). This should be specified
+   # if the output differs from the default <name>: SUCESS.
+   output:
+       # The expected output text
+     - text: "You should see this message if the test passed!"
+       # true if the output is secured, false if not
+       trusted:  true
+       # true if text references an external command, false* if not
+       external: false
+
+   # Whether or not the command panics - yes, no*, or maybe
+   panics: no
+
+   # Whether or not the command is expected to time out - yes, no*, maybe
+   timesout: no
+
+   # Time (s) after which the test is terminated - 0.0* indicates no timeout
+   timeout: 0.0
+----
+
+Minimally, any command that is to be evaluated for correctness needs to be
+present in exactly one commands (.tc) file with the `name` property specified.
+If no output is specified, the expected output is `<command name>: SUCCESS`.
+
+==== Examples
+
+In the following example, several tests are specified all of which expect the
+default output.
+
+[source,yaml]
+----
+templates:
+  - name: lt1
+  - name: lt2
+  - name: sem1
+  ...
+----
+
+Some tests might be designed to cause a kernel panic.
+
+[source,yaml]
+----
+templates:
+  ...
+  - name: lt2
+    panics: yes
+    output:
+      - text: "lt2: Should panic..."
+  ...
+----
+
+Some OS/161 tests are composed of other tests, in which case the command output
+will reference an external command:
+
+[source,yaml]
+----
+templates:
+  ...
+ - name: /testbin/triplehuge
+    output:
+      - {text: /testbin/huge, external: true, trusted: true}
+      - {text: /testbin/huge, external: true, trusted: true}
+      - {text: /testbin/huge, external: true, trusted: true}
+  ...
+----
+
+Input and output can use https://golang.org/pkg/text/template/[Go's text templates]
+to specify more complex text. The arguments and argument length are available in
+the text templates as `.Args` and `.ArgLen`, respectively. Custom functions are
+also provided; see the `funcMap` in
+https://github.com/ops-class/test161/blob/master/commands.go[commands.go]
+for details.
+
+The following example illustrates how the add test's output can be determined
+from random integer inputs:
+
+[source,yaml] 
+----
+templates:
+  ...
+  - name: /testbin/add
+    input:
+      - "{{randInt 2 1000}}"
+      - "{{randInt 2 4000}}"
+    output:
+      - text: "/testbin/add: {{$x:= index .Args 0 | atoi}}{{$y := index .Args 1 | atoi}}{{add $x $y}}"
+...
+----
+
+=== Tests
 
 Test files (`*.t`) are located in the `tests/` directory in your test161 root
 directory. This directory can contain subdirectories to help organize tests.
@@ -321,16 +407,124 @@ but commands within the test are executed within the same `sys161` session.
 Some tests will consist of multiple commands, and such tests are designed to
 stress test your system.
 
-=== [[targets]]Targets
+The following is an example of a `test161` test file:
 
-Target files (`*.tt`) are located in the `targets/` directory in your test161 root
-directory. Targets specify which tests are run for each assignment, and
-how the scoring is distributed. When you `test161 submit` your assignments, you will
-specify which target to submit to.
+[source,yaml]
+----
+---
+name: "Semaphore Test"
+description:
+  Tests core semaphore logic through cyclic signaling.
+tags: [synch, semaphores, kleaks]
+depends: [boot]
+sys161:
+  cpus: 32
+---
+sem1
+----
 
-== Features
+==== Front Matter
 
-=== Testfile Syntactic Sugar
+The test consist of two parts. The header in between the first and second
+`---` is http://yaml.org[YAML] front matter that provides test metadata
+and configuration.
+
+The following describes the syntax and semantics of the test metadata:
+
+[source, yaml] 
+----
+---
+name: "Test Name"            # The name this is displayed in test161 commands
+description: "Description"   # Longer test description, used in test161 list tests
+tags: [tag1, tag2]           # All tests with the same tag can be run with test161 run <tag>
+depends: [dep1, dep2]        # Specify dependencies. If these fail, the test is skipped
+...
+---
+----
+
+===== Configuration Options
+
+In addition to metadata, the test file syntax supports various configuration
+options for both `test161` and the underlying `sys161` instance. The following
+provides both the syntax and semantics, as well as the default values for all
+configuration options.
+
+[source, yaml]
+----
+conf:
+  cpus: 8    # 1-32 are valid
+  ram: 1M    # Number of bytes, with optional K or M prefix
+  disk1:     # disabled by default, but should be enabled when you want swap disk
+    enabled: false
+    rpm: 7200
+    bytes: 32M
+    nodoom: true
+    random: seed=random # random number generated at configuration time
+  disk2: #    disabled by default, but uses these defaults if configured
+    enabled: false
+    rpm: 7200
+    bytes: 32M
+    nodoom: false
+    random: seed=random # random number generated at configuration time
+stat:
+  resolution: 0.01
+  window: 1
+monitor:
+  enabled: true
+  window: 400  # Number of samples to include in kernel and user calculations
+  kernel:
+    enablemin: false
+    min: 0.001  # Min ratio of instructions that must be attributed to kernel code
+    max: 1.0    # Max ratio of instructions that attributed to kernel code
+  user:
+    enablemin: false
+    min: 0.0001 # Min ratio of instructions that must be attributed to user code
+    max: 1.0    # Max ratio of instructions that attributed to user code
+  progresstimeout: 10.0 # Seconds without character output before the test fails
+  commandtimeout: 0.0   # Seconds of command runtime before a test is stopped
+misc:
+  # The next three configuration parameters deal with sys161 occasionally
+  # dropping input characters, such as when programmatically sending a command.
+  charactertimeout: 1000  # Time (s) to wait for a character to appear in the
+                          # output stream after sending it.
+  retrycharacters: true   # Whether or not to retry sending characters if the
+                          # character timeout is exceeded.
+  commandretries: 5       # Number of times a command is retried if the number
+                          # of character retries is exceeded.
+  prompttimeout: 1800.0   # Time (s) before halting a test if the current prompt
+                          # is not seen in the output stream.
+  killonexit: false       # If true, send the kill signal to sys161. This should
+                          # not generally be needed.
+----
+
+===== Command Override
+
+In addition to the configuration options, command behavior can be overridden
+in the YAML front matter. A partial <<Commands, command template>> can be
+specified using the `commandoverrides` property, which will be merged with
+the command definition found in the commands files.
+
+For example, the following changes the command timeout for a particular test:
+
+....
+...
+commandoverrides:
+  - name: /testbin/forkbomb
+    timeout: 20.0
+...
+....
+
+Note that the name must be specified in order to distinguish between commands
+in the test.
+
+==== Test Commands
+
+The second part of the test file is a listing of the commands that make up the
+test. In the example at the top of the section, the test file specifies that a
+single test should be run, namely `sem1`. It is important to note that *the
+command name provided here must match what is specified in the commands files*.
+
+===== Testfile Syntactic Sugar
 
 A line starting with `$` will be run in the shell and start the shell as
 needed. Lines not starting with `$` are run from the kernel prompt and get
@@ -372,9 +566,95 @@ But this is so much simpler, right?
 $ /bin/true
 ....
 
+`test161` also supports syntactic sugar for <<leaks, memory leak detection>>.
+....
+| p /testbin/forktest
+....
+
+expands to:
+....
+khu
+p /testbin/forktest
+khu
+....
+
+=== Targets
+
+Target files (`*.tt`) are located in the `targets/` directory in your test161 root
+directory. Targets specify which tests are run for each assignment, and
+how the scoring is distributed. When you `test161 submit` your assignments, you will
+specify which target to submit to.
+
+The following example provides the full syntax of a target file:
+
+[source, yaml]
+----
+# The name must be unique across all targets
+name: example_target
+
+# The print name, description, and leaderboard are used by the test161 front-end website
+print_name: EXAMPLE
+description: An example to illustrate target syntax and semantics
+leaderboard: true
+
+# Only active targets can be submitted to
+active: true
+
+# The test161 server uses the target version internally. The version number
+# must be incremented when any test or points details change.
+version: 1
+
+# Target types can be asst or perf (assignment and performance)
+type: asst
+
+# The total number of points for the target. The sum of the individual test
+# points must equal this number.
+points: 10
+
+# The associated kernel configuration file. test161 uses this value to
+# configure and compile your kernel
+kconfig: ASST1
+
+# true if the userland binaries should be compiled, false (default) if not.
+userland: false
+
+# Specify a commit hash id that must be included in the Git history of the
+# submitted repo.
+required_commit:
+
+# The list of tests that are to be run and evaluated as part of this target
+tests:
+    # ID is the path relative to the tests directory
+  - id: path/to/test.t
+    # entire or partial. With the "entire" (default) method, all commands in
+    # the test must pass to earn any points. With partial, each command in the
+    # test can earn points.
+    scoring: entire
+
+    # The points for this test
+    points: 10
+
+    # The number of points to deduct if a memory leak was detected
+    mem_leak_points: 2
+
+    # A list of commands whose behavior needs to be individually specified.
+    # This is only necessary when argument overrides need to be provided, or
+    # when partial command credit is given.
+    commands:
+      - id: sem1
+        # Particular instance of the command in the test. Only useful if the
+        # command is listed multiple times in the test
+        index: 0
+        points: 0
+        # Override default command arguments
+        args: [arg1, arg2,...]
+----
+
+== Features
+
 === [[tags]]Test Tags
-Optionally, tests can have one or more tags. `test161` can be invoked to run these tests
-as a group with `test161 run <tag>`.
+Optionally, tests can have one or more tags. `test161` can be invoked to run
+these tests as a group with `test161 run <tag>`.
 
 === Progress Tracking Using `stat161` Output
 
@@ -398,6 +678,7 @@ User limits are only applied when running in userspace.
 also checks to ensure that there are no user cycles generated when we are
 running in kernel mode, which could be caused by a hung progress.
 
+=== [[leaks]] Memory Leak Detection
 
 === Running multiple tests and dependencies
 
