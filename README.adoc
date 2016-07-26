@@ -1,7 +1,5 @@
 = `test161`: A Testing Tool for OS/161
 
-:source-highlighter: coderay
-
 `test161` is a command line tool for automated testing of
 http://os161.eecs.harvard.edu[OS/161] instructional operating system kernels
 that run inside the `sys161` (System/161)
@@ -140,19 +138,18 @@ test161 config
 
 `test161` is designed around two main tasks: running tests and submitting
 targets. Additionally, sub-commands exist for configuring test161 and
-listing existing tests.
-
-Running `test161` with no arguments will print usage information. For a more
-detailed description of `test161` sub-commands, use `test161 help`.
+listing existing tests. Running `test161` with no arguments will print usage
+information, and for a more detailed description of `test161` sub-commands,
+use `test161 help`.
 
 === Tests, Targets, and Tags
 
 The `test161` sub-commands often take one or more tests, targets, and tags as
-arguments. A *test* consists of one or more OS/161 commands along with
+arguments. A _test_ consists of one or more OS/161 commands along with
 metadata, `sys161` configuration, and possibly some additional `test161` runtime
-configuration. Tests can include one or more *tags*, which allow related tests
-to be grouped and run together. *Targets* consist of a set of tests that are run
-together and allow point values to be assigned to tests.
+configuration. Tests can optionally include _tags_, which allow related tests
+to be grouped and run together. _Targets_ consist of a set of tests that are run
+together, and allow point values to be assigned to each test.
 
 ==== Listing Tests, Targets, and Tags
 
@@ -299,42 +296,45 @@ The following is the full syntax for a commands file:
 # Each commands file consists of a collection of templates. An * indicates the
 # default option.
 templates:
-   # Command name/id. For userland tests, include the path and binary name.
- - name: /testbin/true
+    # Command name/id. For userland tests, include the path and binary name.
+  - name: /testbin/forktest
 
-   # An array of input arguments (optional). This should be included if the
-   # command needs default arguments.
-   input:
-     - arg 1
-     - arg 2
+    # An array of input arguments (optional). This should be included if the
+    # command needs default arguments.
+    input:
+      - arg1
+      - arg2
 
-   # An array of expected output lines (optional). This should be specified
-   # if the output differs from the default <name>: SUCESS.
-   output:
-       # The expected output text
-     - text: "You should see this message if the test passed!"
-       # true if the output is secured, false if not
-       trusted:  true
-       # true if text references an external command, false* if not
-       external: false
+    # An array of expected output lines (optional). This should be specified
+    # if the output differs from the default <name>: SUCESS.
+    output:
+        # The expected output text
+      - text: "You should see this message if the test passed!"
 
-   # Whether or not the command panics - yes, no*, or maybe
-   panics: no
+		# true* if the output is secured, false if not
+        trusted:  true
 
-   # Whether or not the command is expected to time out - yes, no*, maybe
-   timesout: no
+        # true if <text> references an external command, false* if not
+        external: false
 
-   # Time (s) after which the test is terminated - 0.0* indicates no timeout
-   timeout: 0.0
+    # Whether or not the command panics - yes, no*, or maybe
+    panics: no
+
+    # Whether or not the command is expected to time out - yes, no*, maybe
+    timesout: no
+
+    # Time (s) after which the test is terminated - 0.0* indicates no timeout
+    timeout: 0.0
 ----
 
 Minimally, any command that is to be evaluated for correctness needs to be
 present in exactly one commands (.tc) file with the `name` property specified.
-If no output is specified, the expected output is `<command name>: SUCCESS`.
+If no output is specified, the default expected output is
+`<command name>: SUCCESS`.
 
 ==== Examples
 
-In the following example, several tests are specified all of which expect the
+In the following example, several commands are specified all of which expect the
 default output.
 
 [source,yaml]
@@ -346,7 +346,7 @@ templates:
   ...
 ----
 
-Some tests might be designed to cause a kernel panic.
+Some commands might be designed to cause a kernel panic.
 
 [source,yaml]
 ----
@@ -360,7 +360,8 @@ templates:
 ----
 
 Some OS/161 tests are composed of other tests, in which case the command output
-will reference an external command:
+will reference an external command. In the following example, the 'triplehuge'
+command expects three instances of the 'huge' command's output:
 
 [source,yaml]
 ----
@@ -381,10 +382,10 @@ also provided; see the `funcMap` in
 https://github.com/ops-class/test161/blob/master/commands.go[commands.go]
 for details.
 
-The following example illustrates how the add test's output can be determined
+The following example illustrates how the `add` test's output can be determined
 from random integer inputs:
 
-[source,yaml] 
+[source,yaml,options="nowrap"]
 ----
 templates:
   ...
@@ -404,8 +405,6 @@ directory. This directory can contain subdirectories to help organize tests.
 Each test consists of one or more commands, and each test can have its own
 `sys161` configuration.  Tests are run in their own sandboxed environment, 
 but commands within the test are executed within the same `sys161` session.
-Some tests will consist of multiple commands, and such tests are designed to
-stress test your system.
 
 The following is an example of a `test161` test file:
 
@@ -426,10 +425,9 @@ sem1
 ==== Front Matter
 
 The test consist of two parts. The header in between the first and second
-`---` is http://yaml.org[YAML] front matter that provides test metadata
-and configuration.
-
-The following describes the syntax and semantics of the test metadata:
+`---` is http://yaml.org[YAML] front matter that provides test metadata and
+configuration. The following describes the syntax and semantics of the test
+metadata:
 
 [source, yaml] 
 ----
@@ -451,50 +449,90 @@ configuration options.
 
 [source, yaml]
 ----
+# sys161 configuration
 conf:
-  cpus: 8    # 1-32 are valid
-  ram: 1M    # Number of bytes, with optional K or M prefix
-  disk1:     # disabled by default, but should be enabled when you want swap disk
+  # 1-32 are valid
+  cpus: 8
+
+  # Number of bytes of memory, with optional K or M prefix
+  ram: 1M
+
+  # Random number generated at runtime. This can be overridden by specifying an
+  # unsigned 32 bit integer to use as the random seed.
+  random: seed=random
+
+  # Disabled by default, but should be enabled when you want swap disk
+  disk1:
     enabled: false
     rpm: 7200
     bytes: 32M
     nodoom: true
-    random: seed=random # random number generated at configuration time
-  disk2: #    disabled by default, but uses these defaults if configured
+
+  # Disabled by default, but uses these defaults if configured
+  disk2: 
     enabled: false
     rpm: 7200
     bytes: 32M
     nodoom: false
-    random: seed=random # random number generated at configuration time
+
+# stat161 configuration. The window specifies the number of stat objects we
+# keep around, while the resolution represents the interval (s) that we
+# request stats from stat161.
 stat:
   resolution: 0.01
   window: 1
+
+# Monitor configuration
 monitor:
   enabled: true
-  window: 400  # Number of samples to include in kernel and user calculations
+
+  # Number of samples to include in kernel and user calculations
+  window: 400
+
+  # Monitor configuration for tracking kernel cycles. The ratio of kernel
+  # cycles to total cycles to be >= min (if enabled) and <= max.
   kernel:
     enablemin: false
-    min: 0.001  # Min ratio of instructions that must be attributed to kernel code
-    max: 1.0    # Max ratio of instructions that attributed to kernel code
+    min: 0.001
+    max: 1.0
+
+  # Monitor configuration for tracking user cycles. The ratio of user cycles
+  # to total cycles to be >= min (if enabled) and <= max.
   user:
     enablemin: false
-    min: 0.0001 # Min ratio of instructions that must be attributed to user code
-    max: 1.0    # Max ratio of instructions that attributed to user code
-  progresstimeout: 10.0 # Seconds without character output before the test fails
-  commandtimeout: 0.0   # Seconds of command runtime before a test is stopped
+    min: 0.0001
+    max: 1.0
+
+  # Sim time (s) without character output before the test is stopped
+  progresstimeout: 10.0
+
+  # Sim time (s) a command is allowed to execute before it is stopped
+  commandtimeout: 60.0
+
+# Miscelleneous configuration
 misc:
   # The next three configuration parameters deal with sys161 occasionally
-  # dropping input characters, such as when programmatically sending a command.
-  charactertimeout: 1000  # Time (s) to wait for a character to appear in the
-                          # output stream after sending it.
-  retrycharacters: true   # Whether or not to retry sending characters if the
-                          # character timeout is exceeded.
-  commandretries: 5       # Number of times a command is retried if the number
-                          # of character retries is exceeded.
-  prompttimeout: 1800.0   # Time (s) before halting a test if the current prompt
-                          # is not seen in the output stream.
-  killonexit: false       # If true, send the kill signal to sys161. This should
-                          # not generally be needed.
+  # dropping input characters.
+
+  # Time (ms) to wait for a character to appear in the output stream after
+  # sending it.
+  charactertimeout: 1000
+
+  # Whether or not to retry sending characters if the character timeout is
+  # exceeded.
+  retrycharacters: true
+
+  # Number of times a command is retried if the number of character retries is
+  # exceeded.
+  commandretries: 5
+
+  # Time (s) before halting a test if the current prompt is not seen in the
+  # output stream.
+  prompttimeout: 1800.0   
+
+  # If true, send the kill signal to sys161. This should not generally be
+  # needed.
+  killonexit: false
 ----
 
 ===== Command Override
@@ -604,7 +642,7 @@ active: true
 # must be incremented when any test or points details change.
 version: 1
 
-# Target types can be asst or perf (assignment and performance)
+# Target types can be asst or perf (assignment and performance).
 type: asst
 
 # The total number of points for the target. The sum of the individual test
@@ -612,7 +650,7 @@ type: asst
 points: 10
 
 # The associated kernel configuration file. test161 uses this value to
-# configure and compile your kernel
+# configure and compile your kernel.
 kconfig: ASST1
 
 # true if the userland binaries should be compiled, false (default) if not.
@@ -622,7 +660,7 @@ userland: false
 # submitted repo.
 required_commit:
 
-# The list of tests that are to be run and evaluated as part of this target
+# The list of tests that are to be run and evaluated as part of this target.
 tests:
     # ID is the path relative to the tests directory
   - id: path/to/test.t
@@ -634,8 +672,8 @@ tests:
     # The points for this test
     points: 10
 
-    # The number of points to deduct if a memory leak was detected
-    mem_leak_points: 2
+    # The number of points to deduct if a memory leak was detected.
+    mem_leak_points: 2  # default is 0
 
     # A list of commands whose behavior needs to be individually specified.
     # This is only necessary when argument overrides need to be provided, or
@@ -643,10 +681,10 @@ tests:
     commands:
       - id: sem1
         # Particular instance of the command in the test. Only useful if the
-        # command is listed multiple times in the test
+        # command is listed multiple times in the test.
         index: 0
         points: 0
-        # Override default command arguments
+        # Override default command arguments.
         args: [arg1, arg2,...]
 ----
 
