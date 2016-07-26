@@ -322,7 +322,7 @@ templates:
         # The expected output text
       - text: "You should see this message if the test passed!"
 
-		# true* if the output is secured, false if not
+        # true* if the output is secured, false if not
         trusted:  true
 
         # true if <text> references an external command, false* if not
