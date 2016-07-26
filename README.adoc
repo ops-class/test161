@@ -7,6 +7,16 @@ https://en.wikipedia.org/wiki/R3000[MIPS R3000] simulator. You are probably
 not interested in `test161` unless you are a student taking or an instructor
 teaching a course that uses OS/161.
 
+== `test161`: Library, Client, and Server
+
+The `test161` source tree consists of a library along with client and server
+utilities, which are in large part wrappers around the library. <<Configuration>>
+and <<Usage>> examples below that mention `test161` commands are referring to
+the `test161` utility, which is what students generally interact with. There is
+also a <<server,test161-server>> utility that students indirectly interact with
+when submitting assignments. Much of the documentation refers simply to
+`test161`, which refers to the system as a whole.
+
 == Installation and Environment
 
 `test161` is written in https://golang.org/[Go], and the instructions below
@@ -103,14 +113,15 @@ export TEST161_SERVER=http://localhost:4000
 * *`TEST161_OVERLAY`*: The `test161` server uses an overlay directory
 containing trusted files for each assignment. As a security measure, these
 trusted files -- make files, user and kernel test code -- replace students'
-versions when testing their submissions. Setting this environment variable
-allows you to test an overlay using the `test161` client, allowing you to test
-overlay changes without submitting to a `test161` server.
+versions when testing their submissions (see <<Security>>). Setting this
+environment variable allows you to test an overlay using the `test161` client,
+allowing you to test overlay changes without submitting to a `test161` server.
 
 ==== Submission Configuration
 
 In order to submit to the https://test161.ops-class.org[test161 server], you
-need to configure your username/token, which can be done with:
+need to configure your username/token footnote:[The task of creating tokens
+belongs to the front-end, which students need log in for.], which can be done with:
 
 [source,bash]
 ----
@@ -562,7 +573,7 @@ test. In the example at the top of the section, the test file specifies that a
 single test should be run, namely `sem1`. It is important to note that *the
 command name provided here must match what is specified in the commands files*.
 
-===== Testfile Syntactic Sugar
+===== Test File Syntactic Sugar
 
 A line starting with `$` will be run in the shell and start the shell as
 needed. Lines not starting with `$` are run from the kernel prompt and get
@@ -688,11 +699,84 @@ tests:
         args: [arg1, arg2,...]
 ----
 
-== Features
+== [[server]]test161-server
 
-=== [[tags]]Test Tags
-Optionally, tests can have one or more tags. `test161` can be invoked to run
-these tests as a group with `test161 run <tag>`.
+`test161-server` is a command line utility that implements the `test161`
+back-end functionality. Its main responsibilities include accepting submission
+requests, evaluating these requests, and persisting test output and results.
+
+Our `test161-server` uses https://www.mongodb.com/[mongoDB] as its storage
+layer, which is also how it communicates with the
+https://github.com/ops-class/test161-web-ui[front-end]. The interface of the
+back-end utility is less mature than the `test161` command line utility, mostly
+due to its audience.
+
+=== `test161-server` Configuration
+
+The `test161-server` configuration is in YAML configuration file,
+`~/.test161-server.conf`. The following example provides the syntax for this
+configuration file:
+
+[source,yaml]
+----
+overlaydir: /path/to/overlay/directory
+test161dir: /path/to/test161/root/directory
+cachedir: /path/to/student/repo/cache
+keydir: /path/to/student/deploy/keys
+
+# The maximum concurrency for executing test161 tests. This can also be changed
+# dynamically from the command line with test161-server set-capacity N.
+max_tests: 20
+
+# The mongoDB database name
+dbname: "test161"
+
+# The mongoDB database server and port
+dbsever: "localhost:27017"
+
+# Database credentials
+dbuser: user
+dbpw: password
+
+# The port that test161-server is configured to listen on for API requests
+api_port: 4000
+
+# The minimum test161 client version that the server will accept submissions from
+min_client:
+  major: 1
+  minor: 2
+  revision: 5
+----
+
+==== Key Directory
+
+As part of its API, `test161-server` can generate public/private RSA keypairs.
+The front-end issues these requests from a student's settings page. The keypairs
+are stored in the `keydir` specified in `test161-server.conf`. The student is
+required to add the public key to their private Git repository as a deploy key
+so `test161` can clone their OS/161 sources.
+
+==== Cache Directory
+
+`test161-server` caches students' source code so that it can fetch updates
+rather than re-clone on subsequent submissions.
+
+=== `test161-server` Usage
+
+`test161-server` should be launched as a daemon during boot, but occasionally
+you may need to communicate with the running instance.
+
+[source,bash]
+----
+test161-server status          # Get the status of the running instance
+test161-server pause           # Stop the server from accepting new submissions, but
+                               # finish processing pending submissions
+test161-server resume          # Resume accepting submissions
+test161-server set-capacity N  # Set the max number of concurrent tests
+test161-server get-capacity    # Get the max number of concurrent tests
+----
+
+== Features
 
 === Progress Tracking Using `stat161` Output
 
@@ -700,7 +784,7 @@ these tests as a group with `test161 run <tag>`.
 detect deadlocks, livelocks, and other forms of stalls. We do this using
 several different strategies:
 
-. *Progress and prompt timeouts.* Testfiles can configure both progress
+. *Progress and prompt timeouts.* Test files can configure both progress
 (`monitorconf.timeouts.progress`) and prompt (`monitorconf.timeouts.prompt`)
 timeouts. The former is used to kill the test if no output has appeared, while
 the latter is passed to `expect` and used to kill the test of the prompt is
@@ -718,41 +802,139 @@ running in kernel mode, which could be caused by a hung progress.
 
 === [[leaks]] Memory Leak Detection
 
-=== Running multiple tests and dependencies
+In addition for checking for test correctness, `test161` can also check for
+memory leaks. To implement this feature, a few changes were made to our
+https://github.com/ops-class/os161[ops-class OS/161 sources], which implies
+this feature will be unavailable or source modification is required if you are
+starting from other OS/161 sources.
+
+A new command, `khu`, has been added to our OS/161 kernel menu. When run, this
+command prints the number of bytes of memory currently allocated, between both
+the `kmalloc` subpage allocator, and the VM subsystem. `test161` parses this
+output and calculates the difference between successive invocations to
+determine memory leaks. `test161` <<Targets, targets>> can optionally deduct
+points for memory leaks.
 
 === Correctness vs. Grading
 
+The concepts of _correctness_ and _grading_ are purposely separated in
+`test161`. Correctness is first established at the command granularity -- each
+command has specific criteria that defines correct execution. Since tests are
+composed of commands, it follows that test correctness can be determined from
+command correctness. Grading, however, is handled independently by targets.
+The _partial_ grading method allows for points to be awarded when only some of
+the commands in a single test are correct. In the _entire_ scoring method,
+points are only awarded of the all of the commands in the test are correct.
+
+=== Partial Credit
+
+`test161` allows for partial credit at the command level. This is different
+from the partial scoring method for tests. With partial credit, a command can
+earn a fraction of the points it is assigned in the target. This is implemented
+by looking for the (secured) string, `PARTIAL CREDIT X OF N`. If X == N, full
+credit is awarded and the test is marked correct. Otherwise, a fraction of the
+points (X/N) are awarded and the test is marked as incorrect.
+
 === Security
 
-=== Multiple output strategies
+Given that students are modifying the operating system itself, the attack
+surface for gaming the system is quite large. Given that we have modified
+user test programs to output `<name>: SUCCESS` when they succeed, it would
+be particularly easy for students to fake this output if security measures
+were not put in place. Therefore, security has been built into `test161` to
+create a _secure testing environment_. This was accomplished through both
+`test161` features and additions to our
+https://github.com/ops-class/os161[ops-class OS/161 sources]. In particular,
+we ensure that our trusted tests are running, and that to a very high degree, we
+trust the output.
+
+==== `libtest161` and `secprintf`
+
+Our OS/161 sources add a `test161` library, `libtest161` with the important
+function, `secprintf`:
+
+[source,c]
+----
+int secprintf(const char * secret, const char * msg, const char * name);
+----
+
+When `SECRET_TESTING` is disabled, which it normally is, this function simply
+outputs the message, such as <name>: SUCCESS. Even though the `test161` command
+is expecting trusted output, it knows that `SECRET_TESTING` has been disabled
+and will ignore this requirement. This allows students to test their code using
+`test161` in an unsecured environment.
+
+When `SECRET_TESTING` is enabled, this function _secures_ the output string by
+computing the SHA256 HMAC of the message using the provided _secret key_ and a
+random salt value. It outputs a 4-tuple of (name, hash, salt, name: message).
+`test161` uses this information to verify the authenticity of the message.
+
+==== Source Overlay
+
+`test161` allows the specification of an _overlay directory_ that contains
+trusted source files. These trusted files, such as make files and anything that
+prints `SUCCESS`, overwrite students' untrusted source files on the `test161`
+server during compilation. During testing, an overlay can be specified using
+the `TEST161_OVERLAY` environment variable (see <<Environment Variables>>).
+
+==== Key Injection
+
+When an <<Source Overlay,overlay>> is specified, the process of _key injection_
+is triggered. In our OS/161 source code, a placeholder (`SECRET`) for the secret
+key was added anywhere a key was required for the `secprintf` function. Key
+injection replaces instances of `SECRET` in the source code with a randomly
+generated key, _one per command_. During compile time, a map of command to key
+is created so `test161` can authenticate messages output by test code.
+Importantly, this process repeats itself each time a student submits to a
+target, which means no information from previous submissions can be replayed.
+Additionally, unique salt values are required during testing, preventing replay
+attacks from previously seen command output, such in the case of `triplehuge`.
+
+=== Multiple Output Strategies
 
 `test161` supports different output strategies through its PersistenceManager
-interface. Each TestEnvironment as a PersistenceManager which receives
-callbacks when events happen, like when scores changes, status change, or when
+interface. Each TestEnvironment has a PersistenceManager which receives
+callbacks when events happen, like when scores changes, statuses change, or when
 output lines are added. This allows multiple implementations to handle output
-as they wish. The test161 client utility implements the interface through
+as they wish. The `test161` client utility implements the interface through
 its ConsolePersistence type, which writes all input to stdout. The server uses
-a MongoPersistence type which outputs JSON data to our mongo backend server.
+a MongoPersistence type which outputs JSON data to our mongo back-end server.
+This feature allows `test161-server` forks to easily use whatever back-end
+storage system they desire.
 
 == TODOs
 
 === Nits
 
-* Colored test output on terminals that support it? (Particularly for correct/incorrect.)
+* Colored test output on terminals that support it? (Particularly for
+correct/incorrect.)
+
 * Handle missing newline correctly. Test with shll for lossy shell support.
+
 * sys161 version checks
+
 * Order the test output in some meaningful way, probably by depth in the
 dependency graph. (That way all skipped tests should be shown last.)
-** Not necessarily true. You could have a long, unrelated branch that
-succeeds (even leaf nodes), but some unrelated dependency fails early. I made the
-default print order topological sort, but it's still confusing. I added the
-reason a test is skipped, which helps. Maybe a nice ASCII art tree would work here...
+
+** SDH: Not necessarily true. You could have a long, unrelated branch that
+succeeds (even leaf nodes), but some unrelated dependency fails early. I made
+the default print order topological sort, but it's still confusing. I added the
+reason a test is skipped, which helps. Maybe a nice ASCII art tree would work
+here...
+
 * Check for repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
-(Prevent backend storage DOS attacks.)
+(Prevent back-end storage DOS attacks.)
+
 * Use URL associated with the tree-ish id provided to `test161 submit`
-* Fix directory bash completion for test161 config test161dir. It's unfortunately adding
-a space instead of /.
+
+* Fix directory bash completion for test161 config test161dir. It's
+unfortunately adding a space instead of /.
+
+* Add a backlink from `Test` -> `Submission`
+
+* An `isStaff` flag would be useful when querying the students collection in
+mongo
 
 === Performance Tracking
 
@@ -771,6 +953,9 @@ of the screen showing the tests that are being run.
 It would be nice to be able to add descriptions to tags and have `test161`
 print all tests that fall into a tag (or target) along with the description.
 
+(SDH: we have `test161 list tags` which handles printing tags and their tests,
+but we do not currently support tag descriptions or querying)
+
 === Output Frequency
 
 For long running tests, OS/161 tests generate periodic output, usually in the
@@ -781,30 +966,30 @@ break these into multiple lines, it would be nice to refactor things in such a
 way that the current output line is periodically persisted. This would give
 students a better indication of progress, as opposed to tests looking "stuck".
 
-=== Key saving
+=== Key Saving
 
 Now that we are having students save a key through the web interface we need
 to make sure that these keys get saved, associated with each successful
 submission, and not destroyed even if they are changed later.
 
-=== Configuration override
+=== Configuration Override
 
 It would be great if `test161 run boot.t --sys161-cpus=1` worked properly. I
 think that there is a library for this.
 
-=== Support for GDB backtraces on error
+=== Support for GDB Backtraces on Error
 
 It should be possible to automate the process of hooking up a debugger and
 running BT on panics.
 
-=== Server
+=== Server Nits
 * Environment inference with environment variable overrides, similar to the test161 client
 ** `test161-server config` to both show the configuration and modify it
 * Log the configuration on startup
-* More usability cleanup
+* Usability cleanup
 ** Usage
 ** Help
 ** Bash completion
 * Moving window for stats API
-* Periodically persist server stats, either in MongoDB or through the logger. We currently lose these on restart.
+* Periodically persist server stats, either in mongoDB or through the logger. We currently lose these on restart.
 * Move collaboration messages into their own files instead of hard-coding
