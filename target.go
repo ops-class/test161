@@ -40,8 +40,6 @@ type Target struct {
 	// Make sure to update isChangeAllowed with any new fields that need to be versioned.
 	ID               string        `yaml:"-" bson:"_id"`
 	Name             string        `yaml:"name"`
-	PrintName        string        `yaml:"print_name" bson:"print_name"`
-	Description      string        `yaml:"description"`
 	Active           string        `yaml:"active"`
 	Version          uint          `yaml:"version"`
 	Type             string        `yaml:"type"`
@@ -49,10 +47,15 @@ type Target struct {
 	KConfig          string        `yaml:"kconfig"`
 	RequiredCommit   string        `yaml:"required_commit" bson:"required_commit"`
 	RequiresUserland bool          `yaml:"userland" bson:"userland"`
-	Leaderboard      string        `yaml:"leaderboard" bson:"leaderboard"`
 	Tests            []*TargetTest `yaml:"tests"`
 	FileHash         string        `yaml:"-" bson:"file_hash"`
 	FileName         string        `yaml:"-" bson:"file_name"`
+
+	// Front-end only
+	PrintName   string `yaml:"print_name" bson:"print_name"`
+	Description string `yaml:"description"`
+	Link        string `yaml:"link" bson:"link"`
+	Leaderboard string `yaml:"leaderboard" bson:"leaderboard"`
 }
 
 // A TargetTest is the specification for a single Test contained in the Target.
@@ -351,7 +354,7 @@ func (old *Target) isChangeAllowed(other *Target) error {
 
 	// Fields we don't care about:
 	//
-	// PrintName, Description, Active, RequiredCommit
+	// PrintName, Description, Active, RequiredCommit, Link
 	// KConfig is set based on the Name
 	// RequiresUserland: if this was broken, tests would have failed
 	// FileHash: this will change

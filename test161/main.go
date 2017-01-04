@@ -9,7 +9,7 @@ import (
 var env *test161.TestEnvironment
 var clientConf *ClientConf
 
-func envInit() {
+func envInit(cmd *test161Command) {
 	var err error
 
 	// Get our bearings
@@ -29,8 +29,11 @@ func envInit() {
 
 	// OK if confFile is nil, but they won't be able to submit.
 	if confFile != nil {
-		// The user info is all we store in .test161.conf at this point
 		clientConf.Users = confFile.Users
+		// The test161dir, if present, overrides the inferred directory.
+		if confFile.Test161Dir != "" {
+			clientConf.Test161Dir = confFile.Test161Dir
+		}
 	}
 
 	// Environment variable overrides
@@ -42,20 +45,21 @@ func envInit() {
 	// Test all the paths before trying to load the environment. Only the overlay
 	// should really be a problem since we're figuring everything else out from
 	// the cwd.
-	if err = clientConf.checkPaths(); err != nil {
-		fmt.Fprintf(os.Stderr, "The following paths are incorrect in your configuration: %v\n", err)
+	if err = clientConf.checkPaths(cmd); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
 	// Lastly, create the acutal test environment, loading the targets, commands, and
-	// tests.
-	if env, err = test161.NewEnvironment(clientConf.Test161Dir, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "to create your test161 test environment:\n%v\n", err)
-		os.Exit(1)
+	// tests, but only if the test161 dir is set.
+	if cmd.reqTests {
+		if env, err = test161.NewEnvironment(clientConf.Test161Dir, nil); err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to create your test161 test environment:\n%v\n", err)
+			os.Exit(1)
+		}
+		env.RootDir = clientConf.RootDir
+		env.OverlayRoot = clientConf.OverlayDir
 	}
-
-	env.RootDir = clientConf.RootDir
-	env.OverlayRoot = clientConf.OverlayDir
 }
 
 func usage() {
@@ -71,6 +75,7 @@ func usage() {
     test161 list (targets|tags|tests) [-remote | -r]
 
     test161 config [-debug] [(add-user|del-user|change-token)] <username> <token>
+    test161 config test161dir <dir>
 
     test161 version
 
@@ -139,23 +144,53 @@ three commands available to modify user configuration:
 	  'test161 config add-user <email> <token>'
 	  'test161 config del-user <email>'
 	  'test161 config change-token <email> <new-token>'
+
+Test161 Directory: 'test161 config' can also configure your test161 directory,
+which is the directory that targets and tests are found. To specify a specific
+directory, use:
+
+	'test161 config test161dir <dir>'
 `)
 
 	return 0
 }
 
 type test161Command struct {
-	cmd    func() int
-	reqEnv bool
+	cmd       func() int
+	reqEnv    bool
+	reqSource bool
+	reqRoot   bool
+	reqTests  bool
 }
 
 var cmdTable = map[string]*test161Command{
-	"run":     &test161Command{doRun, true},
-	"submit":  &test161Command{doSubmit, true},
-	"list":    &test161Command{doListCommand, true},
-	"config":  &test161Command{doConfig, true},
-	"version": &test161Command{doVersion, false},
-	"help":    &test161Command{doHelp, false},
+	"run": &test161Command{
+		cmd:      doRun,
+		reqEnv:   true,
+		reqRoot:  true,
+		reqTests: true,
+	},
+	"submit": &test161Command{
+		cmd:       doSubmit,
+		reqEnv:    true,
+		reqSource: true,
+		reqTests:  true,
+	},
+	"list": &test161Command{
+		cmd:      doListCommand,
+		reqEnv:   true,
+		reqTests: true,
+	},
+	"config": &test161Command{
+		cmd:    doConfig,
+		reqEnv: true,
+	},
+	"version": &test161Command{
+		cmd: doVersion,
+	},
+	"help": &test161Command{
+		cmd: doHelp,
+	},
 }
 
 func doVersion() int {
@@ -172,11 +207,11 @@ func main() {
 		// Get the sub-command
 		if cmd, ok := cmdTable[os.Args[1]]; ok {
 			if cmd.reqEnv {
-				envInit() // This might exit
+				envInit(cmd) // This might exit
 			}
 			exitcode = cmd.cmd()
 		} else {
-			fmt.Fprintf(os.Stderr, "'%v' is not a reconized test161 command", os.Args[1])
+			fmt.Fprintf(os.Stderr, "'%v' is not a recognized test161 command\n", os.Args[1])
 			usage()
 		}
 	}

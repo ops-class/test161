@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Config args
@@ -25,16 +26,18 @@ var CACHE_DIR = path.Join(os.Getenv("HOME"), ".test161/cache")
 var KEYS_DIR = path.Join(os.Getenv("HOME"), ".test161/keys")
 
 type ClientConf struct {
-	// This is now the only thing we put in the yaml file.
+	// These are now the only thing we put in the yaml file.
 	// Everything else is inferred or set through environment
 	// variables.
 	Users []*test161.SubmissionUserInfo `yaml:"users"`
+
+	// Test161Dir is optional, and it's usually inferred from source.
+	Test161Dir string `yaml:"test161dir"`
 
 	OverlayDir string `yaml:"-"` // Env
 	Server     string `yaml:"-"` // Env override
 	RootDir    string `yaml:"-"`
 	SrcDir     string `yaml:"-"`
-	Test161Dir string `yaml:"-"`
 }
 
 func ClientConfFromFile(file string) (*ClientConf, error) {
@@ -71,104 +74,128 @@ func ClientConfToFile(conf *ClientConf) error {
 	return nil
 }
 
-func printDefaultConf() {
-	fmt.Println(`
-test161 needs a configuration file in order to submit to the server.  Create a '.test161.conf' 
-in your $HOME directory, or the directory where you plan to run test161. The following is an 
-example .test161.conf file that you can modify with your group information. Note: the conf file 
-is in yaml format (so no tabs please).
-
-Alternatively, use 'test161 config add-user' to add user information from the command line.
- 
-(Example .test161.conf)
----
-users:
-  - email: "your-email@buffalo.edu"
-    token: "your-token (from test161.ops-class.org)"
-  - email: "your-email@buffalo.edu"
-    token: "your-token (from test161.ops-class.org)"
-`)
-}
-
 func isRootDir(path string) bool {
-	reqs := []string{"kernel", ".src", "sys161.conf"}
+	reqs := []string{"kernel", "testbin"}
 	err := testPath(path, "root", reqs)
 	return err == nil
 }
 
 func isSourceDir(path string) bool {
-	reqs := []string{"kern", ".root", "userland", "mk"}
+	reqs := []string{"kern", "userland", "mk"}
 	err := testPath(path, "source", reqs)
 	return err == nil
 }
 
-// Infer the required test161 configuration from the current working directory.
+func isTest161Dir(path string) bool {
+	reqs := []string{"commands", "targets", "tests"}
+	err := testPath(path, "source", reqs)
+	return err == nil
+}
+
+// Seach for a directory starting at 'start', popping up the tree until 'home'.
+// This used fn() to determine if the directory is a match.
+func searchForDir(start, home string, fn func(string) bool) string {
+	prev := ""
+	dir := start
+	for strings.HasPrefix(dir, home) && prev != dir {
+		if fn(dir) {
+			return dir
+		}
+		prev = dir
+		dir = filepath.Dir(dir)
+	}
+	return ""
+}
+
+// Infer the test161 configuration from the current working directory.
 // This replaces most of .test161.conf.
 func inferConf() (*ClientConf, error) {
 	var err error
+	src, root, test := "", "", ""
+	cwd, home := "", ""
 
-	src, root := "", ""
-
-	cwd, err := os.Getwd()
-	if err != nil {
+	if cwd, err = os.Getwd(); err != nil {
 		return nil, fmt.Errorf("Cannot retrieve current working directory: %v", err)
 	}
+	if cwd, err = filepath.Abs(cwd); err != nil {
+		// Unlikely
+		return nil, fmt.Errorf("Cannot determine absolute path of cwd: %v", err)
+	}
+	if home = os.Getenv("HOME"); home == "" {
+		// Unlikely
+		return nil, errors.New("test161 requires your $HOME environment variable to be set")
+	}
+	if !strings.HasPrefix(cwd, home) {
+		// Unlikely, but more likely
+		return nil, errors.New("Trying to run test161 outside of your $HOME directory?")
+	}
 
-	// Are we in root?
-	if isRootDir(cwd) {
-		root = cwd
-		src = path.Join(cwd, ".src")
-	} else {
-		// Are we somewhere in src? Walk backwards until we find out.
-		home := os.Getenv("HOME")
-		if home == "" {
-			// Unlikely
-			return nil, errors.New("test161 requires your $HOME environment variable to be set")
-		}
+	// Search for all of the directories we need, starting with cwd
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-		dir, err := filepath.Abs(cwd)
-		if err != nil {
-			// Unlikely
-			return nil, fmt.Errorf("Cannot determine absolute path of cwd: %v", err)
-		}
+	go func() {
+		defer wg.Done()
+		src = searchForDir(cwd, home, isSourceDir)
+	}()
 
-		if !strings.HasPrefix(dir, home) {
-			// Unlikely, but more likely
-			return nil, errors.New("Trying to run test161 outside of your $HOME directory?")
-		}
+	go func() {
+		defer wg.Done()
+		root = searchForDir(cwd, home, isRootDir)
+	}()
 
-		prev := ""
-		for strings.HasPrefix(dir, home) && prev != dir {
-			if isSourceDir(dir) {
-				src = dir
-				root = path.Join(dir, ".root")
-				break
-			}
-			prev = dir
-			dir = filepath.Dir(dir)
+	wg.Wait()
+
+	testJoin := func(base, dir string, fn func(string) bool) string {
+		temp := path.Join(base, dir)
+		if fn(temp) {
+			return temp
+		} else {
+			return ""
 		}
 	}
 
-	if root == "" || src == "" {
-		return nil, errors.New("test161 must be run in either your OS/161 root directory, or inside your OS/161 source tree")
+	// If we couldn't find root or source from the CWD, we may be able to
+	// find one if we know the other.
+	if src == "" && root != "" {
+		src = testJoin(root, ".src", pathExists)
+	} else if root == "" && src != "" {
+		root = testJoin(src, ".root", pathExists)
 	}
 
-	if root, err = filepath.EvalSymlinks(root); err != nil {
-		return nil, fmt.Errorf("An error occurred evaluating symlinks in your root path (%v): %v", root, err)
+	// If we have source and not test161, we can hopefully find test161 in source
+	// or root. If not, it may be configured in .test161.conf, which gets checked
+	// later.
+	if test == "" && src != "" {
+		test = testJoin(src, "test161", isTest161Dir)
+	}
+	if test == "" && root != "" {
+		test = testJoin(root, "test161", isTest161Dir)
 	}
 
-	if src, err = filepath.EvalSymlinks(src); err != nil {
-		return nil, fmt.Errorf("An error occurred evaluating symlinks in your root path (%v): %v", src, err)
+	// Clean up symlinks so the paths are cleaner when printed
+	if root != "" {
+		if root, err = filepath.EvalSymlinks(root); err != nil {
+			return nil, fmt.Errorf("An error occurred evaluating symlinks in your root path (%v): %v", root, err)
+		}
 	}
-
-	// Skip repo name until we need it (submit)
+	if src != "" {
+		if src, err = filepath.EvalSymlinks(src); err != nil {
+			return nil, fmt.Errorf("An error occurred evaluating symlinks in your source path (%v): %v", src, err)
+		}
+	}
+	if test != "" {
+		if test, err = filepath.EvalSymlinks(test); err != nil {
+			return nil, fmt.Errorf("An error occurred evaluating symlinks in your test161 path (%v): %v", test, err)
+		}
+	}
 
 	inferred := &ClientConf{
 		Server:     SERVER,
 		Users:      make([]*test161.SubmissionUserInfo, 0),
 		RootDir:    root,
 		SrcDir:     src,
-		Test161Dir: path.Join(src, "test161"),
+		Test161Dir: test,
 		OverlayDir: "",
 	}
 
@@ -203,30 +230,26 @@ func testPath(p, desc string, mustContain []string) error {
 	return nil
 }
 
-// Validate all paths in the config file. Now that we're figuring out the configuration
-// from the current directory, this shouldn't fail, except for possibly the overlay directory.
-func (conf *ClientConf) checkPaths() (err error) {
+// Validate all required paths in the config file. If source or root are set,
+// we know they have the right structure, but they may be required and not
+// present. The overlay dir (env variable) may not be valid. The test161 dir
+// may not be valid if there's an override in the .test161.conf file.
+func (conf *ClientConf) checkPaths(cmd *test161Command) (err error) {
 
-	if conf == nil {
-		fmt.Println("Conf is nil???")
+	err = nil
+
+	if conf.RootDir == "" && cmd.reqRoot {
+		return errors.New("Unable to execute command: test161 cannot determine your root directory from the CWD.")
 	}
 
-	// Root Directory
-	if err = testPath(conf.RootDir, "Root Directory", []string{"kernel"}); err != nil {
-		return
+	if conf.SrcDir == "" && cmd.reqSource {
+		return errors.New("Unable to execute command: test161 cannot determine your source directory from the CWD.")
 	}
 
-	// Source Directory
-	if len(conf.SrcDir) == 0 {
-		conf.SrcDir = path.Dir(conf.Test161Dir)
-		if err = testPath(conf.SrcDir, "Source Directory", []string{"kern", "mk", "test161"}); err != nil {
-			return
-		}
-	}
-
-	// test161 Directory
-	if err = testPath(conf.Test161Dir, "test161 Directory", []string{"targets", "tests", "commands"}); err != nil {
-		return
+	if conf.Test161Dir == "" && cmd.reqTests {
+		return errors.New("Unable to execute command: test161 cannot determine your test161 directory from the CWD.")
+	} else if cmd.reqTests && !isTest161Dir(conf.Test161Dir) {
+		return fmt.Errorf(`"%v" is not a valid test161 directory.`, conf.Test161Dir)
 	}
 
 	// Overlay directory
@@ -236,20 +259,7 @@ func (conf *ClientConf) checkPaths() (err error) {
 		}
 	}
 
-	err = nil
 	return
-}
-
-// Get a key to use for git ssh commands. We follow what the server does and pick the
-// first one that exists.
-func (conf *ClientConf) getKeyFile() string {
-	for _, u := range conf.Users {
-		keyfile := path.Join(KEYS_DIR, u.Email, "id_rsa")
-		if _, err := os.Stat(keyfile); err == nil {
-			return keyfile
-		}
-	}
-	return ""
 }
 
 // test161 config (-debug]
@@ -270,6 +280,10 @@ func doShowConf() int {
 	for _, u := range clientConf.Users {
 		fmt.Println(" - User   :", u.Email)
 		fmt.Println("   Token  :", u.Token)
+	}
+
+	if clientConf.SrcDir == "" {
+		return 0
 	}
 
 	// Infer git info and print it
@@ -435,6 +449,24 @@ func changeToken(email, token string) error {
 	return fmt.Errorf(`User "%v" not found in %v`, email, CONF_FILE)
 }
 
+func setTest161Dir(test161dir string) error {
+
+	if !pathExists(test161dir) {
+		return errors.New("Unable to set test161 directory: directory not found")
+	}
+	if !isTest161Dir(test161dir) {
+		return errors.New("Unable to set test161 directory: invalid test161 directory")
+	}
+
+	conf, err := getConfFromFileSafe()
+	if err != nil {
+		return err
+	}
+
+	conf.Test161Dir = test161dir
+	return ClientConfToFile(conf)
+}
+
 // test161 config (add-user | del-user | change-token)
 func doConfig() int {
 
@@ -470,6 +502,13 @@ func doConfig() int {
 				return 1
 			}
 			err = changeToken(args[1], args[2])
+		case "test161dir":
+			if len(args) != 2 {
+				usage()
+				return 1
+			}
+			err = setTest161Dir(args[1])
+
 		default:
 			fmt.Fprintf(os.Stderr, "Invalid option for config\n")
 			usage()

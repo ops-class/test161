@@ -131,6 +131,9 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 		if res.Test.Result != test161.TEST_RESULT_CORRECT {
 			allCorrect = false
 		}
+		if res.Err != nil {
+			fmt.Fprint(os.Stderr, "Error running %v: %v\n", res.Test.DependencyID, res.Err)
+		}
 	}
 
 	test161.StopManager()
@@ -196,7 +199,11 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 
 		leak := "---"
 		if test.MemLeakChecked {
-			leak = fmt.Sprintf("%v bytes", test.MemLeakBytes)
+			if test.MemLeakBytes == 0 {
+				leak = "None"
+			} else {
+				leak = fmt.Sprintf("%v bytes", test.MemLeakBytes)
+			}
 		}
 
 		row := []string{
@@ -359,11 +366,42 @@ func explain(tg *test161.TestGroup) {
 
 		fmt.Println()
 
+		// Merge in test161 defaults for any missing configuration values
+		test.SetEnv(env)
+		test.MergeAllDefaults()
+
 		// Test ID
 		fmt.Println(test.DependencyID)
 		fmt.Println(strings.Repeat("-", 60))
 		fmt.Println("Name        :", test.Name)
-		fmt.Println("Description :", test.Description)
+		fmt.Println("Description :", strings.TrimSpace(test.Description))
+
+		// Monitor
+		if test.Monitor.Enabled == "true" {
+			fmt.Println("\ntest161 Monitor Conf:")
+			fmt.Println("  Progress Timeout :", test.Monitor.ProgressTimeout)
+			fmt.Println("  Command Timeout  :", test.Monitor.CommandTimeout)
+			fmt.Println("  Window           :", test.Monitor.Window)
+			if test.Monitor.Kernel.EnableMin == "true" {
+				fmt.Println("  Kernel Min       :", test.Monitor.Kernel.Min)
+			} else {
+				fmt.Println("  Kernel Min       : disabled")
+			}
+			fmt.Println("  Kernel Max       :", test.Monitor.Kernel.Max)
+
+			if test.Monitor.User.EnableMin == "true" {
+				fmt.Println("  User Min         :", test.Monitor.User.Min)
+			} else {
+				fmt.Println("  User Min         : disabled")
+			}
+			fmt.Println("  User Max         :", test.Monitor.User.Max)
+		}
+
+		// Sys161
+		fmt.Println("\nsys161 Conf:")
+		conf, _ := test.PrintConf()
+		fmt.Println(strings.TrimSpace(conf))
+		fmt.Println()
 
 		// Points/scoring
 		if test.PointsAvailable > 0 {
@@ -390,7 +428,6 @@ func explain(tg *test161.TestGroup) {
 
 		for _, cmd := range test.Commands {
 			// Instantiate the command so we get the expected output
-			cmd.Instantiate(env)
 			fmt.Println("    Cmd Line    :", cmd.Input.Line)
 			fmt.Println("      Panics    :", cmd.Panic)
 			fmt.Println("      Times Out :", cmd.TimesOut)

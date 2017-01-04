@@ -36,6 +36,12 @@ func doListCommand() int {
 	}
 }
 
+type targetsByName []*test161.TargetListItem
+
+func (t targetsByName) Len() int           { return len(t) }
+func (t targetsByName) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
+func (t targetsByName) Less(i, j int) bool { return t[i].Name < t[j].Name }
+
 func doListTargets() int {
 	if err := getListArgs(); err != nil {
 		printRunError(err)
@@ -53,6 +59,8 @@ func doListTargets() int {
 	} else {
 		targets = env.TargetList()
 	}
+
+	sort.Sort(targetsByName(targets.Targets))
 
 	printTargets(targets)
 

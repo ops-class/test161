@@ -1,6 +1,7 @@
 package test161
 
 import (
+	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -14,14 +15,14 @@ func TestSubmissionRun(t *testing.T) {
 	var err error
 
 	req := &SubmissionRequest{
-		Target: "asst1",
+		Target: "simple",
 		Users: []*SubmissionUserInfo{
 			&SubmissionUserInfo{
-				Email: "t1@xcv58.com",
-				Token: "ATamoCT7DdeNdnErQ",
+				Email: testStudent.Email,
+				Token: testStudent.Token,
 			},
 		},
-		Repository: "git@gitlab.ops-class.org:staff/sol1.git",
+		Repository: "git@github.com:ops-class/os161.git",
 		CommitID:   "HEAD",
 	}
 
@@ -38,6 +39,8 @@ func TestSubmissionRun(t *testing.T) {
 		}
 		env.Persistence = mongo
 		defer mongo.Close()
+	} else {
+		env.Persistence = &TestingPersistence{}
 	}
 
 	env.manager = newManager()
@@ -57,5 +60,39 @@ func TestSubmissionRun(t *testing.T) {
 	assert.Nil(err)
 	assert.Equal(uint(50), s.Score)
 
+	students := retrieveTestStudent(env.Persistence)
+	assert.Equal(1, len(students))
+	if len(students) != 1 {
+		t.FailNow()
+	}
+
+	// The submission makes a copy of of env with a fresh keymap, so use that
+	assert.True(len(s.Env.keyMap) > 0)
+	t.Log(s.Env.keyMap)
+
+	outputBytes, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+	t.Log(string(outputBytes))
+
+	stat := students[0].getStat("simple")
+	assert.NotNil(stat)
+	assert.Equal(uint(50), stat.MaxScore)
+	assert.Equal(uint(50), stat.HighScore)
+
 	env.manager.stop()
+}
+
+func retrieveTestStudent(persist PersistenceManager) []*Student {
+	students := []*Student{}
+	request := map[string]interface{}{
+		"email": testStudent.Email,
+		"token": testStudent.Token,
+	}
+
+	persist.Retrieve(PERSIST_TYPE_STUDENTS, request, &students)
+
+	return students
 }

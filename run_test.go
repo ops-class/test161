@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,14 @@ func init() {
 
 	defaultEnv.TestDir = "./fixtures/tests/nocycle"
 	defaultEnv.RootDir = "./fixtures/root"
+
+	path, _ := filepath.Abs("./fixtures/keys")
+	defaultEnv.KeyDir = path
+
+	path, _ = filepath.Abs("./fixtures/overlays")
+	defaultEnv.OverlayRoot = path
+
+	defaultEnv.SetNullLogger()
 
 	// Command line flags
 	flag.BoolVar(&testFlagDB, "db", false, "Run tests that rely on mongodb")
@@ -248,33 +257,6 @@ func TestRunResults(t *testing.T) {
 	err = test.Run(defaultEnv)
 	assert.Nil(err)
 	assert.Equal(TEST_RESULT_INCORRECT, test.Result)
-
-	t.Log(test.OutputJSON())
-	t.Log(test.OutputString())
-}
-
-func TestRunBadSys161(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-
-	test, err := TestFromString(`---
-sys161:
-  path: "./fixtures/sys161/sys161-2.0.5"
----
-q
-`)
-	assert.Nil(err)
-	assert.Nil(test.MergeConf(TEST_DEFAULTS))
-	assert.Nil(test.Run(defaultEnv))
-
-	assert.Equal(len(test.Status), 3)
-	if len(test.Status) == 3 {
-		assert.Equal(test.Status[0].Status, "started")
-		assert.Equal(test.Status[1].Status, "stats")
-		assert.True(strings.HasPrefix(test.Status[1].Message, "incorrect stat format"))
-		assert.Equal(test.Status[2].Status, "shutdown")
-		assert.True(strings.HasPrefix(test.Status[2].Message, "unexpected"))
-	}
 
 	t.Log(test.OutputJSON())
 	t.Log(test.OutputString())

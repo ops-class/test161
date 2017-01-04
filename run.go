@@ -41,11 +41,12 @@ type Test struct {
 	Depends     []string `yaml:"depends" json:"depends"`
 
 	// Configuration chunks
-	Sys161      Sys161Conf    `yaml:"sys161" json:"sys161"`
-	Stat        StatConf      `yaml:"stat" json:"stat"`
-	Monitor     MonitorConf   `yaml:"monitor" json:"monitor"`
-	CommandConf []CommandConf `yaml:"commandconf" json:"commandconf"`
-	Misc        MiscConf      `yaml:"misc" json:"misc"`
+	Sys161           Sys161Conf         `yaml:"sys161" json:"sys161"`
+	Stat             StatConf           `yaml:"stat" json:"stat"`
+	Monitor          MonitorConf        `yaml:"monitor" json:"monitor"`
+	CommandConf      []CommandConf      `yaml:"commandconf" json:"commandconf"`
+	Misc             MiscConf           `yaml:"misc" json:"misc"`
+	CommandOverrides []*CommandTemplate `yaml:"commandoverrides" json:"-"`
 
 	// Actual test commands to run
 	Content string `fm:"content" yaml:"-" json:"-" bson:"-"`
@@ -128,9 +129,10 @@ type Command struct {
 	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
 	// Set during init
-	Type          string         `json:"type"`
-	PromptPattern *regexp.Regexp `json:"-" bson:"-"`
-	Input         InputLine      `json:"input"`
+	Type          string          `json:"type"`
+	PromptPattern *regexp.Regexp  `json:"-" bson:"-"`
+	Input         InputLine       `json:"input"`
+	Config        CommandTemplate `json:"config"`
 
 	// Set during target init
 	PointsAvailable uint `json:"points_avail" bson:"points_avail"`
@@ -203,6 +205,33 @@ func (t *Test) getWallTime() TimeFixedPoint {
 	return TimeFixedPoint(float64(time.Now().UnixNano()-t.startTime) / float64(1000*1000*1000))
 }
 
+func (t *Test) SetEnv(env *TestEnvironment) {
+	t.env = env
+}
+
+func (t *Test) MergeAllDefaults() error {
+
+	// Merge in test161 defaults for any missing configuration values. This
+	if err := t.MergeConf(CONF_DEFAULTS); err != nil {
+		return err
+	}
+
+	for _, c := range t.Commands {
+		// Set the instance-specific input and expected output
+		if err := c.Instantiate(t.env); err != nil {
+			return err
+		}
+
+		// If no timeout was specified in the command definition or override
+		// (test), use the default.
+		if c.Timeout == 0.0 {
+			c.Timeout = t.Monitor.CommandTimeout
+		}
+	}
+
+	return nil
+}
+
 // Run a test161 test.
 func (t *Test) Run(env *TestEnvironment) (err error) {
 	// Serialize the current command state.
@@ -217,24 +246,11 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		env.notifyAndLogErr("Test Complete", t, MSG_PERSIST_COMPLETE, 0)
 	}()
 
-	t.Result = TEST_RESULT_RUNNING
-	env.notifyAndLogErr("Test Status Running", t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
-
-	// Set the instance-specific input and expected output
-	for _, c := range t.Commands {
-		if err = c.Instantiate(env); err != nil {
-			t.addStatus("aborted", "")
-			t.Result = TEST_RESULT_ABORT
-			return
-		}
-	}
-
-	// Merge in test161 defaults for any missing configuration values
-	err = t.MergeConf(CONF_DEFAULTS)
+	err = t.MergeAllDefaults()
 	if err != nil {
 		t.addStatus("aborted", "")
 		t.Result = TEST_RESULT_ABORT
-		return err
+		return
 	}
 
 	// Create temp directory.
@@ -349,6 +365,11 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 
 	t.allCorrect = true
 
+	// SDH: Moved this to just before we start running so peristence managers have
+	// more accurate test state, i.e. merged config.
+	t.Result = TEST_RESULT_RUNNING
+	env.notifyAndLogErr("Test Status Running", t, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
+
 	// Broadcast current command
 	env.notifyAndLogErr("Command Status", t.currentCommand, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
 
@@ -362,7 +383,12 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 			err = t.sendCommand(t.currentCommand.Input.Line + "\n")
 
 			if err != nil {
-				t.addStatus("expect", "couldn't send a command")
+				// If we can't send the command, it's most likey a broken kernel
+				err = nil
+				t.currentCommand.Status = COMMAND_STATUS_INCORRECT
+				t.allCorrect = false
+				t.currentCommand.PointsEarned = 0
+				t.addStatus("timeout", "couldn't send a command")
 				break
 			}
 			statActive, statErr := t.enableStats()
@@ -442,7 +468,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 			}
 			break
 		} else if cur.Status == COMMAND_STATUS_INCORRECT {
-			if t.ScoringMethod == "entire" {
+			if t.ScoringMethod == TEST_SCORING_ENTIRE {
 				// No point in continuing, just shut down ungracefully.
 				t.addStatus("shutdown", "short-circuit")
 				break
@@ -518,6 +544,12 @@ func (t *Test) finishAndEvaluate() {
 
 // sendCommand sends a command persistently. All the retry logic to deal with
 // dropped characters is now here.
+
+// If your system is running the simulator more than this much slower than
+// wall-clock time you are in trouble...
+
+const MAX_RETRY_LOOPS = 16
+
 func (t *Test) sendCommand(commandLine string) error {
 
 	// If t.Misc.CharacterTimeout is set to zero disable the character retry
@@ -532,23 +564,40 @@ func (t *Test) sendCommand(commandLine string) error {
 
 		for _, character := range commandLine {
 			retryCount := uint(0)
+		CharLoop:
 			for ; retryCount < t.Misc.CommandRetries; retryCount++ {
 				err := t.sys161.Send(string(character))
 				if err != nil {
 					return err
 				}
-				_, err = t.sys161.ExpectRegexp(regexp.MustCompile(regexp.QuoteMeta(string(character))))
-				if err == nil {
-					break
-				} else if err == expect.ErrTimeout {
-					t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'", t.ID, commandLine)
-					continue
-				} else {
-					return err
+				t.L.Lock()
+				charStartTime := t.SimTime
+				t.L.Unlock()
+				for i := 0; i < MAX_RETRY_LOOPS; i++ {
+					_, err = t.sys161.ExpectRegexp(regexp.MustCompile(regexp.QuoteMeta(string(character))))
+					if err == nil {
+						break CharLoop
+					} else if err == expect.ErrTimeout {
+						t.L.Lock()
+						charSimTime := t.SimTime - charStartTime
+						t.L.Unlock()
+						if float64(charSimTime*1000) < float64(t.Misc.CharacterTimeout) {
+							continue
+						} else {
+							t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'",
+								t.ID, strings.TrimSpace(commandLine))
+							continue CharLoop
+						}
+					} else {
+						return err
+					}
 				}
+				t.env.Log.Printf("Test ID: %v  Character timeout in command line '%v'", t.ID, commandLine)
+				continue
 			}
 			if retryCount == t.Misc.CommandRetries {
-				t.env.Log.Printf("Test ID %v  Too many character retries in command line '%v'", t.ID, commandLine)
+				t.env.Log.Printf("Test ID %v  Too many character retries in command line '%v'",
+					t.ID, strings.TrimSpace(commandLine))
 				return errors.New("test161: timeout sending command")
 			}
 		}

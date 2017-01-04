@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -50,6 +51,7 @@ type MonitorConf struct {
 	Kernel          Limits  `yaml:"kernel" json:"kernel"`
 	User            Limits  `yaml:"user" json:"user"`
 	ProgressTimeout float32 `yaml:"progresstimeout" json:"progresstimeout"`
+	CommandTimeout  float32 `yaml:"commandtimeout" json:"commandtimeout"`
 }
 
 type Limits struct {
@@ -80,14 +82,14 @@ var CONF_DEFAULTS = Test{
 		CPUs: 8,
 		RAM:  "1M",
 		Disk1: DiskConf{
-			Enabled: "true",
-			Bytes:   "4M",
+			Enabled: "false",
+			Bytes:   "32M",
 			RPM:     7200,
 			NoDoom:  "true",
 		},
 		Disk2: DiskConf{
 			Enabled: "false",
-			Bytes:   "2M",
+			Bytes:   "32M",
 			RPM:     7200,
 			NoDoom:  "false",
 		},
@@ -110,10 +112,11 @@ var CONF_DEFAULTS = Test{
 			Max:       1.0,
 		},
 		ProgressTimeout: 10.0,
+		CommandTimeout:  60.0,
 	},
 	Misc: MiscConf{
 		CommandRetries:   5,
-		PromptTimeout:    300.0,
+		PromptTimeout:    1800.0,
 		CharacterTimeout: 1000,
 		RetryCharacters:  "true",
 		KillOnExit:       "false",
@@ -310,9 +313,67 @@ func (t *Test) commandConfFromLine(commandLine string) (string, *CommandConf) {
 	return commandLine, nil
 }
 
+// simplePrefixes handle prefixes that don't change the environment or require
+// special prompts.
+
+var khuPrefixRegexp *regexp.Regexp
+var multiplierPrefixRegexp *regexp.Regexp
+var simplePrefixOnce sync.Once
+
+func simplePrefixes(inputCommands []string) ([]string, error) {
+	outputCommands, err := doSimplePrefixes(inputCommands)
+	if err != nil {
+		return nil, err
+	}
+	outputCommands, err = doSimplePrefixes(outputCommands)
+	if err != nil {
+		return nil, err
+	}
+	return outputCommands, nil
+}
+
+func doSimplePrefixes(inputCommands []string) ([]string, error) {
+	simplePrefixOnce.Do(func() {
+		khuPrefixRegexp = regexp.MustCompile(`^\|(.*)`)
+		multiplierPrefixRegexp = regexp.MustCompile(`^(\d+)x(.*)`)
+	})
+	outputCommands := make([]string, 0, len(inputCommands))
+	for _, command := range inputCommands {
+		command = strings.TrimSpace(command)
+		matches := khuPrefixRegexp.FindStringSubmatch(command)
+		if len(matches) != 0 {
+			outputCommands = append(outputCommands, "khu", matches[1], "khu")
+			continue
+		}
+		matches = multiplierPrefixRegexp.FindStringSubmatch(command)
+		if len(matches) != 0 {
+			multiplier, err := strconv.Atoi(matches[1])
+			if err != nil {
+				return nil, err
+			}
+			for i := 0; i < multiplier; i++ {
+				outputCommands = append(outputCommands, matches[2])
+			}
+			continue
+		}
+		outputCommands = append(outputCommands, command)
+	}
+	return outputCommands, nil
+}
+
 // Don't get stuck in an infinite loop
 
 const MAX_EXPANSION_LOOPS = 1024
+
+func (c *Command) setCommandConfig(test *Test) {
+	myname := c.Id()
+	for _, tmpl := range test.CommandOverrides {
+		if tmpl.Name == myname {
+			c.Config = *(tmpl)
+			return
+		}
+	}
+}
 
 func (t *Test) initCommands() (err error) {
 
@@ -345,6 +406,11 @@ func (t *Test) initCommands() (err error) {
 	allConfs := append(t.CommandConf, *SHELL_COMMAND_CONF, *KERNEL_COMMAND_CONF)
 
 	commandLines := strings.Split(strings.TrimSpace(t.Content), "\n")
+	commandLines, err = simplePrefixes(commandLines)
+	if err != nil {
+		return err
+	}
+
 	for i := 0; i <= MAX_EXPANSION_LOOPS; i++ {
 		if i == MAX_EXPANSION_LOOPS {
 			return errors.New("test161: infinite loop expanding command list")
@@ -421,7 +487,7 @@ func (t *Test) initCommands() (err error) {
 			if nextConf != nil {
 				promptPattern = regexp.MustCompile(regexp.QuoteMeta(nextConf.Prompt))
 			}
-			t.Commands = append(t.Commands, &Command{
+			newCmd := &Command{
 				Type:          commandType,
 				ID:            uuid.NewV4().String(),
 				Test:          t,
@@ -433,7 +499,9 @@ func (t *Test) initCommands() (err error) {
 				Panic:    CMD_OPT_NO,
 				TimesOut: CMD_OPT_NO,
 				Timeout:  0.0,
-			})
+			}
+			newCmd.setCommandConfig(t)
+			t.Commands = append(t.Commands, newCmd)
 			commandLines = commandLines[1:]
 		}
 	}

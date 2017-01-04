@@ -329,7 +329,15 @@ func (s *Submission) validResult() bool {
 	}
 }
 
-// update the
+func (student *Student) getStat(targetName string) *TargetStats {
+	for _, stat := range student.Stats {
+		if stat.TargetName == targetName {
+			return stat
+		}
+	}
+	return nil
+}
+
 func (student *Student) updateStats(submission *Submission) {
 
 	// This might be nil coming out of Mongo
@@ -340,14 +348,7 @@ func (student *Student) updateStats(submission *Submission) {
 	student.TotalSubmissions += 1
 
 	// Find the TargetStats to update, or create a new one
-	var stat *TargetStats
-
-	for _, temp := range student.Stats {
-		if temp.TargetName == submission.TargetName {
-			stat = temp
-			break
-		}
-	}
+	stat := student.getStat(submission.TargetName)
 	if stat == nil {
 		stat = submission.TargetStats()
 		student.Stats = append(student.Stats, stat)
@@ -356,6 +357,15 @@ func (student *Student) updateStats(submission *Submission) {
 	// Always increment submission count, but everything else depends on the
 	// submission result
 	stat.TotalSubmissions += 1
+
+	// If the target changed, like in ASST3 where we're incrementally building it,
+	// update the max score so the front-end displays it correctly.
+	// TODO: We might want to keep multiple version in the stats collection, but
+	// that would require aggregation (slow) on the front-end.
+	if stat.TargetVersion < submission.TargetVersion {
+		stat.MaxScore = submission.PointsAvailable
+		stat.TargetVersion = submission.TargetVersion
+	}
 
 	if submission.validResult() {
 

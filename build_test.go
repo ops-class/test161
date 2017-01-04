@@ -10,10 +10,9 @@ func TestBuildFull(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &BuildConf{
-		Repo:     "git@gitlab.ops-class.org:staff/sol1.git",
+		Repo:     "https://github.com/ops-class/os161.git",
 		CommitID: "HEAD",
-		KConfig:  "ASST1",
-		//RequiredCommit: "db6d3d219d53a292b96e8529649757bb257e8785",
+		KConfig:  "DUMBVM",
 	}
 
 	env := defaultEnv.CopyEnvironment()

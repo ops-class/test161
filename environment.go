@@ -184,3 +184,8 @@ func (env *TestEnvironment) notifyAndLogErr(desc string, entity interface{}, msg
 		}
 	}
 }
+
+func (env *TestEnvironment) SetNullLogger() {
+	env.Log.SetFlags(0)
+	env.Log.SetOutput(ioutil.Discard)
+}

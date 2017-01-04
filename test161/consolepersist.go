@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/ops-class/test161"
+	"strings"
 )
 
 // A PersistenceManager that "persists" to the console
@@ -54,6 +55,20 @@ func (c *ConsolePersistence) Notify(entity interface{}, msg, what int) error {
 						str += fmt.Sprintf(": %s", status.Message)
 					}
 					fmt.Println(str)
+				}
+			}
+		}
+	} else if msg == test161.MSG_PERSIST_UPDATE && what == test161.MSG_FIELD_STATUS {
+		switch entity.(type) {
+		case *test161.Test:
+			{
+				test := entity.(*test161.Test)
+				if test.Result == test161.TEST_RESULT_RUNNING {
+					lines := strings.Split(strings.TrimSpace(test.ConfString), "\n")
+					for _, line := range lines {
+						output := fmt.Sprintf(lineFmt, c.width, test.DependencyID, 0.0, line)
+						fmt.Println(output)
+					}
 				}
 			}
 		}

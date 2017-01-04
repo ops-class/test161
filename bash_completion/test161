@@ -50,6 +50,11 @@ _test161()
             ;;
         esac
         ;;
+    config)
+        case "$prev" in
+        test161dir)
+            COMPREPLY=( $(compgen -o dirnames -- $cur) )
+        esac
     esac
 
     case "$prev" in
@@ -66,7 +71,7 @@ _test161()
         ;;
 
     config)
-        COMPREPLY=( $(compgen -W "add-user del-user change-token" -- $cur) )
+        COMPREPLY=( $(compgen -W "add-user del-user change-token test161dir" -- $cur) )
         return 0
         ;;
 
