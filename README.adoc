@@ -7,10 +7,27 @@ https://en.wikipedia.org/wiki/R3000[MIPS R3000] simulator. You are probably
 not interested in `test161` unless you are a student taking or an instructor
 teaching a course that uses OS/161.
 
-== Installing Go
+== `test161`: Library, Client, and Server
 
-Many Linux distributions package fairly out-of-date versions of Go. Instead,
-we encourage you to install the https://github.com/moovweb/gvm[Go Version Manager (GVM)]:
+The `test161` source tree consists of a library along with client and server
+utilities, which are in large part wrappers around the library. <<Configuration>>
+and <<Usage>> examples below that mention `test161` commands are referring to
+the `test161` utility, which is what students generally interact with. There is
+also a <<server,test161-server>> utility that students indirectly interact with
+when submitting assignments. Much of the documentation refers simply to
+`test161`, which refers to the system as a whole.
+
+== Installation and Environment
+
+`test161` is written in https://golang.org/[Go], and the instructions below
+assume you are installing from source and/or setting up your development
+environment to work on `test161`. Alternatively, the current stable binary
+version of `test161` is included in the https://www.ops-class.org/asst/toolchain/#ppa[ops-class.org PPA].
+
+=== Installing Go
+
+Many Linux distributions package fairly out-of-date versions of Go. Instead, we
+encourage you to install the https://github.com/moovweb/gvm[Go Version Manager (GVM)]:
 
 [source,bash]
 ----
@@ -32,14 +49,14 @@ gvm install go1.5.3
 gvm use 1.5.3 --default
 ----
 
-=== `GOPATH`
+==== `GOPATH`
 
 Note that `gvm` will set your `GOPATH` and `PATH` variables properly to allow
 you to run Go binaries that you install. However, if you are interested in
 writing Go code you should set a more accessible `GOPATH` as described as https://golang.org/doc/code.html#GOPATH[described
 here.]
 
-== Installing `test161`
+=== Installing `test161`
 
 Once you have Go installed, upgrading or installing `test161` is simple:
 
@@ -48,18 +65,63 @@ Once you have Go installed, upgrading or installing `test161` is simple:
 go get -u github.com/ops-class/test161/test161
 ----
 
-== Configuration
+=== Configuration
 
-Out of the box, `test161` can't do much without a set of <<tests>>, <<targets>>,
-and <<commands>>, as well as an OS/161 `root` directory which contains your
-kernel. If you are starting from the https://github.com/ops-class/os161[ops-class OS/161 sources],
-as soon as you configure, compile, and install your userland binaries and kernel, `test161`
-will work in either your root or source trees.
+Out of the box, `test161` can't do much without a set of test scripts and an
+OS/161 `root` directory which contains your kernel and user binaries. If you
+are starting from the https://github.com/ops-class/os161[ops-class OS/161 sources],
+as soon as you configure, compile, and install your userland binaries and kernel,
+`test161` will work in either your root or source trees. If you are starting from
+other OS/161 sources, see <<Custom Configuration>>.
 
-=== Submission
+==== Custom Configuration
+
+The ops-class sources create symlinks footnote:[`.root` is in your source
+directory and points to your root directory, `.src` is in your root directory
+and points to your source directory] between your OS/161 source and root
+directories in order to infer your environment, which may not always be what
+you want. To support partial environments where either source or root cannot be
+inferred from the other, or you want to use a specific set of `test161`
+configuration files, you can use `test161 config` to set the test161 directory
+footnote:[The directory containing the tests, targets, and commands subdirectories.
+For the ops-class sources, the test161 directory is named `test161` and is a
+subdirectory of the OS/161 source directory.].
+
+[source,bash]
+----
+test161 config test161dir <path>
+----
+
+This allows you to run `test161` tests from your root directory using the test
+files in `test161dir`. If you do not have symlinks created for environment
+inference, submitting will need to be done from your source directory.
+
+===== Environment Variables
+
+In addition to configuring the `test161` directory, `test161` supports
+environment variables that may be useful during development testing and
+in advanced and use cases.
+
+* *`TEST161_SERVER`*: This variable allows you to set a custom back-end server,
+for example:
+
+[source,bash]
+----
+export TEST161_SERVER=http://localhost:4000
+----
+
+* *`TEST161_OVERLAY`*: The `test161` server uses an overlay directory
+containing trusted files for each assignment. As a security measure, these
+trusted files -- make files, user and kernel test code -- replace students'
+versions when testing their submissions (see <<Security>>). Setting this
+environment variable allows you to test an overlay using the `test161` client,
+allowing you to test overlay changes without submitting to a `test161` server.
+
+==== Submission Configuration
 
 In order to submit to the https://test161.ops-class.org[test161 server], you
-need to configure your username/token, which can be done with:
+need to configure your username/token footnote:[The task of creating tokens
+belongs to the front-end, which students need log in for.], which can be done with:
 
 [source,bash]
 ----
@@ -70,144 +132,448 @@ Removing users and changing configured tokens can be done with:
 
 [source,bash]
 ----
-test161 config del-user <username>              // Delete user information
-test161 config change-token <username> <token>  // Change token
+test161 config del-user <username>              # Delete user information
+test161 config change-token <username> <token>  # Change token
 ----
-
-=== Custom Configuration
-
-The ops-class sources create symlinks between your OS/161 source directory and
-root directory, which may not always be what you want. To support partial
-environments where either source or root cannot be inferred from the other,
-you can use `test161 config` to set the directory containing tests, targets,
-and commands:
-
-[source,bash]
-----
-test161 config test161dir <path>
-----
-
-This allows you to run `test161 run ...` from your root directory.
-
-==== Secure Overlay
-
-The `test161` server uses an overlay directory, containing an overlay for each
-assignment, which it rsyncs over student submissions before compiling. The
-overlay contains files that we don't trust from students, e.g. make files, anything
-that prints SUCCESS. To enable an overlay for local testing, set the
-`TEST161_OVERLAY` environment variable to the overlay path.
-
-==== Local Server
-
-Set the TEST161_SERVER environment variable for testing submissions with a local
-server.
 
 ==== Printing Configuration
 
-To view the current test161 configuration, simply run `test161 config`.
-
-== Usage
-
-=== Running Tests
-
-To run a tests, group of tests, or target, use the `test161 run <names>` sub-command.
-Here, names can be a single target, a list of tests, or a list of <<tags>>.footnote:[In the case
-that tag and target names conflict, specify `-tag` if you mean tag.] For test files,
-<names> is a list of http://www.linuxjournal.com/content/globstar-new-bash-globbing-option [globstar]
-style file names.  The following are all valid commands:
+To view the current test161 configuration, simply run:
 
 [source,bash]
 ----
-test161 run sync/*.t         # Run all tests in the tests/sync
-test161 run **/l*.t          # Run all tests in all sub-directories beginning with 'l'
-test161 run syncprobs/sp*.t  # Run the syncprobs
-test161 run sync/lt1.t       # Run lock test 1
-test161 run locks            # Run all lock tests (tests tagged with 'locks')
-test161 run asst1            # Run the asst1 target
+test161 config
+----
+
+== Usage
+
+`test161` is designed around two main tasks: running tests and submitting
+targets. Additionally, sub-commands exist for configuring test161 and
+listing existing tests. Running `test161` with no arguments will print usage
+information, and for a more detailed description of `test161` sub-commands,
+use `test161 help`.
+
+=== Tests, Targets, and Tags
+
+The `test161` sub-commands often take one or more tests, targets, and tags as
+arguments. A _test_ consists of one or more OS/161 commands along with
+metadata, `sys161` configuration, and possibly some additional `test161` runtime
+configuration. Tests can optionally include _tags_, which allow related tests
+to be grouped and run together. _Targets_ consist of a set of tests that are run
+together, and allow point values to be assigned to each test.
+
+==== Listing Tests, Targets, and Tags
+
+Available tests, targets, and tags can easily be listed with the `test161 list`
+sub-command:
+
+[source,bash]
+----
+test161 list tests        # List all tests with descriptions
+test161 list tags         # List all tags and which tests share each tag
+test161 list targets      # List all targets
+test161 list targets -r   # List all targets available for submission on the server
+----
+
+=== Running Tests
+
+To run a single test, group of tests, or single target, use the `test161 run
+<names>` sub-command. Here, `<names>` can be a single target, one or more tests,
+or one or more tags.footnote:[In the case that tag and target names conflict,
+specify `-tag` if you mean tag.] For test files, `<names>` is a list of
+http://www.linuxjournal.com/content/globstar-new-bash-globbing-option[globstar]
+style file names, with paths specified relative to the root of the test
+directory.  The following are all valid commands:
+
+[source,bash]
+----
+test161 run synch/*.t         # Run all tests in the tests/sync/
+test161 run **/l*.t           # Run all tests in all sub-directories beginning with 'l'
+test161 run synchprobs/sp*.t  # Run the synchprobs
+test161 run synch/lt1.t       # Run lock test 1
+test161 run locks             # Run all lock tests (tests tagged with 'locks')
+test161 run asst1             # Run the asst1 target
+----
+
+==== Test Concurrency
+
+By default, `test161` runs all tests in parallel to speed up processing. As a
+result, the output produced by each test will be interleaved, which can be
+difficult to debug. It is possible to run tests sequentially using the
+`-sequential (-s)` flag.
+
+==== Test Dependencies
+
+Each test specifies a list of dependencies, tests that must pass in order for
+that test to run. For example, our condition variable tests depend on our lock
+tests since locks must work for CVs to work. Internally, `test161` creates a
+dependency graph for all the tests it needs to run and will short-circuit any
+children in the dependency graph in case of failure. By default, all
+dependencies are run when running any group of tests. For targets, this is
+unavoidable. For other groups of tests, this behavior can be suppressed with
+the `-no-dependencies (-n)` flag. This can save a lot of time when debugging a
+particular test that has a lot of dependencies.
+
+==== Command Line Flags
+
+There are several command line flags that can be specified to customize how
+`test161` runs tests.
+
+* `-dry-run` (`-r`): Show the tests that would be run, but don't run them.
+
+* `-explain` (`-x`): Show test detail, such as name, descriptions, `sys161`
+configuration, commands, and expected output.
+
+* `-sequential` (`-s`): By default the output of all tests are interleaved,
+which can be hard to debug. Specify this option to run tests one at a time.
+
+* `-no-dependencies` (`-n`): Run the given tests without also running their
+dependencies. 
+
+* `-verbose` (`-v`): There are three levels of output: `loud` (default), `quiet`
+(no test output), and `whisper` (only final summary, no per-test status).
+
+=== Submitting
+
+Solutions are submitted with the `test161 submit` sub-command. In the most
+common case, you will use the following command from your source or root
+directory, where <target> is the target you wish to submit:
+
+[source,bash]
+----
+test161 submit <target>
+----
+
+By default, `test161 submit` will use the commit associated with the tip of
+your current Git branch. This behavior can be overridden by specifying a
+tree-ish argument after the target argument. For example, all of the following
+are valid commands:
+
+[source,bash]
+----
+test161 submit asst1            # Submit the current branch to the asst1 target
+test161 submit asst2 working    # Submit the working branch/tag to the asst2 target
+test161 submit asst3 3df3dd59a  # Submit the commit 3df3dd59a to the asst3 target
 ----
 
 ==== Command Line Flags
-There are several command line flags that can be specified to customize how `test161` runs tests.
 
-* `-dry-run` (`-r`): Show the tests that would be run, but don't run them.
-* `-explain` (`-x`): Show test detail, such as name, descriptions, `sys161 configuration`, commands, and expected output.
-* `-sequential` (`-s`): By default the output of all tests are interleaved, which can be hard to debug.
-Specify this option to run tests one at a time.
-* `-no-dependencies` (`-n`): Run the given tests without also running their dependencies. In test files, you can specify a
-test's dependencies, and the test will be skipped if the dependency fails. The default behevior is to run all dependencies
-along with each test specified on the command line. This option does not apply for targets.
-* `-verbose` (`-v`): There are 3 levels of output: `loud` (default), `quiet` (no test output), and `whisper` (only final summary, no
-per test status).
+`test161 submit` has a few useful command line flags:
+
+* `-debug`: Print debug output when submitting, namely all Git commands used to
+determine repository details.
+
+* `-verify`: Check for local and remote issues without submitting, i.e. verify
+that the submission would be accepted. This option is useful for verifying that
+your configuration --  users, tokens, keys, etc. -- is correct.
+
+* `-no-cache`: As an optimization, `test161` caches a cloned copy of your repo
+in the same way the server does in order to improve the performance of
+subsequent submissions. In some cases, it is useful to override this behavior.
 
 == Requirements
 
 * `sys161` and `disk161` in the path.
+* Git version >= 2.3.0.
 
-== Default Settings
-
-....
-conf:
-  cpus: 8
-  ram: 1M
-  disk1: # disabled by default, but should be enabled when you want swap disk
-    sectors: min(2 * ram, 8000) # 8000 is a minimum due to a current sys161 bug
-    rpm: 7200
-    nodoom: true
-  disk2: # disabled by default, but uses these defaults if configured
-    sectors: min(2 * ram, 8000)
-    rpm: 7200
-    nodoom: false
-  random: seed=random # random number generated at configuration time
-stat:
-  resolution: 0.01
-  window: 1
-monitor:
-  enabled: "true
-  intervals: 10
-  kernel:
-    enabled: false
-    min: 0.001
-    max: 1.0
-  user:
-    enabled: false
-    min: 0.0001
-    max: 1.0
-  timeouts:
-    prompt: 300
-    progress: 10
-....
 
 == Commands, Tests, and Targets
 
-=== [[commands]]Commands
+`test161` uses a http://yaml.org[YAML]-based configuration system, with
+configuration files located across subdirectories of your `test161`
+directory. The anatomy of this configuration directory is as follows:
 
-The basic unit in `test161` is a command. such as `lt1` for running Lock Test 1,
+* *commands/*: *.tc files containing OS/161 command specification. Each .tc
+file usually contains multiple related commands.
+
+* *targets/*: *.tt files containing target definitions, one per target.
+
+* *tests/*: *.t files containing test specification, one per test. This
+directory will contain subdirectories used to organize related tests.
+
+=== Commands
+
+The basic unit in `test161` is a command, such as `lt1` for running Lock Test 1,
 or `sp1` to run the whalemating test.  Information about what to
-expect when running these commands, as well as what input/ouput they expect
- is specified in the `commands/` directory in your test161 root directory.
-All .tc (test command) file in this directory will be loaded and commands must
-only be specified once.
+expect when running these commands, as well as what input/output they expect
+is specified in the `commands` directory in your test161 root directory.
+All .tc files in this directory will be loaded, and commands must only be
+specified once.
 
-=== [[tests]]Tests
+The following is the full syntax for a commands file:
+
+[source,yaml]
+----
+# Each commands file consists of a collection of templates. An * indicates the
+# default option.
+templates:
+    # Command name/id. For userland tests, include the path and binary name.
+  - name: /testbin/forktest
+
+    # An array of input arguments (optional). This should be included if the
+    # command needs default arguments.
+    input:
+      - arg1
+      - arg2
+
+    # An array of expected output lines (optional). This should be specified
+    # if the output differs from the default <name>: SUCESS.
+    output:
+        # The expected output text
+      - text: "You should see this message if the test passed!"
+
+        # true* if the output is secured, false if not
+        trusted:  true
+
+        # true if <text> references an external command, false* if not
+        external: false
+
+    # Whether or not the command panics - yes, no*, or maybe
+    panics: no
+
+    # Whether or not the command is expected to time out - yes, no*, maybe
+    timesout: no
+
+    # Time (s) after which the test is terminated - 0.0* indicates no timeout
+    timeout: 0.0
+----
+
+Minimally, any command that is to be evaluated for correctness needs to be
+present in exactly one commands (.tc) file with the `name` property specified.
+If no output is specified, the default expected output is
+`<command name>: SUCCESS`.
+
+==== Examples
+
+In the following example, several commands are specified all of which expect the
+default output.
+
+[source,yaml]
+----
+templates:
+  - name: lt1
+  - name: lt2
+  - name: sem1
+  ...
+----
+
+Some commands might be designed to cause a kernel panic.
+
+[source,yaml]
+----
+templates:
+  ...
+  - name: lt2
+    panics: yes
+    output:
+      - text: "lt2: Should panic..."
+  ...
+----
+
+Some OS/161 tests are composed of other tests, in which case the command output
+will reference an external command. In the following example, the 'triplehuge'
+command expects three instances of the 'huge' command's output:
+
+[source,yaml]
+----
+templates:
+  ...
+ - name: /testbin/triplehuge
+    output:
+      - {text: /testbin/huge, external: true, trusted: true}
+      - {text: /testbin/huge, external: true, trusted: true}
+      - {text: /testbin/huge, external: true, trusted: true}
+  ...
+----
+
+Input and output can use https://golang.org/pkg/text/template/[Go's text templates]
+to specify more complex text. The arguments and argument length are available in
+the text templates as `.Args` and `.ArgLen`, respectively. Custom functions are
+also provided; see the `funcMap` in
+https://github.com/ops-class/test161/blob/master/commands.go[commands.go]
+for details.
+
+The following example illustrates how the `add` test's output can be determined
+from random integer inputs:
+
+[source,yaml,options="nowrap"]
+----
+templates:
+  ...
+  - name: /testbin/add
+    input:
+      - "{{randInt 2 1000}}"
+      - "{{randInt 2 4000}}"
+    output:
+      - text: "/testbin/add: {{$x:= index .Args 0 | atoi}}{{$y := index .Args 1 | atoi}}{{add $x $y}}"
+...
+----
+
+=== Tests
 
 Test files (`*.t`) are located in the `tests/` directory in your test161 root
 directory. This directory can contain subdirectories to help organize tests.
 Each test consists of one or more commands, and each test can have its own
-`sys161` configuration.  Tests are run in their own sandboxed envrionment, 
+`sys161` configuration.  Tests are run in their own sandboxed environment, 
 but commands within the test are executed within the same `sys161` session.
-Some tests will consist of multiple commands, and such tests are designed to
-stress test your system.
 
-=== [[targets]]Targets
+The following is an example of a `test161` test file:
 
-Target files (`*.tt`) are located in the `targets/` directory in your test161 root
-directory. Targets specify which tests are run for each assignment, and
-how the scoring is distributed. When you `test161 submit` your assignments, you will
-specify which target to submit to.
+[source,yaml]
+----
+---
+name: "Semaphore Test"
+description:
+  Tests core semaphore logic through cyclic signaling.
+tags: [synch, semaphores, kleaks]
+depends: [boot]
+sys161:
+  cpus: 32
+---
+sem1
+----
 
-== Features
+==== Front Matter
 
-=== Testfile Syntactic Sugar
+The test consist of two parts. The header in between the first and second
+`---` is http://yaml.org[YAML] front matter that provides test metadata and
+configuration. The following describes the syntax and semantics of the test
+metadata:
+
+[source, yaml] 
+----
+---
+name: "Test Name"            # The name this is displayed in test161 commands
+description: "Description"   # Longer test description, used in test161 list tests
+tags: [tag1, tag2]           # All tests with the same tag can be run with test161 run <tag>
+depends: [dep1, dep2]        # Specify dependencies. If these fail, the test is skipped
+...
+---
+----
+
+===== Configuration Options
+
+In addition to metadata, the test file syntax supports various configuration
+options for both `test161` and the underlying `sys161` instance. The following
+provides both the syntax and semantics, as well as the default values for all
+configuration options.
+
+[source, yaml]
+----
+# sys161 configuration
+conf:
+  # 1-32 are valid
+  cpus: 8
+
+  # Number of bytes of memory, with optional K or M prefix
+  ram: 1M
+
+  # Random number generated at runtime. This can be overridden by specifying an
+  # unsigned 32 bit integer to use as the random seed.
+  random: seed=random
+
+  # Disabled by default, but should be enabled when you want swap disk
+  disk1:
+    enabled: false
+    rpm: 7200
+    bytes: 32M
+    nodoom: true
+
+  # Disabled by default, but uses these defaults if configured
+  disk2: 
+    enabled: false
+    rpm: 7200
+    bytes: 32M
+    nodoom: false
+
+# stat161 configuration. The window specifies the number of stat objects we
+# keep around, while the resolution represents the interval (s) that we
+# request stats from stat161.
+stat:
+  resolution: 0.01
+  window: 1
+
+# Monitor configuration
+monitor:
+  enabled: true
+
+  # Number of samples to include in kernel and user calculations
+  window: 400
+
+  # Monitor configuration for tracking kernel cycles. The ratio of kernel
+  # cycles to total cycles to be >= min (if enabled) and <= max.
+  kernel:
+    enablemin: false
+    min: 0.001
+    max: 1.0
+
+  # Monitor configuration for tracking user cycles. The ratio of user cycles
+  # to total cycles to be >= min (if enabled) and <= max.
+  user:
+    enablemin: false
+    min: 0.0001
+    max: 1.0
+
+  # Sim time (s) without character output before the test is stopped
+  progresstimeout: 10.0
+
+  # Sim time (s) a command is allowed to execute before it is stopped
+  commandtimeout: 60.0
+
+# Miscelleneous configuration
+misc:
+  # The next three configuration parameters deal with sys161 occasionally
+  # dropping input characters.
+
+  # Time (ms) to wait for a character to appear in the output stream after
+  # sending it.
+  charactertimeout: 1000
+
+  # Whether or not to retry sending characters if the character timeout is
+  # exceeded.
+  retrycharacters: true
+
+  # Number of times a command is retried if the number of character retries is
+  # exceeded.
+  commandretries: 5
+
+  # Time (s) before halting a test if the current prompt is not seen in the
+  # output stream.
+  prompttimeout: 1800.0   
+
+  # If true, send the kill signal to sys161. This should not generally be
+  # needed.
+  killonexit: false
+----
+
+===== Command Override
+
+In addition to the configuration options, command behavior can be overridden
+in the YAML front matter. A partial <<Commands, command template>> can be
+specified using the `commandoverrides` property, which will be merged with
+the command definition found in the commands files.
+
+For example, the following changes the command timeout for a particular test:
+
+....
+...
+commandoverrides:
+  - name: /testbin/forkbomb
+    timeout: 20.0
+...
+....
+
+Note that the name must be specified in order to distinguish between commands
+in the test.
+
+==== Test Commands
+
+The second part of the test file is a listing of the commands that make up the
+test. In the example at the top of the section, the test file specifies that a
+single test should be run, namely `sem1`. It is important to note that *the
+command name provided here must match what is specified in the commands files*.
+
+===== Test File Syntactic Sugar
 
 A line starting with `$` will be run in the shell and start the shell as
 needed. Lines not starting with `$` are run from the kernel prompt and get
@@ -249,9 +615,168 @@ But this is so much simpler, right?
 $ /bin/true
 ....
 
-=== [[tags]]Test Tags
-Optionally, tests can have one or more tags. `test161` can be invoked to run these tests
-as a group with `test161 run <tag>`.
+`test161` also supports syntactic sugar for <<leaks, memory leak detection>>.
+....
+| p /testbin/forktest
+....
+
+expands to:
+....
+khu
+p /testbin/forktest
+khu
+....
+
+=== Targets
+
+Target files (`*.tt`) are located in the `targets/` directory in your test161 root
+directory. Targets specify which tests are run for each assignment, and
+how the scoring is distributed. When you `test161 submit` your assignments, you will
+specify which target to submit to.
+
+The following example provides the full syntax of a target file:
+
+[source, yaml]
+----
+# The name must be unique across all targets
+name: example_target
+
+# The print name, description, and leaderboard are used by the test161 front-end website
+print_name: EXAMPLE
+description: An example to illustrate target syntax and semantics
+leaderboard: true
+
+# Only active targets can be submitted to
+active: true
+
+# The test161 server uses the target version internally. The version number
+# must be incremented when any test or points details change.
+version: 1
+
+# Target types can be asst or perf (assignment and performance).
+type: asst
+
+# The total number of points for the target. The sum of the individual test
+# points must equal this number.
+points: 10
+
+# The associated kernel configuration file. test161 uses this value to
+# configure and compile your kernel.
+kconfig: ASST1
+
+# true if the userland binaries should be compiled, false (default) if not.
+userland: false
+
+# Specify a commit hash id that must be included in the Git history of the
+# submitted repo.
+required_commit:
+
+# The list of tests that are to be run and evaluated as part of this target.
+tests:
+    # ID is the path relative to the tests directory
+  - id: path/to/test.t
+    # entire or partial. With the "entire" (default) method, all commands in
+    # the test must pass to earn any points. With partial, each command in the
+    # test can earn points.
+    scoring: entire
+
+    # The points for this test
+    points: 10
+
+    # The number of points to deduct if a memory leak was detected.
+    mem_leak_points: 2  # default is 0
+
+    # A list of commands whose behavior needs to be individually specified.
+    # This is only necessary when argument overrides need to be provided, or
+    # when partial command credit is given.
+    commands:
+      - id: sem1
+        # Particular instance of the command in the test. Only useful if the
+        # command is listed multiple times in the test.
+        index: 0
+        points: 0
+        # Override default command arguments.
+        args: [arg1, arg2,...]
+----
+
+== [[server]]test161-server
+
+`test161-server` is a command line utility that implements the `test161`
+back-end functionality. Its main responsibilities include accepting submission
+requests, evaluating these requests, and persisting test output and results.
+
+Our `test161-server` uses https://www.mongodb.com/[mongoDB] as its storage
+layer, which is also how it communicates with the
+https://github.com/ops-class/test161-web-ui[front-end]. The interface of the
+back-end utility is less mature than the `test161` command line utility, mostly
+due to its audience.
+
+=== `test161-server` Configuration
+
+The `test161-server` configuration is in YAML configuration file,
+`~/.test161-server.conf`. The following example provides the syntax for this
+configuration file:
+
+[source,yaml]
+----
+overlaydir: /path/to/overlay/directory
+test161dir: /path/to/test161/root/directory
+cachedir: /path/to/student/repo/cache
+keydir: /path/to/student/deploy/keys
+
+# The maximum concurrency for executing test161 tests. This can also be changed
+# dynamically from the command line with test161-server set-capacity N.
+max_tests: 20
+
+# The mongoDB database name
+dbname: "test161"
+
+# The mongoDB database server and port
+dbsever: "localhost:27017"
+
+# Database credentials
+dbuser: user
+dbpw: password
+
+# The port that test161-server is configured to listen on for API requests
+api_port: 4000
+
+# The minimum test161 client version that the server will accept submissions from
+min_client:
+  major: 1
+  minor: 2
+  revision: 5
+----
+
+==== Key Directory
+
+As part of its API, `test161-server` can generate public/private RSA keypairs.
+The front-end issues these requests from a student's settings page. The keypairs
+are stored in the `keydir` specified in `test161-server.conf`. The student is
+required to add the public key to their private Git repository as a deploy key
+so `test161` can clone their OS/161 sources.
+
+==== Cache Directory
+
+`test161-server` caches students' source code so that it can fetch updates
+rather than re-clone on subsequent submissions.
+
+=== `test161-server` Usage
+
+`test161-server` should be launched as a daemon during boot, but occasionally
+you may need to communicate with the running instance.
+
+[source,bash]
+----
+test161-server status          # Get the status of the running instance
+test161-server pause           # Stop the server from accepting new submissions, but
+                               # finish processing pending submissions
+test161-server resume          # Resume accepting submissions
+test161-server set-capacity N  # Set the max number of concurrent tests
+test161-server get-capacity    # Get the max number of concurrent tests
+----
+
+== Features
 
 === Progress Tracking Using `stat161` Output
 
@@ -259,7 +784,7 @@ as a group with `test161 run <tag>`.
 detect deadlocks, livelocks, and other forms of stalls. We do this using
 several different strategies:
 
-. *Progress and prompt timeouts.* Testfiles can configure both progress
+. *Progress and prompt timeouts.* Test files can configure both progress
 (`monitorconf.timeouts.progress`) and prompt (`monitorconf.timeouts.prompt`)
 timeouts. The former is used to kill the test if no output has appeared, while
 the latter is passed to `expect` and used to kill the test of the prompt is
@@ -275,42 +800,141 @@ User limits are only applied when running in userspace.
 also checks to ensure that there are no user cycles generated when we are
 running in kernel mode, which could be caused by a hung progress.
 
+=== [[leaks]] Memory Leak Detection
 
-=== Running multiple tests and dependencies
+In addition for checking for test correctness, `test161` can also check for
+memory leaks. To implement this feature, a few changes were made to our
+https://github.com/ops-class/os161[ops-class OS/161 sources], which implies
+this feature will be unavailable or source modification is required if you are
+starting from other OS/161 sources.
+
+A new command, `khu`, has been added to our OS/161 kernel menu. When run, this
+command prints the number of bytes of memory currently allocated, between both
+the `kmalloc` subpage allocator, and the VM subsystem. `test161` parses this
+output and calculates the difference between successive invocations to
+determine memory leaks. `test161` <<Targets, targets>> can optionally deduct
+points for memory leaks.
 
 === Correctness vs. Grading
 
+The concepts of _correctness_ and _grading_ are purposely separated in
+`test161`. Correctness is first established at the command granularity -- each
+command has specific criteria that defines correct execution. Since tests are
+composed of commands, it follows that test correctness can be determined from
+command correctness. Grading, however, is handled independently by targets.
+The _partial_ grading method allows for points to be awarded when only some of
+the commands in a single test are correct. In the _entire_ scoring method,
+points are only awarded of the all of the commands in the test are correct.
+
+=== Partial Credit
+
+`test161` allows for partial credit at the command level. This is different
+from the partial scoring method for tests. With partial credit, a command can
+earn a fraction of the points it is assigned in the target. This is implemented
+by looking for the (secured) string, `PARTIAL CREDIT X OF N`. If X == N, full
+credit is awarded and the test is marked correct. Otherwise, a fraction of the
+points (X/N) are awarded and the test is marked as incorrect.
+
 === Security
 
-=== Multiple output strategies
+Given that students are modifying the operating system itself, the attack
+surface for gaming the system is quite large. Given that we have modified
+user test programs to output `<name>: SUCCESS` when they succeed, it would
+be particularly easy for students to fake this output if security measures
+were not put in place. Therefore, security has been built into `test161` to
+create a _secure testing environment_. This was accomplished through both
+`test161` features and additions to our
+https://github.com/ops-class/os161[ops-class OS/161 sources]. In particular,
+we ensure that our trusted tests are running, and that to a very high degree, we
+trust the output.
+
+==== `libtest161` and `secprintf`
+
+Our OS/161 sources add a `test161` library, `libtest161` with the important
+function, `secprintf`:
+
+[source,c]
+----
+int secprintf(const char * secret, const char * msg, const char * name);
+----
+
+When `SECRET_TESTING` is disabled, which it normally is, this function simply
+outputs the message, such as <name>: SUCCESS. Even though the `test161` command
+is expecting trusted output, it knows that `SECRET_TESTING` has been disabled
+and will ignore this requirement. This allows students to test their code using
+`test161` in an unsecured environment.
+
+When `SECRET_TESTING` is enabled, this function _secures_ the output string by
+computing the SHA256 HMAC of the message using the provided _secret key_ and a
+random salt value. It outputs a 4-tuple of (name, hash, salt, name: message).
+`test161` uses this information to verify the authenticity of the message.
+
+==== Source Overlay
+
+`test161` allows the specification of an _overlay directory_ that contains
+trusted source files. These trusted files, such as make files and anything that
+prints `SUCCESS`, overwrite students' untrusted source files on the `test161`
+server during compilation. During testing, an overlay can be specified using
+the `TEST161_OVERLAY` environment variable (see <<Environment Variables>>).
+
+==== Key Injection
+
+When an <<Source Overlay,overlay>> is specified, the process of _key injection_
+is triggered. In our OS/161 source code, a placeholder (`SECRET`) for the secret
+key was added anywhere a key was required for the `secprintf` function. Key
+injection replaces instances of `SECRET` in the source code with a randomly
+generated key, _one per command_. During compile time, a map of command to key
+is created so `test161` can authenticate messages output by test code.
+Importantly, this process repeats itself each time a student submits to a
+target, which means no information from previous submissions can be replayed.
+Additionally, unique salt values are required during testing, preventing replay
+attacks from previously seen command output, such in the case of `triplehuge`.
+
+=== Multiple Output Strategies
 
 `test161` supports different output strategies through its PersistenceManager
-interface. Each TestEnvironment as a PersistenceManager which receives
-callbacks when events happen, like when scores changes, status change, or when
+interface. Each TestEnvironment has a PersistenceManager which receives
+callbacks when events happen, like when scores changes, statuses change, or when
 output lines are added. This allows multiple implementations to handle output
-as they wish. The test161 client utility implements the interface through
+as they wish. The `test161` client utility implements the interface through
 its ConsolePersistence type, which writes all input to stdout. The server uses
-a MongoPersistence type which outputs JSON data to our mongo backend server.
+a MongoPersistence type which outputs JSON data to our mongo back-end server.
+This feature allows `test161-server` forks to easily use whatever back-end
+storage system they desire.
 
 == TODOs
 
 === Nits
 
-* Colored test output on terminals that support it? (Particularly for correct/incorrect.)
+* Colored test output on terminals that support it? (Particularly for
+correct/incorrect.)
+
 * Handle missing newline correctly. Test with shll for lossy shell support.
+
 * sys161 version checks
+
 * Order the test output in some meaningful way, probably by depth in the
 dependency graph. (That way all skipped tests should be shown last.)
-** Not necessarily true. You could have a long, unrelated branch that
-succeeds (even leaf nodes), but some unrelated depencency fails early. I made the
-default print order topological sort, but it's still confusing. I added the
-reason a test is skipped, which helps. Maybe a nice ASCII art tree would work here...
+
+** SDH: Not necessarily true. You could have a long, unrelated branch that
+succeeds (even leaf nodes), but some unrelated dependency fails early. I made
+the default print order topological sort, but it's still confusing. I added the
+reason a test is skipped, which helps. Maybe a nice ASCII art tree would work
+here...
+
 * Check for repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
-(Prevent backend storage DOS attacks.)
+(Prevent back-end storage DOS attacks.)
+
 * Use URL associated with the tree-ish id provided to `test161 submit`
-* Fix directory bash completion for test161 config test161dir. It's unfortunately adding
-a space instead of /.
+
+* Fix directory bash completion for test161 config test161dir. It's
+unfortunately adding a space instead of /.
+
+* Add a backlink from `Test` -> `Submission`
+
+* An `isStaff` flag would be useful when querying the students collection in
+mongo
 
 === Performance Tracking
 
@@ -329,6 +953,9 @@ of the screen showing the tests that are being run.
 It would be nice to be able to add descriptions to tags and have `test161`
 print all tests that fall into a tag (or target) along with the description.
 
+(SDH: we have `test161 list tags` which handles printing tags and their tests,
+but we do not currently support tag descriptions or querying)
+
 === Output Frequency
 
 For long running tests, OS/161 tests generate periodic output, usually in the
@@ -339,30 +966,30 @@ break these into multiple lines, it would be nice to refactor things in such a
 way that the current output line is periodically persisted. This would give
 students a better indication of progress, as opposed to tests looking "stuck".
 
-=== Key saving
+=== Key Saving
 
 Now that we are having students save a key through the web interface we need
 to make sure that these keys get saved, associated with each successful
 submission, and not destroyed even if they are changed later.
 
-=== Configuration override
+=== Configuration Override
 
 It would be great if `test161 run boot.t --sys161-cpus=1` worked properly. I
 think that there is a library for this.
 
-=== Support for GDB backtraces on error
+=== Support for GDB Backtraces on Error
 
 It should be possible to automate the process of hooking up a debugger and
 running BT on panics.
 
-=== Server
+=== Server Nits
 * Environment inference with environment variable overrides, similar to the test161 client
 ** `test161-server config` to both show the configuration and modify it
 * Log the configuration on startup
-* More usablility cleanup
+* Usability cleanup
 ** Usage
 ** Help
 ** Bash completion
 * Moving window for stats API
-* Periodically persist server stats, either in MongoDB or through the logger. We currently lose these on restart.
+* Periodically persist server stats, either in mongoDB or through the logger. We currently lose these on restart.
 * Move collaboration messages into their own files instead of hard-coding
