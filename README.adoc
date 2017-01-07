@@ -936,6 +936,8 @@ unfortunately adding a space instead of /.
 * An `isStaff` flag would be useful when querying the students collection in
 mongo
 
+* Populate man pages
+
 === Performance Tracking
 
 Most of the infrastructure is in place to handle performance targets, but we still
