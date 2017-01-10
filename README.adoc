@@ -931,8 +931,6 @@ here...
 * Fix directory bash completion for test161 config test161dir. It's
 unfortunately adding a space instead of /.
 
-* Add a backlink from `Test` -> `Submission`
-
 * An `isStaff` flag would be useful when querying the students collection in
 mongo
 
