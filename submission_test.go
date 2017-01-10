@@ -82,6 +82,13 @@ func TestSubmissionRun(t *testing.T) {
 	assert.Equal(uint(50), stat.MaxScore)
 	assert.Equal(uint(50), stat.HighScore)
 
+	// Check test ids
+	assert.True(len(s.ID) > 0)
+	assert.Equal(s.ID, s.BuildTest.SubmissionID)
+	for _, test := range s.Tests.Tests {
+		assert.Equal(s.ID, test.SubmissionID)
+	}
+
 	env.manager.stop()
 }
 

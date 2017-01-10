@@ -477,6 +477,7 @@ func (s *Submission) Run() error {
 	if s.BuildTest != nil {
 		s.Status = SUBMISSION_BUILDING
 		s.Env.notifyAndLogErr("Submission Status Building", s, MSG_PERSIST_UPDATE, MSG_FIELD_STATUS)
+		s.BuildTest.SubmissionID = s.ID
 
 		res, err := s.BuildTest.Run(s.Env)
 		if err != nil {
@@ -497,6 +498,9 @@ func (s *Submission) Run() error {
 
 	// Build succeeded, update things accordingly
 	for _, test := range s.Tests.Tests {
+		// Link the test to this submission.
+		test.SubmissionID = s.ID
+
 		// Add test IDs to DB
 		s.TestIDs = append(s.TestIDs, test.ID)
 

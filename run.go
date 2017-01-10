@@ -32,6 +32,9 @@ type Test struct {
 	// Mongo ID
 	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
+	// ID of the submission this test belongs to.
+	SubmissionID string `yaml:"-" json:"-" bson:"submission_id"`
+
 	// Input
 
 	// Metadata

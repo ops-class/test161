@@ -58,6 +58,9 @@ type BuildTest struct {
 	// Mongo ID
 	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
+	// ID of the submission this test belongs to.
+	SubmissionID string `yaml:"-" json:"-" bson:"submission_id"`
+
 	// Metadata
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description" json:"description"`
