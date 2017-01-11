@@ -74,10 +74,18 @@ func ClientConfToFile(conf *ClientConf) error {
 	return nil
 }
 
-func isRootDir(path string) bool {
-	reqs := []string{"kernel", "testbin"}
-	err := testPath(path, "root", reqs)
-	return err == nil
+func isRootDir(p string) bool {
+	reqs := []string{"kernel"}
+	if err := testPath(p, "root", reqs); err != nil {
+		return false
+	}
+
+	// Make sure it's executable (os.Stat follows links)
+	if fi, err := os.Stat(path.Join(p, "kernel")); err != nil {
+		return false
+	} else {
+		return !fi.IsDir() && (fi.Mode()&0111 > 0)
+	}
 }
 
 func isSourceDir(path string) bool {
