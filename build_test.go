@@ -73,3 +73,26 @@ func TestBuildFailures(t *testing.T) {
 		assert.Nil(res)
 	}
 }
+
+func TestHexString(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	testCases := []struct {
+		input    string
+		expected bool
+	}{
+		{"0123456789abcdef", true},
+		{"0123456789ABCDEF", true},
+		{"e1a2fbd038c618b6d9e636a94e1907dc92e94ca6", true},
+		{"", false},
+		{"foo", false},
+		{"0123456789abcdefg", false},
+		{"!", false},
+	}
+
+	for _, test := range testCases {
+		t.Log(test.input)
+		assert.Equal(test.expected, isHexString(test.input))
+	}
+}

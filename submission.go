@@ -53,6 +53,9 @@ type Submission struct {
 	CommitRef     string   `bson:"commit_ref"`     // Just informational
 	ClientVersion string   `bson:"client_version"` // Just informational
 
+	// From the environment
+	OverlayCommitID string `bson:"overlay_commit_id"` // Just informational
+
 	// Target details
 	TargetID        string `bson:"target_id"`
 	TargetName      string `bson:"target_name"`
@@ -494,6 +497,8 @@ func (s *Submission) Run() error {
 		if len(res.TempDir) > 0 {
 			defer os.RemoveAll(res.TempDir)
 		}
+
+		s.OverlayCommitID = s.BuildTest.overlayCommitID
 	}
 
 	// Build succeeded, update things accordingly

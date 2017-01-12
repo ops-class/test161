@@ -59,6 +59,8 @@ func TestSubmissionRun(t *testing.T) {
 	err = s.Run()
 	assert.Nil(err)
 	assert.Equal(uint(50), s.Score)
+	assert.True(len(s.OverlayCommitID) > 0)
+	assert.True(isHexString(s.OverlayCommitID))
 
 	students := retrieveTestStudent(env.Persistence)
 	assert.Equal(1, len(students))
