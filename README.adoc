@@ -906,9 +906,6 @@ storage system they desire.
 
 === Nits
 
-* Colored test output on terminals that support it? (Particularly for
-correct/incorrect.)
-
 * Handle missing newline correctly. Test with shll for lossy shell support.
 
 * sys161 version checks

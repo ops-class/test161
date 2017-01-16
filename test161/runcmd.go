@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/ops-class/test161"
 	"os"
 	"sort"
@@ -56,6 +57,14 @@ const (
 	VERBOSE_LOUD    = "loud"
 	VERBOSE_QUIET   = "quiet"
 	VERBOSE_WHISPER = "whisper"
+)
+
+// Colors
+var (
+	COLOR_SUCCESS *color.Color = color.New(color.FgGreen)
+	COLOR_FAIL    *color.Color = color.New(color.FgRed)
+	COLOR_SKIPPED *color.Color = color.New(color.FgBlue)
+	COLOR_ABORT   *color.Color = color.New(color.FgBlue)
 )
 
 func getRunArgs() error {
@@ -148,31 +157,33 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 }
 
 func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder bool) {
-	headers := []*Heading{
-		&Heading{
-			Text:     "Test",
-			MinWidth: 30,
+	pd := &PrintData{
+		Headings: []*Heading{
+			&Heading{
+				Text:     "Test",
+				MinWidth: 30,
+			},
+			&Heading{
+				Text:     "Result",
+				MinWidth: 10,
+			},
+			&Heading{
+				Text:           "Memory Leaks",
+				RightJustified: true,
+			},
+			&Heading{
+				Text:           "Score",
+				MinWidth:       10,
+				RightJustified: true,
+			},
 		},
-		&Heading{
-			Text:     "Result",
-			MinWidth: 10,
-		},
-		&Heading{
-			Text:           "Memory Leaks",
-			RightJustified: true,
-		},
-		&Heading{
-			Text:           "Score",
-			MinWidth:       10,
-			RightJustified: true,
-		},
+		Config: defaultPrintConf,
+		Rows:   make(Rows, 0),
 	}
 
 	tests := getPrintOrder(tg, tryDependOrder)
 
 	totalPoints, totalAvail := uint(0), uint(0)
-
-	results := make([][]string, 0)
 
 	desc := []string{"Total Correct", "Total Incorrect",
 		"Total Skipped", "Total Aborted",
@@ -184,7 +195,21 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 		totalPoints += test.PointsEarned
 		totalAvail += test.PointsAvailable
 
+		var paint *color.Color = nil
+
+		switch test.Result {
+		case test161.TEST_RESULT_CORRECT:
+			paint = COLOR_SUCCESS
+		case test161.TEST_RESULT_INCORRECT:
+			paint = COLOR_FAIL
+		case test161.TEST_RESULT_SKIP:
+			paint = COLOR_SKIPPED
+		case test161.TEST_RESULT_ABORT:
+			paint = COLOR_ABORT
+		}
+
 		status := string(test.Result)
+
 		if test.Result == test161.TEST_RESULT_SKIP {
 			// Try to find a failed dependency
 			for _, dep := range test.ExpandedDeps {
@@ -206,14 +231,14 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 			}
 		}
 
-		row := []string{
-			test.DependencyID,
-			status,
-			leak,
-			fmt.Sprintf("%v/%v", test.PointsEarned, test.PointsAvailable),
+		row := []*Cell{
+			&Cell{Text: test.DependencyID},
+			&Cell{Text: status, CellColor: paint},
+			&Cell{Text: leak},
+			&Cell{Text: fmt.Sprintf("%v/%v", test.PointsEarned, test.PointsAvailable)},
 		}
 
-		results = append(results, row)
+		pd.Rows = append(pd.Rows, row)
 
 		switch test.Result {
 		case test161.TEST_RESULT_CORRECT:
@@ -232,13 +257,13 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 	if verbosity != VERBOSE_WHISPER {
 		// Chop off the score if it's not a graded target
 		if totalAvail == 0 {
-			headers = headers[0 : len(headers)-1]
-			for i, row := range results {
-				results[i] = row[0 : len(row)-1]
+			pd.Headings = pd.Headings[0 : len(pd.Headings)-1]
+			for i, row := range pd.Rows {
+				pd.Rows[i] = row[0 : len(row)-1]
 			}
 		}
 		fmt.Println()
-		printColumns(headers, results, defaultPrintConf)
+		pd.Print()
 	}
 
 	// Print totals
@@ -313,22 +338,25 @@ func (t testsByID) Less(i, j int) bool { return t[i].DependencyID < t[j].Depende
 
 func printDryRun(tg *test161.TestGroup) {
 
-	headers := []*Heading{
-		&Heading{
-			Text:     "Test ID",
-			MinWidth: 30,
+	pd := &PrintData{
+		Headings: []*Heading{
+			&Heading{
+				Text:     "Test ID",
+				MinWidth: 30,
+			},
+			&Heading{
+				Text: "Test Name",
+			},
+			&Heading{
+				Text:           "Points",
+				RightJustified: true,
+			},
 		},
-		&Heading{
-			Text: "Test Name",
-		},
-		&Heading{
-			Text:           "Points",
-			RightJustified: true,
-		},
+		Rows:   make(Rows, 0),
+		Config: defaultPrintConf,
 	}
 
 	sorted := getPrintOrder(tg, true)
-	rows := make([][]string, 0)
 
 	for _, test := range sorted {
 		points := ""
@@ -337,13 +365,15 @@ func printDryRun(tg *test161.TestGroup) {
 		} else {
 			points = fmt.Sprintf("%v", test.PointsAvailable)
 		}
-		rows = append(rows, []string{
-			test.DependencyID, test.Name, points,
+		pd.Rows = append(pd.Rows, []*Cell{
+			&Cell{Text: test.DependencyID},
+			&Cell{Text: test.Name},
+			&Cell{Text: points},
 		})
 	}
 
 	fmt.Println()
-	printColumns(headers, rows, defaultPrintConf)
+	pd.Print()
 	fmt.Println()
 }
 

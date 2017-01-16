@@ -101,32 +101,39 @@ func printTargets(list *test161.TargetList) {
 		desc = "Local Target"
 	}
 
-	headers := []*Heading{
-		&Heading{
-			Text:     desc,
-			MinWidth: 20,
+	pd := &PrintData{
+		Headings: []*Heading{
+			&Heading{
+				Text:     desc,
+				MinWidth: 20,
+			},
+			&Heading{
+				Text: "Type",
+			},
+			&Heading{
+				Text: "Version",
+			},
+			&Heading{
+				Text:           "Points",
+				RightJustified: true,
+			},
 		},
-		&Heading{
-			Text: "Type",
-		},
-		&Heading{
-			Text: "Version",
-		},
-		&Heading{
-			Text:           "Points",
-			RightJustified: true,
-		},
+		Rows:   make(Rows, 0),
+		Config: defaultPrintConf,
 	}
 
-	data := make([][]string, 0)
 	for _, t := range list.Targets {
-		data = append(data, []string{
-			t.Name, t.Type, fmt.Sprintf("v%v", t.Version), fmt.Sprintf("%v", t.Points),
-		})
+		row := []*Cell{
+			&Cell{Text: t.Name},
+			&Cell{Text: t.Type},
+			&Cell{Text: fmt.Sprintf("v%v", t.Version)},
+			&Cell{Text: fmt.Sprintf("%v", t.Points)},
+		}
+		pd.Rows = append(pd.Rows, row)
 	}
 
 	fmt.Println()
-	printColumns(headers, data, defaultPrintConf)
+	pd.Print()
 	fmt.Println()
 }
 
@@ -210,17 +217,20 @@ func doListTags() int {
 }
 
 func doListTests() int {
-
-	headers := []*Heading{
-		&Heading{
-			Text: "Test ID",
+	pd := &PrintData{
+		Headings: []*Heading{
+			&Heading{
+				Text: "Test ID",
+			},
+			&Heading{
+				Text: "Name",
+			},
+			&Heading{
+				Text: "Description",
+			},
 		},
-		&Heading{
-			Text: "Name",
-		},
-		&Heading{
-			Text: "Description",
-		},
+		Rows:   make(Rows, 0),
+		Config: defaultPrintConf,
 	}
 
 	// Load every test file
@@ -231,17 +241,17 @@ func doListTests() int {
 	}
 
 	// Print ID, line, description for each tests
-	data := make([][]string, 0)
 	for _, test := range tests {
-		data = append(data, []string{
-			test.DependencyID,
-			test.Name,
-			strings.TrimSpace(test.Description),
-		})
+		row := []*Cell{
+			&Cell{Text: test.DependencyID},
+			&Cell{Text: test.Name},
+			&Cell{Text: strings.TrimSpace(test.Description)},
+		}
+		pd.Rows = append(pd.Rows, row)
 	}
 
 	fmt.Println()
-	printColumns(headers, data, defaultPrintConf)
+	pd.Print()
 	fmt.Println()
 
 	return 0
