@@ -18,6 +18,7 @@ const (
 	COLLECTION_TESTS       = "tests"
 	COLLECTION_STUDENTS    = "students"
 	COLLECTION_TARGETS     = "targets"
+	COLLECTION_USERS       = "users"
 )
 
 func NewMongoPersistence(dial *mgo.DialInfo) (PersistenceManager, error) {
@@ -238,16 +239,25 @@ func (m *MongoPersistence) CanRetrieve() bool {
 	return true
 }
 
-func (m *MongoPersistence) Retrieve(what int, who map[string]interface{}, res interface{}) error {
+func (m *MongoPersistence) Retrieve(what int, who map[string]interface{}, filter map[string]interface{}, res interface{}) error {
 	session := m.session.Copy()
 	defer session.Close()
 
+	collection := ""
+
 	switch what {
 	case PERSIST_TYPE_STUDENTS:
-		c := session.DB(m.dbName).C(COLLECTION_STUDENTS)
-		return c.Find(bson.M(who)).All(res)
-
+		collection = COLLECTION_STUDENTS
+	case PERSIST_TYPE_USERS:
+		collection = COLLECTION_USERS
 	default:
 		return errors.New("Persistence: Invalid data type")
 	}
+
+	c := session.DB(m.dbName).C(collection)
+	query := c.Find(bson.M(who))
+	if filter != nil {
+		query = query.Select(bson.M(filter))
+	}
+	return query.All(res)
 }

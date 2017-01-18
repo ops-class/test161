@@ -19,6 +19,7 @@ const (
 
 const (
 	PERSIST_TYPE_STUDENTS = 1 << iota
+	PERSIST_TYPE_USERS
 )
 
 // Each Submission has at most one PersistenceManager, and it is pinged when a
@@ -35,7 +36,7 @@ type PersistenceManager interface {
 	// what should be PERSIST_TYPE_*
 	// who is a map of field:value
 	// res is where to deserialize the data
-	Retrieve(what int, who map[string]interface{}, res interface{}) error
+	Retrieve(what int, who map[string]interface{}, filter map[string]interface{}, res interface{}) error
 }
 
 type DoNothingPersistence struct {
@@ -52,6 +53,7 @@ func (d *DoNothingPersistence) CanRetrieve() bool {
 	return false
 }
 
-func (d *DoNothingPersistence) Retrieve(what int, who map[string]interface{}, res interface{}) error {
+func (d *DoNothingPersistence) Retrieve(what int, who map[string]interface{},
+	filter map[string]interface{}, res interface{}) error {
 	return nil
 }

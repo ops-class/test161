@@ -55,6 +55,7 @@ type Submission struct {
 
 	// From the environment
 	OverlayCommitID string `bson:"overlay_commit_id"` // Just informational
+	IsStaff         bool   `bson:"is_staff"`
 
 	// Target details
 	TargetID        string `bson:"target_id"`
@@ -111,6 +112,10 @@ type Student struct {
 	// Stats
 	TotalSubmissions uint           `bson:"total_submissions"`
 	Stats            []*TargetStats `bson:"target_stats"`
+
+	// Computed, cached.
+	// 0 == uncached, 1 == false, 2 == true
+	isStaff int
 }
 
 // Keep track of pending submissions.  Keep this out of the database in case there are
@@ -143,13 +148,15 @@ func getStudents(email, token string, env *TestEnvironment) ([]*Student, error) 
 		"token": token,
 	}
 	students := []*Student{}
-	if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, &students); err != nil {
+	if err := env.Persistence.Retrieve(PERSIST_TYPE_STUDENTS, request, nil, &students); err != nil {
 		return nil, err
 	}
 
 	if len(students) != 1 || students[0].Email != email || students[0].Token != token {
 		return nil, errors.New("Unable to authenticate student: " + email)
+
 	}
+
 	return students, nil
 }
 
@@ -178,6 +185,19 @@ func (req *SubmissionRequest) Validate(env *TestEnvironment) ([]*Student, error)
 
 	if len(req.Repository) == 0 || len(req.CommitID) == 0 {
 		return students, errors.New("Must specify a Git repository and commit id")
+	}
+
+	// Staff flag needs to be all or nothing
+	staffCnt := 0
+	for _, student := range students {
+		if staff, err := student.IsStaff(env); err != nil {
+			return students, err
+		} else if staff {
+			staffCnt += 1
+		}
+	}
+	if staffCnt > 0 && staffCnt < len(students) {
+		return students, errors.New("Cannot have staff working with students!")
 	}
 
 	return students, nil
@@ -261,11 +281,19 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 	}
 
 	// We need the students to later update the students collection.  But,
-	// the submission only care about user email addresses.
+	// the submission only cares about user email addresses.
 	s.students = students
 	s.Users = make([]string, 0, len(request.Users))
 	for _, u := range request.Users {
 		s.Users = append(s.Users, u.Email)
+	}
+
+	// Also, we record whether the students were staff or not so we can
+	// easily filter out staff submissions. The validate step checks that
+	// students and staff are not working together
+	if len(students) > 0 {
+		// This has already been set during validate.
+		s.IsStaff, _ = students[0].IsStaff(env)
 	}
 
 	// Try and lock students now so we don't allow multiple submissions.
@@ -415,6 +443,36 @@ func (student *Student) updateStats(submission *Submission) {
 			stat.AvgPerf = (prevPerfTotal + submission.Performance) / float64(stat.TotalComplete)
 		}
 	}
+}
+
+func (student *Student) IsStaff(env *TestEnvironment) (bool, error) {
+	const staff = "services.auth0.user_metadata.staff"
+	const email = "services.auth0.email"
+
+	if student.isStaff == 0 {
+		if env.Persistence != nil && env.Persistence.CanRetrieve() {
+			who := map[string]interface{}{
+				email: student.Email,
+				staff: true,
+			}
+			filter := map[string]interface{}{staff: 1}
+			res := make([]interface{}, 0)
+			if err := env.Persistence.Retrieve(PERSIST_TYPE_USERS, who, filter, &res); err != nil {
+				return false, err
+			} else {
+				// Set flag
+				if len(res) > 0 {
+					student.isStaff = 2
+				} else {
+					student.isStaff = 1
+				}
+			}
+		} else {
+			return false, errors.New("Unable to detect if student is staff")
+		}
+	}
+
+	return student.isStaff == 2, nil
 }
 
 // Update students.  We copy metadata to make this quick and store the

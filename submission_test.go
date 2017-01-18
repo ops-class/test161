@@ -61,6 +61,7 @@ func TestSubmissionRun(t *testing.T) {
 	assert.Equal(uint(50), s.Score)
 	assert.True(len(s.OverlayCommitID) > 0)
 	assert.True(isHexString(s.OverlayCommitID))
+	assert.True(s.IsStaff)
 
 	students := retrieveTestStudent(env.Persistence)
 	assert.Equal(1, len(students))
@@ -101,7 +102,7 @@ func retrieveTestStudent(persist PersistenceManager) []*Student {
 		"token": testStudent.Token,
 	}
 
-	persist.Retrieve(PERSIST_TYPE_STUDENTS, request, &students)
+	persist.Retrieve(PERSIST_TYPE_STUDENTS, request, nil, &students)
 
 	return students
 }
