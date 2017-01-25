@@ -906,18 +906,7 @@ storage system they desire.
 
 === Nits
 
-* Handle missing newline correctly. Test with shll for lossy shell support.
-
 * sys161 version checks
-
-* Order the test output in some meaningful way, probably by depth in the
-dependency graph. (That way all skipped tests should be shown last.)
-
-** SDH: Not necessarily true. You could have a long, unrelated branch that
-succeeds (even leaf nodes), but some unrelated dependency fails early. I made
-the default print order topological sort, but it's still confusing. I added the
-reason a test is skipped, which helps. Maybe a nice ASCII art tree would work
-here...
 
 * Check for repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
@@ -950,23 +939,8 @@ break these into multiple lines, it would be nice to refactor things in such a
 way that the current output line is periodically persisted. This would give
 students a better indication of progress, as opposed to tests looking "stuck".
 
-=== Key Saving
-
-Now that we are having students save a key through the web interface we need
-to make sure that these keys get saved, associated with each successful
-submission, and not destroyed even if they are changed later.
-
-=== Configuration Override
-
-It would be great if `test161 run boot.t --sys161-cpus=1` worked properly. I
-think that there is a library for this.
-
-=== Support for GDB Backtraces on Error
-
-It should be possible to automate the process of hooking up a debugger and
-running BT on panics.
-
 === Server Nits
+
 * Environment inference with environment variable overrides, similar to the test161 client
 ** `test161-server config` to both show the configuration and modify it
 * Log the configuration on startup
