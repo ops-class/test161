@@ -33,6 +33,7 @@ type Rows []Row
 type PrintConfig struct {
 	NumSpaceSep   int
 	UnderlineChar string
+	BoldHeadings  bool
 }
 
 type PrintData struct {
@@ -46,6 +47,7 @@ type PrintData struct {
 var defaultPrintConf = PrintConfig{
 	NumSpaceSep:   3,
 	UnderlineChar: "-",
+	BoldHeadings:  true,
 }
 
 // Get the number of columns available on the terminal. We'll try to squeeze
@@ -268,8 +270,14 @@ func (pd *PrintData) Print() error {
 	}
 
 	// Print heading
+	bold := color.New(color.Bold)
+
 	for i, h := range pd.Headings {
-		fmt.Printf(fmtStrings[i], h.Text)
+		if pd.Config.BoldHeadings {
+			bold.Printf(fmtStrings[i], h.Text)
+		} else {
+			fmt.Printf(fmtStrings[i], h.Text)
+		}
 	}
 
 	// Underlines
