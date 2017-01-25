@@ -72,10 +72,10 @@ type TargetTest struct {
 // in TargetTests. TargetCommands allow you to the points for an individual command
 // or override the input arguments.
 type TargetCommand struct {
-	Id     string   `yaml:"id" bson:cmd_id"` // ID, must match ID in test file
-	Index  int      `yaml:"index"`           // Index > 0 => match to index in test
-	Points uint     `yaml:"points"`          // Points for this command
-	Args   []string `yaml:"args"`            // Argument overrides
+	Id     string   `yaml:"id" bson:"cmd_id"` // ID, must match ID in test file
+	Index  int      `yaml:"index"`            // Index > 0 => match to index in test
+	Points uint     `yaml:"points"`           // Points for this command
+	Args   []string `yaml:"args"`             // Argument overrides
 }
 
 // TargetListItem is the target detail we send to remote clients about a target

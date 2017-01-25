@@ -12,10 +12,10 @@ import (
 
 // GroupConfig specifies how a group of tests should be created and run.
 type GroupConfig struct {
-	Name    string           `json:name`
+	Name    string           `json:"name"`
 	UseDeps bool             `json:"usedeps"`
 	Tests   []string         `json:"tests"`
-	Env     *TestEnvironment `json:"-" "bson:"-"`
+	Env     *TestEnvironment `json:"-" bson:"-"`
 }
 
 // A group of tests to be run, which is the result of expanding a GroupConfig.
