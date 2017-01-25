@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/ops-class/test161"
 	"github.com/parnurzeal/gorequest"
 	"net/http"
@@ -14,6 +15,11 @@ import (
 )
 
 var listRemoteFlag bool
+
+var (
+	listTagsShort bool
+	listTagsList  []string
+)
 
 func doListCommand() int {
 	if len(os.Args) < 3 {
@@ -30,6 +36,8 @@ func doListCommand() int {
 		return doListTests()
 	case "all":
 		return doListAll()
+	case "tagnames":
+		return doListTagnames()
 	default:
 		fmt.Fprintf(os.Stderr, "Invalid option to 'test161 list'.  Must be one of (targets, tags, tests)\n")
 		return 1
@@ -153,6 +161,19 @@ func getListArgs() error {
 	return nil
 }
 
+func getTagArgs() error {
+	flags := flag.NewFlagSet("test161 list-tags", flag.ExitOnError)
+	flags.Usage = usage
+	flags.BoolVar(&listTagsShort, "short", false, "")
+	flags.BoolVar(&listTagsShort, "s", false, "")
+
+	flags.Parse(os.Args[3:]) // this may exit
+	listTagsList = flags.Args()
+
+	return nil
+
+}
+
 func getAllTests() ([]*test161.Test, []error) {
 	conf := &test161.GroupConfig{
 		Tests: []string{"**/*.t"},
@@ -174,9 +195,43 @@ func getAllTests() ([]*test161.Test, []error) {
 	return tests, nil
 }
 
+// Hidden option for autocomplete
+func doListTagnames() int {
+	// Load every test file
+	tests, errs := getAllTests()
+	if len(errs) > 0 {
+		printRunErrors(errs)
+		return 1
+	}
+
+	tags := make(map[string]bool)
+
+	for _, test := range tests {
+		for _, tag := range test.Tags {
+			tags[tag] = true
+		}
+	}
+
+	// Print tags
+	for key, _ := range tags {
+		fmt.Println(key)
+	}
+
+	return 0
+}
+
 func doListTags() int {
+	if err := getTagArgs(); err != nil {
+		printRunError(err)
+		return 1
+	}
 
 	tags := make(map[string][]*test161.Test)
+
+	desired := make(map[string]bool)
+	for _, t := range listTagsList {
+		desired[t] = true
+	}
 
 	// Load every test file
 	tests, errs := getAllTests()
@@ -204,14 +259,63 @@ func doListTags() int {
 	// Printing
 	fmt.Println()
 
-	for _, tag := range sorted {
-		fmt.Println(tag)
-		for _, test := range tags[tag] {
-			fmt.Println("    ", test.DependencyID)
+	if listTagsShort {
+		// For the short version, we'll print a table to align the descriptions
+		pd := &PrintData{
+			Headings: []*Heading{
+				&Heading{
+					Text: "Tag",
+				},
+				&Heading{
+					Text: "Description",
+				},
+			},
+			Config: defaultPrintConf,
+			Rows:   make(Rows, 0),
+		}
+
+		for _, tag := range sorted {
+			if len(desired) > 0 && !desired[tag] {
+				continue
+			}
+
+			desc := ""
+			if info, ok := env.Tags[tag]; ok {
+				desc = info.Description
+			}
+
+			pd.Rows = append(pd.Rows, []*Cell{
+				&Cell{Text: tag},
+				&Cell{Text: desc},
+			})
+		}
+
+		if len(pd.Rows) > 0 {
+			pd.Print()
+		}
+		fmt.Println()
+
+	} else {
+		bold := color.New(color.Bold)
+
+		for _, tag := range sorted {
+			if len(desired) > 0 && !desired[tag] {
+				continue
+			}
+
+			if info, ok := env.Tags[tag]; ok {
+				bold.Printf("%v:", tag)
+				fmt.Printf("  %v\n", info.Description)
+			} else {
+				bold.Print(tag)
+			}
+
+			for _, test := range tags[tag] {
+				fmt.Println("    ", test.DependencyID)
+			}
+			fmt.Println()
 		}
 	}
-
-	fmt.Println()
 
 	return 0
 }
@@ -242,7 +346,7 @@ func doListTests() int {
 
 	// Print ID, line, description for each tests
 	for _, test := range tests {
-		row := []*Cell{
+		row := Row{
 			&Cell{Text: test.DependencyID},
 			&Cell{Text: test.Name},
 			&Cell{Text: strings.TrimSpace(test.Description)},

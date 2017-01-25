@@ -19,6 +19,9 @@ type TestEnvironment struct {
 	Commands map[string]*CommandTemplate
 	Targets  map[string]*Target
 
+	// Optional - added in version 1.2.6
+	Tags map[string]*TagDescription
+
 	manager *manager
 
 	CacheDir    string
@@ -83,6 +86,23 @@ func envTargetHandler(env *TestEnvironment, f string) error {
 	}
 }
 
+// Handle a single tag description file (.td) and load it into the
+// TestEnvironment.
+func envTagDescHandler(env *TestEnvironment, f string) error {
+	if tags, err := TagDescriptionsFromFile(f); err != nil {
+		return err
+	} else {
+		// If we already know about the tag, it's an error
+		for _, tag := range tags.Tags {
+			if _, ok := env.Tags[tag.Name]; ok {
+				return fmt.Errorf("Duplicate tag (%v) in file %v", tag.Name, f)
+			}
+			env.Tags[tag.Name] = tag
+		}
+		return nil
+	}
+}
+
 // envReadLoop searches a directory for files with a certain extention. When it
 // finds one, it calls handler().
 func (env *TestEnvironment) envReadLoop(searchDir, ext string,
@@ -114,12 +134,14 @@ func NewEnvironment(test161Dir string, pm PersistenceManager) (*TestEnvironment,
 	cmdDir := path.Join(test161Dir, "commands")
 	testDir := path.Join(test161Dir, "tests")
 	targetDir := path.Join(test161Dir, "targets")
+	tagDir := path.Join(test161Dir, "tags")
 
 	env := &TestEnvironment{
 		TestDir:     testDir,
 		manager:     testManager,
 		Commands:    make(map[string]*CommandTemplate),
 		Targets:     make(map[string]*Target),
+		Tags:        make(map[string]*TagDescription),
 		keyMap:      make(map[string]string),
 		Log:         log.New(os.Stderr, "test161: ", log.Ldate|log.Ltime|log.Lshortfile),
 		Persistence: pm,
@@ -135,21 +157,26 @@ func NewEnvironment(test161Dir string, pm PersistenceManager) (*TestEnvironment,
 		resChan <- env.envReadLoop(cmdDir, ".tc", envCommandHandler)
 	}()
 
+	// Tags are optional
+	numExpected := 2
+	if _, err := os.Stat(tagDir); err == nil {
+		numExpected += 1
+		go func() {
+			resChan <- env.envReadLoop(tagDir, ".td", envTagDescHandler)
+		}()
+	}
+
 	// Get the results
-	err := <-resChan
-
-	if err != nil {
+	var err error = nil
+	for i := 0; i < numExpected; i++ {
 		// Let the other finish, but just return one error
-		<-resChan
-	} else {
-		err = <-resChan
+		temp := <-resChan
+		if err == nil {
+			err = temp
+		}
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
-	return env, nil
+	return env, err
 }
 
 func (env *TestEnvironment) TargetList() *TargetList {

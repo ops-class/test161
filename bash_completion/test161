@@ -75,6 +75,13 @@ _test161()
         return 0
         ;;
 
+    tags)
+        local tags
+        tags=$(test161 list tagnames 2>/dev/null)
+        COMPREPLY=( $(compgen -W "${tags} -short" -- $cur) )
+        return 0
+        ;;
+
     -verbose)
        COMPREPLY=( $(compgen -W "loud quiet whisper" -- $cur) )
         return 0

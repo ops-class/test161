@@ -928,9 +928,6 @@ here...
 * Fix directory bash completion for test161 config test161dir. It's
 unfortunately adding a space instead of /.
 
-* An `isStaff` flag would be useful when querying the students collection in
-mongo
-
 === Performance Tracking
 
 Most of the infrastructure is in place to handle performance targets, but we still
@@ -942,14 +939,6 @@ the Test object and use it properly in the Submission.
 It would be cool to be able to print serial output from one test while queuing
 the output from other tests. Maybe using curses to maintain a line at the end
 of the screen showing the tests that are being run.
-
-=== Tag Descriptions and Querying
-
-It would be nice to be able to add descriptions to tags and have `test161`
-print all tests that fall into a tag (or target) along with the description.
-
-(SDH: we have `test161 list tags` which handles printing tags and their tests,
-but we do not currently support tag descriptions or querying)
 
 === Output Frequency
 
