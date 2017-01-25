@@ -125,7 +125,7 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 			allCorrect = false
 		}
 		if res.Err != nil {
-			fmt.Fprint(os.Stderr, "Error running %v: %v\n", res.Test.DependencyID, res.Err)
+			fmt.Fprintf(os.Stderr, "Error running %v: %v\n", res.Test.DependencyID, res.Err)
 		}
 	}
 
@@ -270,6 +270,7 @@ func runTests() (int, []error) {
 
 	var target *test161.Target
 	var ok bool
+	exitcode := 0
 
 	// Try running as a Target first
 	if len(runCommandVars.tests) == 1 && !runCommandVars.isTag {
@@ -279,13 +280,13 @@ func runTests() (int, []error) {
 				return 1, errs
 			} else {
 				if runCommandVars.explain {
-					explain(tg)
+					exitcode, errs = explain(tg)
 				} else if runCommandVars.dryRun {
 					printDryRun(tg)
 				} else {
 					runTestGroup(tg, true)
 				}
-				return 0, nil
+				return exitcode, errs
 			}
 		}
 	}
@@ -298,19 +299,17 @@ func runTests() (int, []error) {
 		Env:     env,
 	}
 
-	exitcode := 0
-
 	if tg, errs := test161.GroupFromConfig(config); len(errs) > 0 {
 		return 1, errs
 	} else {
 		if runCommandVars.explain {
-			explain(tg)
+			exitcode, errs = explain(tg)
 		} else if runCommandVars.dryRun {
 			printDryRun(tg)
 		} else {
 			exitcode = runTestGroup(tg, config.UseDeps)
 		}
-		return exitcode, nil
+		return exitcode, errs
 	}
 }
 
@@ -361,7 +360,7 @@ func printDryRun(tg *test161.TestGroup) {
 	fmt.Println()
 }
 
-func explain(tg *test161.TestGroup) {
+func explain(tg *test161.TestGroup) (int, []error) {
 
 	tests := getPrintOrder(tg, true)
 
@@ -382,7 +381,9 @@ func explain(tg *test161.TestGroup) {
 
 		// Merge in test161 defaults for any missing configuration values
 		test.SetEnv(env)
-		test.MergeAllDefaults()
+		if err := test.MergeAllDefaults(); err != nil {
+			return 1, []error{err}
+		}
 
 		// Test ID
 		fmt.Println(test.DependencyID)
@@ -459,6 +460,7 @@ func explain(tg *test161.TestGroup) {
 	}
 
 	fmt.Println()
+	return 0, nil
 }
 
 func getPrintOrder(tg *test161.TestGroup, tryDependOrder bool) []*test161.Test {

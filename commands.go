@@ -229,18 +229,7 @@ func (c *Command) Instantiate(env *TestEnvironment) error {
 	pfx, id, args := (&c.Input).splitCommand()
 	tmpl, ok := env.Commands[id]
 	if !ok {
-		// TODO: Eventually, we should have an ignore list instead of hard-coding this.
-		// And, we should really know about all commands. If we don't, typos can lead to
-		// grading errors.
-
-		// OK, it's just not a command that has any input/output specification.
-		switch id {
-		case "q", "s", "khu", "exit", "boot":
-			// OK
-		default:
-			env.Log.Printf("Warning: Command '%v' is not recognized by test161 and will not expect output\n", id)
-		}
-		return nil
+		return fmt.Errorf("Command '%v' is not recognized by test161.\n", id)
 	}
 
 	// Individual tests can override the template in the commands files.
