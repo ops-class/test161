@@ -85,7 +85,7 @@ func getRemoteTargets() (*test161.TargetList, []error) {
 
 	resp, body, errs := request.Get(endpoint).End()
 	if errs != nil {
-		return nil, errs
+		return nil, connectionError(endpoint, errs)
 	}
 
 	if resp.StatusCode != http.StatusOK {

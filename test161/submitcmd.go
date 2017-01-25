@@ -303,7 +303,7 @@ func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (string
 			End()
 
 		if len(errs) > 0 {
-			// Just return one of them
+			errs = connectionError(endpoint, errs)
 			return "", errs[0]
 		} else {
 			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {

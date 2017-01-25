@@ -22,22 +22,6 @@ var runCommandVars struct {
 	tests      []string
 }
 
-func __printRunError(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-}
-
-func printRunError(err error) {
-	__printRunError(err)
-}
-
-func printRunErrors(errs []error) {
-	if len(errs) > 0 {
-		for _, e := range errs {
-			__printRunError(e)
-		}
-	}
-}
-
 func doRun() int {
 	if err := getRunArgs(); err != nil {
 		printRunError(err)
