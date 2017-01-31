@@ -1,0 +1,69 @@
+# These commands expect no output, but must not panic
+templates:
+  - name: tt1
+    output:
+      - text: ""
+
+  - name: tt2
+    output:
+      - text: ""
+
+  - name: tt3
+    output:
+      - text: ""
+
+  - name: khu
+    output:
+      - text: ""
+
+  - name: q 
+    output:
+      - text: ""
+
+  - name: s 
+    output:
+      - text: ""
+
+  - name: boot
+    output:
+      - text:
+
+  - name: exit
+    output:
+      - text: ""
+
+  - name: panic
+    output:
+      - text: ""
+
+  - name: /testbin/waiter
+    output:
+      - text: ""
+
+  - name: ll1
+    output:
+      - text: ""
+
+  - name: ll16
+    output:
+      - text: ""
+
+  - name: dl
+    output:
+      - text: ""
+
+  - name: /bin/true
+    output:
+      - text: ""
+
+  - name: /bin/space
+    output:
+      - text: ""
+
+  - name: /testbin/shll
+    output:
+      - text: ""
+
+  - name: semu1
+    output:
+      - text: ""
