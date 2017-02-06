@@ -200,7 +200,9 @@ func doSubmit() (exitcode int) {
 	// Show score and collab policy, and give them a chance to cancel
 	fmt.Printf(SubmitMsg, collabMsg, score, avail)
 	if text := getYesOrNo(); text == "no" {
-		fmt.Println("\nSubmission request cancelled\n")
+		fmt.Println()
+		fmt.Println("Submission request cancelled")
+		fmt.Println()
 		return
 	}
 
@@ -209,7 +211,9 @@ func doSubmit() (exitcode int) {
 		fmt.Printf("\n(%v of %v): You are submitting on behalf of %v. Is this correct?\n",
 			i+1, len(req.Users), u.Email)
 		if text := getYesOrNo(); text == "no" {
-			fmt.Println("\nSubmission request cancelled\n")
+			fmt.Println()
+			fmt.Println("Submission request cancelled")
+			fmt.Println()
 			return
 		}
 	}

@@ -25,7 +25,7 @@ var submissionMgr *test161.SubmissionManager
 // Environment config
 type SubmissionServerConfig struct {
 	CacheDir   string                 `yaml:"cachedir"`
-	Test161Dir string                 `yaml:"test161dir`
+	Test161Dir string                 `yaml:"test161dir"`
 	OverlayDir string                 `yaml:"overlaydir"`
 	KeyDir     string                 `yaml:"keydir"`
 	UsageDir   string                 `yaml:"usagedir"`
@@ -51,7 +51,7 @@ var defaultConfig = &SubmissionServerConfig{
 	DBPassword: "",
 	DBTimeout:  10,
 	APIPort:    4000,
-	MinClient:  test161.ProgramVersion{0, 0, 0},
+	MinClient:  test161.ProgramVersion{},
 }
 
 var logger = log.New(os.Stderr, "test161-server: ", log.LstdFlags)
@@ -118,7 +118,7 @@ func submissionFromHttp(w http.ResponseWriter, r *http.Request, validateOnly boo
 		w.Header().Set("Content-Type", JsonHeader)
 		w.WriteHeader(http.StatusBadRequest)
 
-		logger.Printf("Error unmarshalling submission request. Error: %v\nRequest: ", err, string(body))
+		logger.Printf("Error unmarshalling submission request. Error: %v\nRequest: %v\n", err, string(body))
 		if err := json.NewEncoder(w).Encode(err); err != nil {
 			logger.Println("Encoding error:", err)
 		}
@@ -244,7 +244,7 @@ func keygen(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.Unmarshal(body, &request); err != nil {
-		logger.Printf("Error unmarshalling keygen request. Error: %v\nRequest: ", err, string(body))
+		logger.Printf("Error unmarshalling keygen request. Error: %v\nRequest: %v\n", err, string(body))
 		sendErrorCode(w, http.StatusBadRequest, errors.New("Error unmarshalling keygen request."))
 		return
 	}
