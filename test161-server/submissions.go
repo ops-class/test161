@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/ops-class/test161"
 	"gopkg.in/mgo.v2"
@@ -27,6 +28,7 @@ type SubmissionServerConfig struct {
 	Test161Dir string                 `yaml:"test161dir`
 	OverlayDir string                 `yaml:"overlaydir"`
 	KeyDir     string                 `yaml:"keydir"`
+	UsageDir   string                 `yaml:"usagedir"`
 	MaxTests   uint                   `yaml:"max_tests"`
 	Database   string                 `yaml:"dbname"`
 	DBServer   string                 `yaml:"dbsever"`
@@ -75,9 +77,6 @@ func NewSubmissionServer() (test161Server, error) {
 
 	return s, nil
 }
-
-const JsonHeader = "application/json; charset=UTF-8"
-const TextHeader = "text/plain; charset=UTF-8"
 
 var minClientVer test161.ProgramVersion
 
@@ -129,16 +128,16 @@ func submissionFromHttp(w http.ResponseWriter, r *http.Request, validateOnly boo
 	// Check the client's version and make sure it's not too old
 	if request.ClientVersion.CompareTo(minClientVer) < 0 {
 		logger.Printf("Old request (version %v)\n", request.ClientVersion)
-		w.WriteHeader(http.StatusNotAcceptable)
+		sendErrorCode(w, http.StatusNotAcceptable, errors.New(
+			"test161 version too old, test161-server requires version "+minClientVer.String()))
 		return nil
 	}
 
 	if submissionMgr.Status() == test161.SM_NOT_ACCEPTING {
 		// We're trying to shut down
 		logger.Println("Rejecting due to SM_NOT_ACCEPTING")
-		w.Header().Set("Content-Type", TextHeader)
-		w.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(w, "The submission server is currently not accepting new submissions")
+		sendErrorCode(w, http.StatusServiceUnavailable,
+			errors.New("The submission server is currently not accepting new submissions"))
 		return nil
 	}
 
@@ -190,11 +189,8 @@ func validateSubmission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := request.Validate(serverEnv); err != nil {
-		w.Header().Set("Content-Type", TextHeader)
-		w.WriteHeader(422) // unprocessable entity
-
-		// Send back a string.
-		fmt.Fprintf(w, "%v", err)
+		// Unprocessable entity
+		sendErrorCode(w, 422, err)
 		return
 	}
 
@@ -248,18 +244,15 @@ func keygen(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.Unmarshal(body, &request); err != nil {
-		w.Header().Set("Content-Type", TextHeader)
-		w.WriteHeader(http.StatusBadRequest)
-
 		logger.Printf("Error unmarshalling keygen request. Error: %v\nRequest: ", err, string(body))
-		fmt.Fprintf(w, "%v", err)
+		sendErrorCode(w, http.StatusBadRequest, errors.New("Error unmarshalling keygen request."))
 		return
 	}
 
 	key, err := test161.KeyGen(request.Email, request.Token, serverEnv)
 	if err != nil {
-		w.WriteHeader(422) // unprocessable entity
-		fmt.Fprintf(w, "%v", err)
+		// Unprocessable entity
+		sendErrorCode(w, 422, err)
 	} else {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, key)
@@ -334,6 +327,7 @@ func (s *SubmissionServer) setUpEnvironment() error {
 
 	// Set the min client version where the handler can access it
 	minClientVer = s.conf.MinClient
+	usageFailDir = s.conf.UsageDir
 
 	fmt.Println("Min client ver:", minClientVer)
 
@@ -345,8 +339,14 @@ func (s *SubmissionServer) setUpEnvironment() error {
 }
 
 func (s *SubmissionServer) Start() {
+	// Kick off test161 submission server
 	test161.SetManagerCapacity(s.conf.MaxTests)
 	test161.StartManager()
+
+	// Init upload handlers
+	initUploadManagers()
+
+	// Finally, start listening for internal API requests
 	logger.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", s.conf.APIPort), NewRouter()))
 }
 

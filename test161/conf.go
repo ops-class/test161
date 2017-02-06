@@ -24,6 +24,9 @@ const SERVER = "https://test161.ops-class.org"
 
 var CACHE_DIR = path.Join(os.Getenv("HOME"), ".test161/cache")
 var KEYS_DIR = path.Join(os.Getenv("HOME"), ".test161/keys")
+var USAGE_DIR = path.Join(os.Getenv("HOME"), ".test161/usage")
+var USAGE_LOCK_FILE = path.Join(os.Getenv("HOME"), ".test161/usage/usage.lock")
+var CUR_USAGE_LOCK_FILE = path.Join(os.Getenv("HOME"), ".test161/usage/current.lock")
 
 type ClientConf struct {
 	// These are now the only thing we put in the yaml file.
@@ -528,6 +531,22 @@ func doConfig() int {
 			return 1
 		} else {
 			return 0
+		}
+	}
+}
+
+// Initialize the cache, key, and usage directories in HOME/.test161
+func init() {
+	dirs := []string{
+		CACHE_DIR, KEYS_DIR, USAGE_DIR,
+	}
+
+	for _, dirname := range dirs {
+		if _, err := os.Stat(dirname); err != nil {
+			if err := os.MkdirAll(dirname, 0770); err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating '%v': %v\n", dirname, err)
+				os.Exit(1)
+			}
 		}
 	}
 }

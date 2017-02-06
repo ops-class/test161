@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // 'test161 run' flags
@@ -87,7 +88,7 @@ func getRunArgs() error {
 	return nil
 }
 
-func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
+func runTestGroup(tg *test161.TestGroup, useDeps bool, desc string) int {
 	var r test161.TestRunner
 	if useDeps {
 		r = test161.NewDependencyRunner(tg)
@@ -115,7 +116,9 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 
 	// Run it
 	test161.StartManager()
+	startTime := time.Now()
 	done := r.Run()
+	endTime := time.Now()
 
 	// For reurn val
 	allCorrect := true
@@ -132,6 +135,7 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 	test161.StopManager()
 
 	printRunSummary(tg, runCommandVars.verbose, useDeps)
+	logUsageStat(tg, desc, startTime, endTime)
 
 	if allCorrect {
 		return 0
@@ -284,7 +288,7 @@ func runTests() (int, []error) {
 				} else if runCommandVars.dryRun {
 					printDryRun(tg)
 				} else {
-					runTestGroup(tg, true)
+					runTestGroup(tg, true, runCommandVars.tests[0])
 				}
 				return exitcode, errs
 			}
@@ -302,12 +306,23 @@ func runTests() (int, []error) {
 	if tg, errs := test161.GroupFromConfig(config); len(errs) > 0 {
 		return 1, errs
 	} else {
+		desc := ""
+		for _, t := range runCommandVars.tests {
+			if !strings.HasSuffix(t, ".t") {
+				if len(desc) == 0 {
+					desc = t
+				} else {
+					desc = desc + ", " + t
+				}
+			}
+		}
+
 		if runCommandVars.explain {
 			exitcode, errs = explain(tg)
 		} else if runCommandVars.dryRun {
 			printDryRun(tg)
 		} else {
-			exitcode = runTestGroup(tg, config.UseDeps)
+			exitcode = runTestGroup(tg, config.UseDeps, desc)
 		}
 		return exitcode, errs
 	}

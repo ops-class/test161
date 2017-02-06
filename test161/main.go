@@ -194,6 +194,10 @@ var cmdTable = map[string]*test161Command{
 	"help": &test161Command{
 		cmd: doHelp,
 	},
+	"upload-usage": &test161Command{
+		cmd:    doUploadUsage,
+		reqEnv: true,
+	},
 }
 
 func doVersion() int {

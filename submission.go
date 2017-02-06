@@ -35,6 +35,18 @@ type SubmissionRequest struct {
 	EstimatedScore uint                  // The local score test161 computed
 }
 
+// UploadRequests are created by clients and provide the form fields for
+// file uploads. Currently, we only support stats file uploads, but this
+// could change.
+type UploadRequest struct {
+	UploadType int
+	Users      []*SubmissionUserInfo
+}
+
+const (
+	UPLOAD_TYPE_USAGE = iota
+)
+
 const (
 	SUBMISSION_SUBMITTED = "submitted" // Submitted and queued
 	SUBMISSION_BUILDING  = "building"  // Building the kernel
@@ -124,11 +136,11 @@ var userLock = &sync.Mutex{}
 var pendingSubmissions = make(map[string]bool)
 
 // Check users against users database.  Don't lock them until we run though
-func (req *SubmissionRequest) validateUsers(env *TestEnvironment) ([]*Student, error) {
+func validateUserRecords(users []*SubmissionUserInfo, env *TestEnvironment) ([]*Student, error) {
 
 	allStudents := make([]*Student, 0)
 
-	for _, user := range req.Users {
+	for _, user := range users {
 
 		if students, err := getStudents(user.Email, user.Token, env); err != nil {
 			return nil, err
@@ -160,31 +172,18 @@ func getStudents(email, token string, env *TestEnvironment) ([]*Student, error) 
 	return students, nil
 }
 
-func (req *SubmissionRequest) Validate(env *TestEnvironment) ([]*Student, error) {
-
+func validateUsers(users []*SubmissionUserInfo, env *TestEnvironment) ([]*Student, error) {
 	students := []*Student{}
 	var err error
 
-	if strings.HasPrefix(req.Repository, "http") {
-		return students, errors.New("test161 must access your repository via SSH and does not accept submissions from http/https URLs")
-	}
-
-	if _, ok := env.Targets[req.Target]; !ok {
-		return students, errors.New("Invalid target: " + req.Target)
-	}
-
-	if len(req.Users) == 0 {
+	if len(users) == 0 {
 		return students, errors.New("No usernames specified")
 	}
 
 	if env.Persistence != nil && env.Persistence.CanRetrieve() {
-		if students, err = req.validateUsers(env); err != nil {
+		if students, err = validateUserRecords(users, env); err != nil {
 			return students, err
 		}
-	}
-
-	if len(req.Repository) == 0 || len(req.CommitID) == 0 {
-		return students, errors.New("Must specify a Git repository and commit id")
 	}
 
 	// Staff flag needs to be all or nothing
@@ -201,6 +200,36 @@ func (req *SubmissionRequest) Validate(env *TestEnvironment) ([]*Student, error)
 	}
 
 	return students, nil
+
+}
+
+func (req *SubmissionRequest) Validate(env *TestEnvironment) ([]*Student, error) {
+
+	students := []*Student{}
+	var err error
+
+	// Non-user checks
+
+	if strings.HasPrefix(req.Repository, "http") {
+		return students, errors.New("test161 must access your repository via SSH and does not accept submissions from http/https URLs")
+	}
+
+	if _, ok := env.Targets[req.Target]; !ok {
+		return students, errors.New("Invalid target: " + req.Target)
+	}
+
+	if len(req.Repository) == 0 || len(req.CommitID) == 0 {
+		return students, errors.New("Must specify a Git repository and commit id")
+	}
+
+	// User checks (shared)
+	students, err = validateUsers(req.Users, env)
+
+	return students, err
+}
+
+func (req *UploadRequest) Validate(env *TestEnvironment) ([]*Student, error) {
+	return validateUsers(req.Users, env)
 }
 
 // Create a new Submission that can be evaluated by the test161 server or client.

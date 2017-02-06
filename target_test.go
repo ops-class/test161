@@ -68,7 +68,7 @@ type expectedTestResults struct {
 	cmdPoints map[string]*expectedCmdResults
 }
 
-func runTargetTest(t *testing.T, testPoints map[string]*expectedTestResults, targetId string) {
+func runTargetTest(t *testing.T, testPoints map[string]*expectedTestResults, targetId string) *TestGroup {
 	assert := assert.New(t)
 	t.Log(targetId)
 
@@ -107,6 +107,9 @@ func runTargetTest(t *testing.T, testPoints map[string]*expectedTestResults, tar
 	for res := range done {
 		id := res.Test.DependencyID
 		t.Log(id + " completed")
+		if res.Err != nil {
+			t.Log(res.Err)
+		}
 		exp, ok := testPoints[id]
 		if !ok {
 			assert.Equal(uint(0), res.Test.PointsEarned)
@@ -139,10 +142,10 @@ func runTargetTest(t *testing.T, testPoints map[string]*expectedTestResults, tar
 
 	assert.Equal(totalExpected, tg.EarnedPoints())
 
+	return tg
 }
 
-func TestTargetScorePartial(t *testing.T) {
-	// t.Parallel()
+func getPartialTestPoints() map[string]*expectedTestResults {
 	testPoints := make(map[string]*expectedTestResults)
 
 	// sem1
@@ -181,6 +184,12 @@ func TestTargetScorePartial(t *testing.T) {
 		},
 	}
 
+	return testPoints
+}
+
+func TestTargetScorePartial(t *testing.T) {
+	// t.Parallel()
+	testPoints := getPartialTestPoints()
 	runTargetTest(t, testPoints, "partial")
 }
 

@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/ops-class/test161"
-	"github.com/parnurzeal/gorequest"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -178,6 +177,9 @@ func doSubmit() (exitcode int) {
 		return
 	}
 
+	// This is a good time to kick off a usage stats upload.
+	runTest161Uploader()
+
 	// We've verified what we can. Time to test things locally before submission.
 	score, avail := uint(0), uint(0)
 
@@ -265,7 +267,7 @@ func validateSubmission(req *test161.SubmissionRequest) error {
 			fmt.Println("Installing deployment key for", data.User)
 		} else {
 			emptyCount += 1
-			fmt.Fprintf(os.Stderr, "Warning: No test161 key exists for", data.User)
+			fmt.Fprintf(os.Stderr, "Warning: No test161 key exists for %v", data.User)
 		}
 	}
 
@@ -286,34 +288,32 @@ func submit(req *test161.SubmissionRequest) error {
 // Return true if OK, false otherwise
 func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (string, error) {
 
-	endpoint := clientConf.Server
+	var pr *PostRequest
+
 	if validateOnly {
-		endpoint += "/api-v1/validate"
+		pr = NewPostRequest(ApiEndpointValidate)
 	} else {
-		endpoint += "/api-v1/submit"
+		pr = NewPostRequest(ApiEndpointSubmit)
 	}
 
-	remoteRequest := gorequest.New()
-	if reqbytes, err := json.Marshal(req); err != nil {
+	pr.SetType(PostTypeJSON)
+	if err := pr.QueueJSON(req, ""); err != nil {
 		return "", err
-	} else {
-		resp, body, errs := remoteRequest.Post(
-			endpoint).
-			Send(string(reqbytes)).
-			End()
+	}
 
-		if len(errs) > 0 {
-			errs = connectionError(endpoint, errs)
-			return "", errs[0]
+	resp, body, errs := pr.Submit()
+
+	if len(errs) > 0 {
+		errs = connectionError(pr.Endpoint, errs)
+		return "", errs[0]
+	} else {
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+			return body, nil
+		} else if resp.StatusCode == http.StatusNotAcceptable {
+			return "", fmt.Errorf("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit.")
 		} else {
-			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-				return body, nil
-			} else if resp.StatusCode == http.StatusNotAcceptable {
-				return "", fmt.Errorf("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit.")
-			} else {
-				return "", fmt.Errorf("The server could not process your request: %v. \nData: %v",
-					resp.Status, body)
-			}
+			return "", fmt.Errorf("The server could not process your request: %v. \nData: %v",
+				resp.Status, body)
 		}
 	}
 }
@@ -407,23 +407,6 @@ func getSubmitCommitIDAndValidate() (*gitRepo, error) {
 	submitRef = ref
 
 	return git, nil
-}
-
-// Initialize the cache and key directories in HOME/.test161
-func init() {
-	if _, err := os.Stat(CACHE_DIR); err != nil {
-		if err := os.MkdirAll(CACHE_DIR, 0770); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating cache directory: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	if _, err := os.Stat(KEYS_DIR); err != nil {
-		if err := os.MkdirAll(KEYS_DIR, 0770); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating keys directory: %v\n", err)
-			os.Exit(1)
-		}
-	}
 }
 
 func getKeyHash(user string) string {
