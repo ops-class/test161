@@ -36,12 +36,13 @@ const (
 // difference between Targets and TestGroups is that Targets can have a
 // scoring component, either points or performance. The test161 submission system
 // operates in terms of Targets.
+//
+// 02/2017 - Targets can now be MetaTargets which have a list of subtargets. Subtargets
+//           are runable, whereas metatargets are not.
 type Target struct {
 	// Make sure to update isChangeAllowed with any new fields that need to be versioned.
 	ID               string        `yaml:"-" bson:"_id"`
 	Name             string        `yaml:"name"`
-	PrintName        string        `yaml:"print_name" bson:"print_name"`
-	Description      string        `yaml:"description"`
 	Active           string        `yaml:"active"`
 	Version          uint          `yaml:"version"`
 	Type             string        `yaml:"type"`
@@ -49,10 +50,24 @@ type Target struct {
 	KConfig          string        `yaml:"kconfig"`
 	RequiredCommit   string        `yaml:"required_commit" bson:"required_commit"`
 	RequiresUserland bool          `yaml:"userland" bson:"userland"`
-	Leaderboard      string        `yaml:"leaderboard" bson:"leaderboard"`
 	Tests            []*TargetTest `yaml:"tests"`
 	FileHash         string        `yaml:"-" bson:"file_hash"`
 	FileName         string        `yaml:"-" bson:"file_name"`
+
+	// MetaTarget info
+	IsMetaTarget   bool     `yaml:"is_meta_target" bson:"is_meta_target"`
+	SubTargetNames []string `yaml:"sub_target_names" bson:"sub_target_names"`
+	MetaName       string   `yaml:"meta_name"`
+
+	// Front-end only
+	PrintName   string `yaml:"print_name" bson:"print_name"`
+	Description string `yaml:"description"`
+	Link        string `yaml:"link" bson:"link"`
+	Leaderboard string `yaml:"leaderboard" bson:"leaderboard"`
+
+	// Parent and siblings if this is a subtarget of a metatarget.
+	metaTarget         *Target
+	previousSubTargets []*Target
 }
 
 // A TargetTest is the specification for a single Test contained in the Target.
@@ -66,13 +81,13 @@ type TargetTest struct {
 }
 
 // TargetCommands (optionally) specify information about the commands contained
-// in TargetTests. TargetCommands allow you to the points for an individual command
-// or override the input arguments.
+// in TargetTests. TargetCommands allow you to assign the points for an
+// individual command or override the input arguments.
 type TargetCommand struct {
-	Id     string   `yaml:"id" bson:cmd_id"` // ID, must match ID in test file
-	Index  int      `yaml:"index"`           // Index > 0 => match to index in test
-	Points uint     `yaml:"points"`          // Points for this command
-	Args   []string `yaml:"args"`            // Argument overrides
+	Id     string   `yaml:"id" bson:"cmd_id"` // ID, must match ID in test file
+	Index  int      `yaml:"index"`            // Index > 0 => match to index in test
+	Points uint     `yaml:"points"`           // Points for this command
+	Args   []string `yaml:"args"`             // Argument overrides
 }
 
 // TargetListItem is the target detail we send to remote clients about a target
@@ -262,22 +277,150 @@ func (tt *TargetTest) applyTo(test *Test) error {
 	return nil
 }
 
+// Initialize the target as a subtarget of a metatarget.
+// This involves linking the target to its metatarget, and finding all of the
+// subtargets that come before it in the same metatarget.
+func (t *Target) initAsSubTarget(env *TestEnvironment) error {
+	if len(t.MetaName) == 0 {
+		return nil
+	}
+
+	metaTarget, ok := env.Targets[t.MetaName]
+	if !ok {
+		return errors.New("Cannot find the metatarget '" + t.MetaName + "'.")
+	}
+
+	foundThis := false
+	others := make([]*Target, 0)
+	for _, name := range metaTarget.SubTargetNames {
+		if name == t.Name {
+			foundThis = true
+			// The subtargets must be in order, and since we've found
+			// this one, we're done.
+			break
+		} else {
+			if other, ok := env.Targets[name]; ok {
+				others = append(others, other)
+			} else {
+				return fmt.Errorf("Cannot find subtarget '%v' in metatarget '%v'", name, metaTarget.Name)
+			}
+		}
+	}
+
+	if !foundThis {
+		return fmt.Errorf("Cannot find main subtarget '%v' in metatarget '%v'", t.Name, metaTarget.Name)
+	}
+
+	// Link this target to its metatarget and younger subtarget siblings.
+	t.metaTarget = metaTarget
+	t.previousSubTargets = others
+
+	return nil
+}
+
+func (t *Target) initAsMetaTarget(env *TestEnvironment) error {
+	if !t.IsMetaTarget {
+		return fmt.Errorf("Target '%v' is not a metatarget", t.Name)
+	}
+
+	if len(t.Tests) > 0 {
+		return fmt.Errorf("MetaTargets cannot have additional tests. Metatarget: %v", t.Name)
+	}
+
+	if len(t.SubTargetNames) == 0 {
+		return fmt.Errorf("MetaTargets must contain at least one subtarget. Metatarget: %v", t.Name)
+	}
+
+	points := uint(0)
+
+	t.previousSubTargets = make([]*Target, 0, len(t.SubTargetNames))
+
+	for _, subname := range t.SubTargetNames {
+		subtarget, ok := env.Targets[subname]
+		if !ok {
+			return fmt.Errorf("Cannot find subtarget '%v'", subname)
+		}
+		points += subtarget.Points
+
+		// These need to match
+		if subtarget.RequiresUserland != t.RequiresUserland {
+			return fmt.Errorf("Subtarget and metatarget must have the same userland requirement.")
+		}
+		if subtarget.KConfig != t.KConfig {
+			return fmt.Errorf("Subtarget and metatarget must use the same kernel configuration.")
+		}
+		if subtarget.Type != t.Type {
+			return fmt.Errorf("Subtarget and metatarget must have the same type.")
+		}
+		t.previousSubTargets = append(t.previousSubTargets, subtarget)
+	}
+
+	if points != t.Points {
+		return fmt.Errorf("Metatarget points (%v) do not match total of subtarget points (%v)", t.Points, points)
+	}
+
+	return nil
+}
+
+// Recursively process the test dependencies, marking the test
+// as required by the target.
+func assignTestRequiredBy(test *Test, name string) {
+	test.requiredBy[name] = true
+	for _, dep := range test.ExpandedDeps {
+		assignTestRequiredBy(dep, name)
+	}
+}
+
+// For each graded test, figure out which tests are required.
+// We use this information to split out the metasubmission into multiple
+// submissions.
+func assignRequiredBy(tg *TestGroup) {
+	for _, test := range tg.Tests {
+		if len(test.TargetName) > 0 {
+			assignTestRequiredBy(test, test.TargetName)
+		}
+	}
+}
+
 // Instance creates a runnable TestGroup from this Target
 func (t *Target) Instance(env *TestEnvironment) (*TestGroup, []error) {
+
+	// Create a TestGroup with the tests from all of the targets we're running.
+	allTargets := []*Target{}
+
+	// We don't permit metatargets to contain extra tests, so ignore it.
+	if !t.IsMetaTarget {
+		allTargets = append(allTargets, t)
+	}
+
+	// This will be populated for subtargets and metatargets
+	if len(t.previousSubTargets) > 0 {
+		allTargets = append(allTargets, t.previousSubTargets...)
+	}
 
 	// First, create a group config and convert it to a TestGroup.
 	config := &GroupConfig{
 		Name:    t.Name,
 		UseDeps: true,
 		Env:     env,
+		Tests:   make([]string, 0),
 	}
 
-	config.Tests = make([]string, 0, len(t.Tests))
+	done := make(map[string]bool)
 
-	for _, tt := range t.Tests {
-		config.Tests = append(config.Tests, tt.Id)
+	for _, target := range allTargets {
+		for _, tt := range target.Tests {
+			if _, ok := done[tt.Id]; ok {
+				return nil, []error{
+					fmt.Errorf("Duplicate test detected: '%v'. Duplicate tests are not allowed in targets.", tt.Id),
+				}
+			}
+			config.Tests = append(config.Tests, tt.Id)
+			done[tt.Id] = true
+		}
 	}
 
+	// Create one combined TestGroup with dependencies for all targets we're running
 	group, errs := GroupFromConfig(config)
 	if len(errs) > 0 {
 		return nil, errs
@@ -285,21 +428,29 @@ func (t *Target) Instance(env *TestEnvironment) (*TestGroup, []error) {
 
 	// We have a runnable group with dependencies.  Next, we need
 	// to assign points, scoring method, args, etc.
-	total := uint(0)
-	for _, tt := range t.Tests {
-		test, ok := group.Tests[tt.Id]
-		if !ok {
-			return nil, []error{errors.New("Cannot find " + tt.Id + " in the TestGroup")}
+	for _, target := range allTargets {
+		total := uint(0)
+		for _, tt := range target.Tests {
+			test, ok := group.Tests[tt.Id]
+
+			if !ok {
+				return nil, []error{errors.New("Cannot find " + tt.Id + " in the TestGroup")}
+			}
+			if err := tt.applyTo(test); err != nil {
+				return nil, []error{err}
+			}
+			// This is used for scoring later
+			test.TargetName = target.Name
+
+			total += tt.Points
 		}
-		if err := tt.applyTo(test); err != nil {
-			return nil, []error{err}
+
+		if total != target.Points {
+			return nil, []error{fmt.Errorf("Target points (%v) do not match sum(test points) (%v)", target.Points, total)}
 		}
-		total += tt.Points
 	}
 
-	if total != t.Points {
-		return nil, []error{fmt.Errorf("Target points (%v) do not match sum(test points) (%v)", t.Points, total)}
-	}
+	assignRequiredBy(group)
 
 	return group, nil
 }
@@ -322,6 +473,9 @@ func (old *Target) isChangeAllowed(other *Target) error {
 	}
 	if old.Points != other.Points {
 		return errors.New("Changing the target points requires a version change")
+	}
+	if old.IsMetaTarget != other.IsMetaTarget {
+		return errors.New("Chaning the target is_meta_target flag requires a version change")
 	}
 
 	// TODO: Relying on no duplicate tests
@@ -349,13 +503,30 @@ func (old *Target) isChangeAllowed(other *Target) error {
 		}
 	}
 
+	// Subtarget names
+	if len(old.SubTargetNames) != len(other.SubTargetNames) {
+		return errors.New("Changing the number of subtargets requiers a version change")
+	}
+
+	oldSubTargetMap := make(map[string]bool)
+
+	for _, name := range old.SubTargetNames {
+		oldSubTargetMap[name] = true
+	}
+
+	for _, name := range other.SubTargetNames {
+		if !oldSubTargetMap[name] {
+			return fmt.Errorf("Subtarget %v was removed in the new target, which requires a version change", name)
+		}
+	}
+
 	// Fields we don't care about:
 	//
-	// PrintName, Description, Active, RequiredCommit
+	// PrintName, Description, Active, RequiredCommit, Link
 	// KConfig is set based on the Name
 	// RequiresUserland: if this was broken, tests would have failed
 	// FileHash: this will change
-	// FileName: OK if if moves
+	// FileName: OK if it moves
 
 	return nil
 }

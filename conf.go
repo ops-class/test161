@@ -124,13 +124,15 @@ var CONF_DEFAULTS = Test{
 }
 
 func confFromString(data string) (*Test, error) {
-	t := new(Test)
+	t := &Test{}
 
 	err := frontmatter.Unmarshal([]byte(data), t)
 	if err != nil {
 		return nil, err
 	}
 	t.Sys161.Random = rand.Uint32() >> 16
+
+	t.requiredBy = make(map[string]bool)
 
 	// TODO: Error checking here
 

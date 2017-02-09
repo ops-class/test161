@@ -16,6 +16,7 @@ const (
 	CTRL_STATUS
 	CTRL_SETCAPACITY
 	CTRL_GETCAPACITY
+	CTRL_STAFF_ONLY
 )
 
 type ControlRequest struct {
@@ -39,6 +40,9 @@ func (sc *ServerCtrl) Control(msg *ControlRequest, reply *int) error {
 		return nil
 	case CTRL_RESUME:
 		submissionMgr.Resume()
+		return nil
+	case CTRL_STAFF_ONLY:
+		submissionMgr.SetStaffOnly()
 		return nil
 	case CTRL_STATUS:
 		*reply = submissionMgr.Status()
@@ -104,6 +108,11 @@ func CtrlPause() error {
 func CtrlResume() error {
 	var reply int
 	return doCtrlRequest(CTRL_RESUME, &reply)
+}
+
+func CtrlSetStaffOnly() error {
+	var reply int
+	return doCtrlRequest(CTRL_STAFF_ONLY, &reply)
 }
 
 func CtrlStatus() (int, error) {

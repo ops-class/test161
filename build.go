@@ -58,6 +58,9 @@ type BuildTest struct {
 	// Mongo ID
 	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
+	// ID of the submission this test belongs to.
+	SubmissionID string `yaml:"-" json:"-" bson:"submission_id"`
+
 	// Metadata
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description" json:"description"`
@@ -88,6 +91,8 @@ type BuildTest struct {
 	env     *TestEnvironment
 	cmdEnv  []string
 	keyLock sync.Mutex
+
+	overlayCommitID string
 }
 
 // A variant of a Test Command for builds
@@ -347,7 +352,8 @@ func (t *BuildTest) addGitCommands() {
 	// If we have the repo cached, fetch instead of clone.
 	if _, err := os.Stat(t.srcDir); err == nil {
 		// First, reset it so we remove previous overlay changes
-		t.addCommand("git reset --hard", t.srcDir)
+		t.addCommand("git reset --hard", t.srcDir) // tracked files
+		t.addCommand("git clean -d -f", t.srcDir)  // untracked files
 		t.addCommand("git fetch", t.srcDir)
 		t.wasCached = true
 	} else {
@@ -530,6 +536,34 @@ func overlayHandler(t *BuildTest, command *BuildCommand) error {
 	return nil
 }
 
+func isHexString(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, c := range s {
+		if '0' <= c && c <= '9' {
+			continue
+		} else if 'a' <= c && c <= 'f' {
+			continue
+		} else if 'A' <= c && c <= 'F' {
+			continue
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
+func overlayCommitHandler(t *BuildTest, command *BuildCommand) error {
+	for _, l := range command.Output {
+		if len(l.Line) > 0 && isHexString(l.Line) {
+			t.overlayCommitID = l.Line
+			return nil
+		}
+	}
+	return fmt.Errorf("Unable to get commit ID of overlay directory")
+}
+
 // Add the commands required when there is an overlay present. This should always
 // happen on the server, but rarely for clients (except testing).
 func (t *BuildTest) addOverlayCommand() {
@@ -548,6 +582,10 @@ func (t *BuildTest) addOverlayCommand() {
 	t.addCommand(fmt.Sprintf("rsync -r %v/ %v", overlayPath, t.srcDir), t.srcDir)
 	cmd := t.addCommand("sync", t.srcDir)
 	cmd.handler = overlayHandler
+
+	// Get the overlay commit
+	cmd = t.addCommand("git rev-parse HEAD", t.env.OverlayRoot)
+	cmd.handler = overlayCommitHandler
 }
 
 // Add the chunk of commands needed to build OS/161

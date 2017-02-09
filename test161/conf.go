@@ -24,6 +24,9 @@ const SERVER = "https://test161.ops-class.org"
 
 var CACHE_DIR = path.Join(os.Getenv("HOME"), ".test161/cache")
 var KEYS_DIR = path.Join(os.Getenv("HOME"), ".test161/keys")
+var USAGE_DIR = path.Join(os.Getenv("HOME"), ".test161/usage")
+var USAGE_LOCK_FILE = path.Join(os.Getenv("HOME"), ".test161/usage/usage.lock")
+var CUR_USAGE_LOCK_FILE = path.Join(os.Getenv("HOME"), ".test161/usage/current.lock")
 
 type ClientConf struct {
 	// These are now the only thing we put in the yaml file.
@@ -74,10 +77,18 @@ func ClientConfToFile(conf *ClientConf) error {
 	return nil
 }
 
-func isRootDir(path string) bool {
-	reqs := []string{"kernel", "testbin"}
-	err := testPath(path, "root", reqs)
-	return err == nil
+func isRootDir(p string) bool {
+	reqs := []string{"kernel"}
+	if err := testPath(p, "root", reqs); err != nil {
+		return false
+	}
+
+	// Make sure it's executable (os.Stat follows links)
+	if fi, err := os.Stat(path.Join(p, "kernel")); err != nil {
+		return false
+	} else {
+		return !fi.IsDir() && (fi.Mode()&0111 > 0)
+	}
 }
 
 func isSourceDir(path string) bool {
@@ -520,6 +531,22 @@ func doConfig() int {
 			return 1
 		} else {
 			return 0
+		}
+	}
+}
+
+// Initialize the cache, key, and usage directories in HOME/.test161
+func init() {
+	dirs := []string{
+		CACHE_DIR, KEYS_DIR, USAGE_DIR,
+	}
+
+	for _, dirname := range dirs {
+		if _, err := os.Stat(dirname); err != nil {
+			if err := os.MkdirAll(dirname, 0770); err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating '%v': %v\n", dirname, err)
+				os.Exit(1)
+			}
 		}
 	}
 }

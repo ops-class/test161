@@ -32,6 +32,9 @@ type Test struct {
 	// Mongo ID
 	ID string `yaml:"-" json:"id" bson:"_id,omitempty"`
 
+	// ID of the submission this test belongs to.
+	SubmissionID string `yaml:"-" json:"-" bson:"submission_id"`
+
 	// Input
 
 	// Metadata
@@ -72,6 +75,10 @@ type Test struct {
 	PointsAvailable uint   `json:"points_avail" bson:"points_avail"`
 	PointsEarned    uint   `json:"points_earned" bson:"points_earned"`
 	ScoringMethod   string `json:"scoring_method" bson:"scoring_method"`
+	TargetName      string `json:"target_name" bson:"target_name"`
+
+	// The reason the test is being run. This could be 1 or more targets.
+	requiredBy map[string]bool
 
 	// Memory leak detection
 	MemLeakBytes    int  `json:"mem_leak_bytes" bson:"mem_leak_bytes"`       // How much are they leaking?
@@ -468,7 +475,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 			}
 			break
 		} else if cur.Status == COMMAND_STATUS_INCORRECT {
-			if t.ScoringMethod == "entire" {
+			if t.ScoringMethod == TEST_SCORING_ENTIRE {
 				// No point in continuing, just shut down ungracefully.
 				t.addStatus("shutdown", "short-circuit")
 				break

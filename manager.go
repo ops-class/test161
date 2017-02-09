@@ -230,6 +230,7 @@ func GetManagerStats() *ManagerStats {
 const (
 	SM_ACCEPTING = iota
 	SM_NOT_ACCEPTING
+	SM_STAFF_ONLY
 )
 
 type SubmissionManager struct {
@@ -258,11 +259,16 @@ func (sm *SubmissionManager) CombinedStats() *Test161Stats {
 		SubmissionStats: *sm.Stats(),
 		TestStats:       *sm.env.manager.Stats(),
 	}
-	if sm.Status() == SM_ACCEPTING {
+
+	switch sm.Status() {
+	case SM_ACCEPTING:
 		stats.Status = "accepting submissions"
-	} else {
+	case SM_NOT_ACCEPTING:
 		stats.Status = "not accepting submissions"
+	case SM_STAFF_ONLY:
+		stats.Status = "accepting submissions from staff only"
 	}
+
 	return stats
 }
 
@@ -281,10 +287,25 @@ func (sm *SubmissionManager) Run(s *Submission) error {
 	sm.l.Lock()
 
 	// Check to see if we've been paused or stopped. The server checks too, but there's delay.
-	if sm.status != SM_ACCEPTING {
+	abort := false
+	abortMsg := ""
+
+	if sm.status == SM_NOT_ACCEPTING {
+		abort = true
+		abortMsg = "The submission server is not accepting new submissions at this time"
+	} else if sm.status == SM_STAFF_ONLY {
+		for _, student := range s.students {
+			if isStaff, _ := student.IsStaff(sm.env); !isStaff {
+				abort = true
+				abortMsg = "The submission server is not accepting new submissions from students at this time"
+			}
+		}
+	}
+
+	if abort {
 		sm.l.Unlock()
 		s.Status = SUBMISSION_ABORTED
-		err := errors.New("The submission server is not accepting new submissions at this time")
+		err := errors.New(abortMsg)
 		s.Errors = append(s.Errors, fmt.Sprintf("%v", err))
 		sm.env.notifyAndLogErr("Submissions Closed", s, MSG_PERSIST_COMPLETE, 0)
 		return err
@@ -361,4 +382,10 @@ func (sm *SubmissionManager) Status() int {
 	sm.l.Lock()
 	defer sm.l.Unlock()
 	return sm.status
+}
+
+func (sm *SubmissionManager) SetStaffOnly() {
+	sm.l.Lock()
+	defer sm.l.Unlock()
+	sm.status = SM_STAFF_ONLY
 }

@@ -49,16 +49,23 @@ func main() {
 		case "status":
 			status, err = CtrlStatus()
 			if err == nil {
-				if status == test161.SM_ACCEPTING {
+				switch status {
+				case test161.SM_ACCEPTING:
 					fmt.Println("test161 server: accepting submissions")
-				} else {
+				case test161.SM_NOT_ACCEPTING:
 					fmt.Println("test161 server: not accepting submissions")
+				case test161.SM_STAFF_ONLY:
+					fmt.Println("test161 server: accepting submissions for staff only")
+				default:
+					fmt.Printf("test161 server: unknown status %v\n", status)
 				}
 			}
 		case "pause":
 			err = CtrlPause()
 		case "resume":
 			err = CtrlResume()
+		case "staff-only":
+			err = CtrlSetStaffOnly()
 		case "set-capacity":
 			if len(os.Args) != 3 {
 				err = errors.New("Wrong number of arguments to set-capacity")

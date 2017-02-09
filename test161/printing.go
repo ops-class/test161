@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/fatih/color"
 	"os"
 	"os/exec"
 	"strconv"
@@ -21,20 +22,36 @@ type Heading struct {
 	max    int
 }
 
-type Rows [][]string
+type Cell struct {
+	Text      string
+	CellColor *color.Color
+}
+
+type Row []*Cell
+type Rows []Row
 
 type PrintConfig struct {
 	NumSpaceSep   int
 	UnderlineChar string
+	BoldHeadings  bool
 }
+
+type PrintData struct {
+	Headings []*Heading
+	Rows     Rows
+	Config   PrintConfig
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 var defaultPrintConf = PrintConfig{
 	NumSpaceSep:   3,
 	UnderlineChar: "-",
+	BoldHeadings:  true,
 }
 
-// Get the number of columns available on the terminal. We'll try to squeeze the results
-// into this width.
+// Get the number of columns available on the terminal. We'll try to squeeze
+// the results into this width.
 func numTTYColumns() int {
 	cmd := exec.Command("stty", "size")
 	cmd.Stdin = os.Stdin
@@ -72,14 +89,13 @@ func longestWordLen(line string) int {
 }
 
 // Calculate the final widths of each column.
-func calcWidths(headings []*Heading, rows Rows, config PrintConfig) {
-
+func (pd *PrintData) calcWidths() {
 	// First pass, get the max and min widths of each column. Best case scenerio,
 	// we fit within the real estate we have. Worst case scenerio, the min width
 	// is smaller than what we have to work with.
 
 	// Start with the headings, and don't break them up
-	for _, h := range headings {
+	for _, h := range pd.Headings {
 		h.min = h.MinWidth
 		if h.min < len(h.Text) {
 			h.min = len(h.Text)
@@ -89,14 +105,14 @@ func calcWidths(headings []*Heading, rows Rows, config PrintConfig) {
 
 	// Now, the rows. The min column width should be the shortest word we find.
 	// The max width is the width of the longest cell.
-	for _, row := range rows {
+	for _, row := range pd.Rows {
 		for col, cell := range row {
-			lw := longestWordLen(cell)
-			if headings[col].min < lw {
-				headings[col].min = lw
+			lw := longestWordLen(cell.Text)
+			if pd.Headings[col].min < lw {
+				pd.Headings[col].min = lw
 			}
-			if len(cell) > headings[col].max {
-				headings[col].max = len(cell)
+			if len(cell.Text) > pd.Headings[col].max {
+				pd.Headings[col].max = len(cell.Text)
 			}
 		}
 	}
@@ -109,11 +125,11 @@ func calcWidths(headings []*Heading, rows Rows, config PrintConfig) {
 	}
 
 	// Deduct the column spacers
-	remaining -= (len(headings) - 1) * config.NumSpaceSep
+	remaining -= (len(pd.Headings) - 1) * pd.Config.NumSpaceSep
 
 	// Start out by setting the widths to the min widths.
 	// (OK if remaining goes negative)
-	for _, h := range headings {
+	for _, h := range pd.Headings {
 		h.width = h.min
 		remaining -= h.width
 	}
@@ -121,7 +137,7 @@ func calcWidths(headings []*Heading, rows Rows, config PrintConfig) {
 	// Divide up the remaining columns equally
 	for remaining > 0 {
 		didOne := false
-		for _, h := range headings {
+		for _, h := range pd.Headings {
 			if h.width < h.max && remaining > 0 {
 				remaining -= 1
 				h.width += 1
@@ -132,19 +148,18 @@ func calcWidths(headings []*Heading, rows Rows, config PrintConfig) {
 			break
 		}
 	}
-
 }
 
 // Split a single-line cell into (possibly) mutiple cells, with one line per cell.
-func splitCell(cell string, width int) []string {
+func (cell *Cell) split(width int) []*Cell {
 	// We currently use the simple (and common) greedy algorithm for
 	// filling each row.
 	// TODO: Change this to Knuth's algorithm for minumum raggedness
 
-	res := make([]string, 0)
+	res := make([]*Cell, 0)
 	remaining := width
 	line := ""
-	words := strings.Split(cell, " ")
+	words := strings.Split(cell.Text, " ")
 
 	for _, word := range words {
 		if len(line) == 0 {
@@ -157,7 +172,7 @@ func splitCell(cell string, width int) []string {
 			line += " " + word
 		} else {
 			// The word doesn't fit; finish the old line and start a new one.
-			res = append(res, line)
+			res = append(res, &Cell{line, cell.CellColor})
 			remaining = width - len(word)
 			line = word
 		}
@@ -165,103 +180,121 @@ func splitCell(cell string, width int) []string {
 
 	// Make sure the last line gets added
 	if len(line) > 0 {
-		res = append(res, line)
+		res = append(res, &Cell{line, cell.CellColor})
 	}
 
 	return res
 }
 
-// Split any rows that have cells that are too long for their column.
-func splitRows(headings []*Heading, rows Rows) Rows {
+// Split this row if it that has any cells that are too long for their column.
+func (row Row) split(headings []*Heading) []Row {
+	newRows := make([]Row, 0)
 
-	newRows := make([][]string, 0)
-
-	for _, row := range rows {
-		splits := make([][]string, len(row))
-		numLines := 0
-		for i, cell := range row {
-			splits[i] = splitCell(cell, headings[i].width)
-			if len(splits[i]) > numLines {
-				numLines = len(splits[i])
-			}
-		}
-
-		// At this point we have something like this:
-		// [    ]  [      ]  [        ]
-		// [    ]            [        ]
-		//                   [        ]
-		//                   [        ]
-		//
-		// Each cell has been broken up into columnar slice, and we now have
-		// to piece back together rows. We need to make sure each new row
-		// has the right number of columns, even if we have blank cells.
-		// We iterate over the rows, and if the cell split has that row,
-		// we add it, otherwise we just add a placeholder.
-		for i := 0; i < numLines; i++ {
-			// The new row has to have the same number of columns
-			newRow := make([]string, len(row))
-
-			for col, _ := range row {
-				if i < len(splits[col]) {
-					newRow[col] = splits[col][i]
-				} else {
-					newRow[col] = ""
-				}
-			}
-			newRows = append(newRows, newRow)
+	splits := make([][]*Cell, len(row))
+	numLines := 0
+	for i, cell := range row {
+		splits[i] = cell.split(headings[i].width)
+		if len(splits[i]) > numLines {
+			numLines = len(splits[i])
 		}
 	}
+
+	// At this point we have something like this:
+	// [    ]  [      ]  [        ]
+	// [    ]            [        ]
+	//                   [        ]
+	//                   [        ]
+	//
+	// Each cell has been broken up into columnar slice, and we now have
+	// to piece back together rows. We need to make sure each new row
+	// has the right number of columns, even if we have blank cells.
+	// We iterate over the rows, and if the cell split has that row,
+	// we add it, otherwise we just add a placeholder.
+	for i := 0; i < numLines; i++ {
+		// The new row has to have the same number of columns
+		newRow := make(Row, len(row))
+
+		for col, _ := range row {
+			if i < len(splits[col]) {
+				newRow[col] = splits[col][i]
+			} else {
+				newRow[col] = &Cell{"", nil}
+			}
+		}
+		newRows = append(newRows, newRow)
+	}
+
 	return newRows
 }
 
-func printColumns(headings []*Heading, rows Rows, config PrintConfig) error {
+// Split any rows that have cells that are too long for their column.
+func (pd *PrintData) splitRows() {
+	newRows := make(Rows, 0)
+
+	for _, row := range pd.Rows {
+		rows := row.split(pd.Headings)
+		newRows = append(newRows, rows...)
+	}
+
+	pd.Rows = newRows
+}
+
+func (pd *PrintData) Print() error {
 	// Do we have the right number of columns in the data? This is a
 	// programming error if we don't.
-	for _, row := range rows {
-		if len(row) != len(headings) {
+	for _, row := range pd.Rows {
+		if len(row) != len(pd.Headings) {
 			return errors.New("Wrong number of columns")
 		}
 	}
 
 	// Calculate min/max column widths and split up cells if needed
-	calcWidths(headings, rows, config)
-	rows = splitRows(headings, rows)
+	pd.calcWidths()
+	pd.splitRows()
 
-	// Next compute the format string for each row
-	fmtStr := ""
-	for i, h := range headings {
-		fmtStr += "%"
+	// Next compute the format string for each cell
+	fmtStrings := make([]string, 0, len(pd.Headings))
+	for i, h := range pd.Headings {
+		fmtStr := "%"
 		if !h.RightJustified {
 			fmtStr += "-"
 		}
 		fmtStr += fmt.Sprintf("%v", h.width)
 		fmtStr += "v"
-		if i+1 < len(headings) && config.NumSpaceSep > 0 {
-			fmtStr += strings.Repeat(" ", config.NumSpaceSep)
+		if i+1 < len(pd.Headings) && pd.Config.NumSpaceSep > 0 {
+			fmtStr += strings.Repeat(" ", pd.Config.NumSpaceSep)
+		} else {
+			fmtStr += "\n"
 		}
+		fmtStrings = append(fmtStrings, fmtStr)
 	}
-	fmtStr += "\n"
 
 	// Print heading
-	row := make([]interface{}, len(headings))
-	for i, h := range headings {
-		row[i] = h.Text
+	bold := color.New(color.Bold)
+
+	for i, h := range pd.Headings {
+		if pd.Config.BoldHeadings {
+			bold.Printf(fmtStrings[i], h.Text)
+		} else {
+			fmt.Printf(fmtStrings[i], h.Text)
+		}
 	}
-	fmt.Printf(fmtStr, row...)
 
 	// Underlines
-	if config.UnderlineChar != "" {
-		for i, h := range headings {
-			row[i] = strings.Repeat(config.UnderlineChar, h.width)
+	if pd.Config.UnderlineChar != "" {
+		for i, h := range pd.Headings {
+			fmt.Printf(fmtStrings[i], strings.Repeat(pd.Config.UnderlineChar, h.width))
 		}
-		fmt.Printf(fmtStr, row...)
 	}
 
-	for _, stringRow := range rows {
-		for col, text := range stringRow {
-			row[col] = text
+	for _, row := range pd.Rows {
+		for col, cell := range row {
+			if cell.CellColor != nil {
+				cell.CellColor.Printf(fmtStrings[col], cell.Text)
+			} else {
+				fmt.Printf(fmtStrings[col], cell.Text)
+			}
 		}
-		fmt.Printf(fmtStr, row...)
 	}
 
 	return nil

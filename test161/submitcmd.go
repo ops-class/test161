@@ -8,8 +8,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/ops-class/test161"
-	"github.com/parnurzeal/gorequest"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -29,7 +29,7 @@ var (
 const SubmitMsg = `
 The CSE 421/521 Collaboration Guidelines for this assignment are as follows:%v
 
-Your submission will receive an estimated score of %v/%v points.
+Your submission will receive the following estimated scores:%v
 
 Do you certify that you have followed the collaboration guidelines and wish to submit now?
 `
@@ -40,10 +40,7 @@ const NoUsersErr = `No users have been configured for test161. Please use 'test1
 
 // Run the submission locally, but as close to how the server would do it
 // as possible
-func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, errs []error) {
-
-	score = 0
-	available = 0
+func localSubmitTest(req *test161.SubmissionRequest) (scores []*scoreMapEntry, errs []error) {
 
 	var submission *test161.Submission
 
@@ -71,8 +68,7 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 
 	printRunSummary(submission.Tests, VERBOSE_LOUD, true)
 
-	score = submission.Score
-	available = submission.PointsAvailable
+	scores = splitScores(submission.Tests)
 
 	return
 }
@@ -178,27 +174,49 @@ func doSubmit() (exitcode int) {
 		return
 	}
 
-	// We've verified what we can. Time to test things locally before submission.
-	score, avail := uint(0), uint(0)
+	// This is a good time to kick off a usage stats upload.
+	runTest161Uploader()
 
 	// Local build
-	var errs []error
-	score, avail, errs = localSubmitTest(req)
+	scores, errs := localSubmitTest(req)
 	if len(errs) > 0 {
 		printRunErrors(errs)
 		return
 	}
 
+	hasPoints := false
+	for _, entry := range scores {
+		if entry.Earned > 0 {
+			hasPoints = true
+			break
+		}
+	}
+
 	// Don't bother proceeding if no points earned
-	if score == 0 && avail > 0 {
+	if !hasPoints {
 		fmt.Println("No points will be earned for this submission, cancelling submission.")
 		return
 	}
 
 	// Show score and collab policy, and give them a chance to cancel
-	fmt.Printf(SubmitMsg, collabMsg, score, avail)
+
+	scoreMsg := ""
+	bold := color.New(color.Bold).SprintFunc()
+
+	for _, entry := range scores {
+		name := entry.TargetName
+		if entry.IsMeta {
+			name = "(" + name + ")"
+		}
+		temp := fmt.Sprintf("\n%-15v: %v out of %v", name, entry.Earned, entry.Avail)
+		scoreMsg += bold(temp)
+	}
+
+	fmt.Printf(SubmitMsg, collabMsg, scoreMsg)
 	if text := getYesOrNo(); text == "no" {
-		fmt.Println("\nSubmission request cancelled\n")
+		fmt.Println()
+		fmt.Println("Submission request cancelled")
+		fmt.Println()
 		return
 	}
 
@@ -207,13 +225,18 @@ func doSubmit() (exitcode int) {
 		fmt.Printf("\n(%v of %v): You are submitting on behalf of %v. Is this correct?\n",
 			i+1, len(req.Users), u.Email)
 		if text := getYesOrNo(); text == "no" {
-			fmt.Println("\nSubmission request cancelled\n")
+			fmt.Println()
+			fmt.Println("Submission request cancelled")
+			fmt.Println()
 			return
 		}
 	}
 
 	// Let the server know what we think we're going to get
-	req.EstimatedScore = score
+	req.EstimatedScores = make(map[string]uint)
+	for _, entry := range scores {
+		req.EstimatedScores[entry.TargetName] = entry.Earned
+	}
 
 	// Finally, submit
 	if err := submit(req); err == nil {
@@ -265,7 +288,7 @@ func validateSubmission(req *test161.SubmissionRequest) error {
 			fmt.Println("Installing deployment key for", data.User)
 		} else {
 			emptyCount += 1
-			fmt.Fprintf(os.Stderr, "Warning: No test161 key exists for", data.User)
+			fmt.Fprintf(os.Stderr, "Warning: No test161 key exists for %v", data.User)
 		}
 	}
 
@@ -286,34 +309,32 @@ func submit(req *test161.SubmissionRequest) error {
 // Return true if OK, false otherwise
 func submitOrValidate(req *test161.SubmissionRequest, validateOnly bool) (string, error) {
 
-	endpoint := clientConf.Server
+	var pr *PostRequest
+
 	if validateOnly {
-		endpoint += "/api-v1/validate"
+		pr = NewPostRequest(ApiEndpointValidate)
 	} else {
-		endpoint += "/api-v1/submit"
+		pr = NewPostRequest(ApiEndpointSubmit)
 	}
 
-	remoteRequest := gorequest.New()
-	if reqbytes, err := json.Marshal(req); err != nil {
+	pr.SetType(PostTypeJSON)
+	if err := pr.QueueJSON(req, ""); err != nil {
 		return "", err
-	} else {
-		resp, body, errs := remoteRequest.Post(
-			endpoint).
-			Send(string(reqbytes)).
-			End()
+	}
 
-		if len(errs) > 0 {
-			// Just return one of them
-			return "", errs[0]
+	resp, body, errs := pr.Submit()
+
+	if len(errs) > 0 {
+		errs = connectionError(pr.Endpoint, errs)
+		return "", errs[0]
+	} else {
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+			return body, nil
+		} else if resp.StatusCode == http.StatusNotAcceptable {
+			return "", fmt.Errorf("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit.")
 		} else {
-			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-				return body, nil
-			} else if resp.StatusCode == http.StatusNotAcceptable {
-				return "", fmt.Errorf("Unable to accept your submission, test161 is out-of-date.  Please update test161 and resubmit.")
-			} else {
-				return "", fmt.Errorf("The server could not process your request: %v. \nData: %v",
-					resp.Status, body)
-			}
+			return "", fmt.Errorf("The server could not process your request: %v. \nData: %v",
+				resp.Status, body)
 		}
 	}
 }
@@ -407,23 +428,6 @@ func getSubmitCommitIDAndValidate() (*gitRepo, error) {
 	submitRef = ref
 
 	return git, nil
-}
-
-// Initialize the cache and key directories in HOME/.test161
-func init() {
-	if _, err := os.Stat(CACHE_DIR); err != nil {
-		if err := os.MkdirAll(CACHE_DIR, 0770); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating cache directory: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	if _, err := os.Stat(KEYS_DIR); err != nil {
-		if err := os.MkdirAll(KEYS_DIR, 0770); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating keys directory: %v\n", err)
-			os.Exit(1)
-		}
-	}
 }
 
 func getKeyHash(user string) string {

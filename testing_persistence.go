@@ -26,7 +26,9 @@ func (d *TestingPersistence) CanRetrieve() bool {
 	return true
 }
 
-func (d *TestingPersistence) Retrieve(what int, who map[string]interface{}, res interface{}) error {
+func (d *TestingPersistence) Retrieve(what int, who map[string]interface{},
+	filter map[string]interface{}, res interface{}) error {
+
 	switch what {
 	case PERSIST_TYPE_STUDENTS:
 		if email, _ := who["email"]; email == testStudent.Email {
@@ -38,6 +40,15 @@ func (d *TestingPersistence) Retrieve(what int, who map[string]interface{}, res 
 
 		return nil
 
+	case PERSIST_TYPE_USERS:
+		// Only currently used to get the staff flag, and only the length is
+		// checked. Since it's like 4 levels deep, we'll just fake it.
+		if id, _ := who["services.auth0.email"]; id == testStudent.Email {
+			results := res.(*[]interface{})
+			*results = append(*results, 1)
+		}
+
+		return nil
 	default:
 		return errors.New("Persistence: Invalid data type")
 	}

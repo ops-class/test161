@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/ops-class/test161"
 	"github.com/parnurzeal/gorequest"
 	"net/http"
@@ -14,6 +15,11 @@ import (
 )
 
 var listRemoteFlag bool
+
+var (
+	listTagsShort bool
+	listTagsList  []string
+)
 
 func doListCommand() int {
 	if len(os.Args) < 3 {
@@ -30,11 +36,19 @@ func doListCommand() int {
 		return doListTests()
 	case "all":
 		return doListAll()
+	case "tagnames":
+		return doListTagnames()
 	default:
 		fmt.Fprintf(os.Stderr, "Invalid option to 'test161 list'.  Must be one of (targets, tags, tests)\n")
 		return 1
 	}
 }
+
+type targetsByName []*test161.TargetListItem
+
+func (t targetsByName) Len() int           { return len(t) }
+func (t targetsByName) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
+func (t targetsByName) Less(i, j int) bool { return t[i].Name < t[j].Name }
 
 func doListTargets() int {
 	if err := getListArgs(); err != nil {
@@ -54,6 +68,8 @@ func doListTargets() int {
 		targets = env.TargetList()
 	}
 
+	sort.Sort(targetsByName(targets.Targets))
+
 	printTargets(targets)
 
 	return 0
@@ -69,7 +85,7 @@ func getRemoteTargets() (*test161.TargetList, []error) {
 
 	resp, body, errs := request.Get(endpoint).End()
 	if errs != nil {
-		return nil, errs
+		return nil, connectionError(endpoint, errs)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -93,32 +109,39 @@ func printTargets(list *test161.TargetList) {
 		desc = "Local Target"
 	}
 
-	headers := []*Heading{
-		&Heading{
-			Text:     desc,
-			MinWidth: 20,
+	pd := &PrintData{
+		Headings: []*Heading{
+			&Heading{
+				Text:     desc,
+				MinWidth: 20,
+			},
+			&Heading{
+				Text: "Type",
+			},
+			&Heading{
+				Text: "Version",
+			},
+			&Heading{
+				Text:           "Points",
+				RightJustified: true,
+			},
 		},
-		&Heading{
-			Text: "Type",
-		},
-		&Heading{
-			Text: "Version",
-		},
-		&Heading{
-			Text:           "Points",
-			RightJustified: true,
-		},
+		Rows:   make(Rows, 0),
+		Config: defaultPrintConf,
 	}
 
-	data := make([][]string, 0)
 	for _, t := range list.Targets {
-		data = append(data, []string{
-			t.Name, t.Type, fmt.Sprintf("v%v", t.Version), fmt.Sprintf("%v", t.Points),
-		})
+		row := []*Cell{
+			&Cell{Text: t.Name},
+			&Cell{Text: t.Type},
+			&Cell{Text: fmt.Sprintf("v%v", t.Version)},
+			&Cell{Text: fmt.Sprintf("%v", t.Points)},
+		}
+		pd.Rows = append(pd.Rows, row)
 	}
 
 	fmt.Println()
-	printColumns(headers, data, defaultPrintConf)
+	pd.Print()
 	fmt.Println()
 }
 
@@ -136,6 +159,19 @@ func getListArgs() error {
 	}
 
 	return nil
+}
+
+func getTagArgs() error {
+	flags := flag.NewFlagSet("test161 list-tags", flag.ExitOnError)
+	flags.Usage = usage
+	flags.BoolVar(&listTagsShort, "short", false, "")
+	flags.BoolVar(&listTagsShort, "s", false, "")
+
+	flags.Parse(os.Args[3:]) // this may exit
+	listTagsList = flags.Args()
+
+	return nil
+
 }
 
 func getAllTests() ([]*test161.Test, []error) {
@@ -159,9 +195,43 @@ func getAllTests() ([]*test161.Test, []error) {
 	return tests, nil
 }
 
+// Hidden option for autocomplete
+func doListTagnames() int {
+	// Load every test file
+	tests, errs := getAllTests()
+	if len(errs) > 0 {
+		printRunErrors(errs)
+		return 1
+	}
+
+	tags := make(map[string]bool)
+
+	for _, test := range tests {
+		for _, tag := range test.Tags {
+			tags[tag] = true
+		}
+	}
+
+	// Print tags
+	for key, _ := range tags {
+		fmt.Println(key)
+	}
+
+	return 0
+}
+
 func doListTags() int {
+	if err := getTagArgs(); err != nil {
+		printRunError(err)
+		return 1
+	}
 
 	tags := make(map[string][]*test161.Test)
+
+	desired := make(map[string]bool)
+	for _, t := range listTagsList {
+		desired[t] = true
+	}
 
 	// Load every test file
 	tests, errs := getAllTests()
@@ -189,30 +259,82 @@ func doListTags() int {
 	// Printing
 	fmt.Println()
 
-	for _, tag := range sorted {
-		fmt.Println(tag)
-		for _, test := range tags[tag] {
-			fmt.Println("    ", test.DependencyID)
+	if listTagsShort {
+		// For the short version, we'll print a table to align the descriptions
+		pd := &PrintData{
+			Headings: []*Heading{
+				&Heading{
+					Text: "Tag",
+				},
+				&Heading{
+					Text: "Description",
+				},
+			},
+			Config: defaultPrintConf,
+			Rows:   make(Rows, 0),
+		}
+
+		for _, tag := range sorted {
+			if len(desired) > 0 && !desired[tag] {
+				continue
+			}
+
+			desc := ""
+			if info, ok := env.Tags[tag]; ok {
+				desc = info.Description
+			}
+
+			pd.Rows = append(pd.Rows, []*Cell{
+				&Cell{Text: tag},
+				&Cell{Text: desc},
+			})
+		}
+
+		if len(pd.Rows) > 0 {
+			pd.Print()
+		}
+		fmt.Println()
+
+	} else {
+		bold := color.New(color.Bold)
+
+		for _, tag := range sorted {
+			if len(desired) > 0 && !desired[tag] {
+				continue
+			}
+
+			if info, ok := env.Tags[tag]; ok {
+				bold.Printf("%v:", tag)
+				fmt.Printf("  %v\n", info.Description)
+			} else {
+				bold.Print(tag)
+			}
+
+			for _, test := range tags[tag] {
+				fmt.Println("    ", test.DependencyID)
+			}
+			fmt.Println()
 		}
 	}
-
-	fmt.Println()
 
 	return 0
 }
 
 func doListTests() int {
-
-	headers := []*Heading{
-		&Heading{
-			Text: "Test ID",
+	pd := &PrintData{
+		Headings: []*Heading{
+			&Heading{
+				Text: "Test ID",
+			},
+			&Heading{
+				Text: "Name",
+			},
+			&Heading{
+				Text: "Description",
+			},
 		},
-		&Heading{
-			Text: "Name",
-		},
-		&Heading{
-			Text: "Description",
-		},
+		Rows:   make(Rows, 0),
+		Config: defaultPrintConf,
 	}
 
 	// Load every test file
@@ -223,17 +345,17 @@ func doListTests() int {
 	}
 
 	// Print ID, line, description for each tests
-	data := make([][]string, 0)
 	for _, test := range tests {
-		data = append(data, []string{
-			test.DependencyID,
-			test.Name,
-			strings.TrimSpace(test.Description),
-		})
+		row := Row{
+			&Cell{Text: test.DependencyID},
+			&Cell{Text: test.Name},
+			&Cell{Text: strings.TrimSpace(test.Description)},
+		}
+		pd.Rows = append(pd.Rows, row)
 	}
 
 	fmt.Println()
-	printColumns(headers, data, defaultPrintConf)
+	pd.Print()
 	fmt.Println()
 
 	return 0

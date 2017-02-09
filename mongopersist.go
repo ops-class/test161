@@ -18,6 +18,8 @@ const (
 	COLLECTION_TESTS       = "tests"
 	COLLECTION_STUDENTS    = "students"
 	COLLECTION_TARGETS     = "targets"
+	COLLECTION_USERS       = "users"
+	COLLECTION_USAGE       = "usage"
 )
 
 func NewMongoPersistence(dial *mgo.DialInfo) (PersistenceManager, error) {
@@ -48,6 +50,13 @@ func (m *MongoPersistence) updateDocumentByID(s *mgo.Session, collection string,
 func (m *MongoPersistence) updateDocument(s *mgo.Session, collection string, selector, data interface{}) error {
 	c := s.DB(m.dbName).C(collection)
 	err := c.Update(selector, data)
+	return err
+}
+
+// Update if it exists, otherwise insert
+func (m *MongoPersistence) upsertDocument(s *mgo.Session, collection string, selector, data interface{}) error {
+	c := s.DB(m.dbName).C(collection)
+	_, err := c.Upsert(selector, data)
 	return err
 }
 
@@ -230,6 +239,20 @@ func (m *MongoPersistence) Notify(t interface{}, msg, what int) (err error) {
 				}
 			}
 		}
+	case *UsageStat:
+		{
+			stat := t.(*UsageStat)
+			switch msg {
+			case MSG_PERSIST_CREATE:
+				if len(stat.ID) == 0 {
+					return errors.New("ID required to upsert UsageStat")
+				}
+				selector := bson.M{
+					"_id": stat.ID,
+				}
+				err = m.upsertDocument(session, COLLECTION_USAGE, selector, stat)
+			}
+		}
 	}
 	return
 }
@@ -238,16 +261,25 @@ func (m *MongoPersistence) CanRetrieve() bool {
 	return true
 }
 
-func (m *MongoPersistence) Retrieve(what int, who map[string]interface{}, res interface{}) error {
+func (m *MongoPersistence) Retrieve(what int, who map[string]interface{}, filter map[string]interface{}, res interface{}) error {
 	session := m.session.Copy()
 	defer session.Close()
 
+	collection := ""
+
 	switch what {
 	case PERSIST_TYPE_STUDENTS:
-		c := session.DB(m.dbName).C(COLLECTION_STUDENTS)
-		return c.Find(bson.M(who)).All(res)
-
+		collection = COLLECTION_STUDENTS
+	case PERSIST_TYPE_USERS:
+		collection = COLLECTION_USERS
 	default:
 		return errors.New("Persistence: Invalid data type")
 	}
+
+	c := session.DB(m.dbName).C(collection)
+	query := c.Find(bson.M(who))
+	if filter != nil {
+		query = query.Select(bson.M(filter))
+	}
+	return query.All(res)
 }

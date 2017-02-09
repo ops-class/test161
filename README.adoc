@@ -906,21 +906,7 @@ storage system they desire.
 
 === Nits
 
-* Colored test output on terminals that support it? (Particularly for
-correct/incorrect.)
-
-* Handle missing newline correctly. Test with shll for lossy shell support.
-
 * sys161 version checks
-
-* Order the test output in some meaningful way, probably by depth in the
-dependency graph. (That way all skipped tests should be shown last.)
-
-** SDH: Not necessarily true. You could have a long, unrelated branch that
-succeeds (even leaf nodes), but some unrelated dependency fails early. I made
-the default print order topological sort, but it's still confusing. I added the
-reason a test is skipped, which helps. Maybe a nice ASCII art tree would work
-here...
 
 * Check for repository problems:
 ** Check and fail if it has inappropriate files (`.o`), or is too large. 
@@ -930,11 +916,6 @@ here...
 
 * Fix directory bash completion for test161 config test161dir. It's
 unfortunately adding a space instead of /.
-
-* Add a backlink from `Test` -> `Submission`
-
-* An `isStaff` flag would be useful when querying the students collection in
-mongo
 
 * Populate man pages
 
@@ -950,14 +931,6 @@ It would be cool to be able to print serial output from one test while queuing
 the output from other tests. Maybe using curses to maintain a line at the end
 of the screen showing the tests that are being run.
 
-=== Tag Descriptions and Querying
-
-It would be nice to be able to add descriptions to tags and have `test161`
-print all tests that fall into a tag (or target) along with the description.
-
-(SDH: we have `test161 list tags` which handles printing tags and their tests,
-but we do not currently support tag descriptions or querying)
-
 === Output Frequency
 
 For long running tests, OS/161 tests generate periodic output, usually in the
@@ -968,23 +941,8 @@ break these into multiple lines, it would be nice to refactor things in such a
 way that the current output line is periodically persisted. This would give
 students a better indication of progress, as opposed to tests looking "stuck".
 
-=== Key Saving
-
-Now that we are having students save a key through the web interface we need
-to make sure that these keys get saved, associated with each successful
-submission, and not destroyed even if they are changed later.
-
-=== Configuration Override
-
-It would be great if `test161 run boot.t --sys161-cpus=1` worked properly. I
-think that there is a library for this.
-
-=== Support for GDB Backtraces on Error
-
-It should be possible to automate the process of hooking up a debugger and
-running BT on panics.
-
 === Server Nits
+
 * Environment inference with environment variable overrides, similar to the test161 client
 ** `test161-server config` to both show the configuration and modify it
 * Log the configuration on startup

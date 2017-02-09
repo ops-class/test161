@@ -4,10 +4,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/ops-class/test161"
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // 'test161 run' flags
@@ -21,21 +23,18 @@ var runCommandVars struct {
 	tests      []string
 }
 
-func __printRunError(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+type scoreMapEntry struct {
+	TargetName string
+	Earned     uint
+	Avail      uint
+	IsMeta     bool
 }
 
-func printRunError(err error) {
-	__printRunError(err)
-}
+type scoresByTarget []*scoreMapEntry
 
-func printRunErrors(errs []error) {
-	if len(errs) > 0 {
-		for _, e := range errs {
-			__printRunError(e)
-		}
-	}
-}
+func (a scoresByTarget) Len() int           { return len(a) }
+func (a scoresByTarget) Less(i, j int) bool { return a[i].TargetName < a[j].TargetName }
+func (a scoresByTarget) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func doRun() int {
 	if err := getRunArgs(); err != nil {
@@ -56,6 +55,14 @@ const (
 	VERBOSE_LOUD    = "loud"
 	VERBOSE_QUIET   = "quiet"
 	VERBOSE_WHISPER = "whisper"
+)
+
+// Colors
+var (
+	COLOR_SUCCESS *color.Color = color.New(color.FgGreen)
+	COLOR_FAIL    *color.Color = color.New(color.FgRed)
+	COLOR_SKIPPED *color.Color = color.New(color.FgBlue)
+	COLOR_ABORT   *color.Color = color.New(color.FgBlue)
 )
 
 func getRunArgs() error {
@@ -94,7 +101,7 @@ func getRunArgs() error {
 	return nil
 }
 
-func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
+func runTestGroup(tg *test161.TestGroup, useDeps bool, desc string) int {
 	var r test161.TestRunner
 	if useDeps {
 		r = test161.NewDependencyRunner(tg)
@@ -122,7 +129,9 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 
 	// Run it
 	test161.StartManager()
+	startTime := time.Now()
 	done := r.Run()
+	endTime := time.Now()
 
 	// For reurn val
 	allCorrect := true
@@ -132,13 +141,14 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 			allCorrect = false
 		}
 		if res.Err != nil {
-			fmt.Fprint(os.Stderr, "Error running %v: %v\n", res.Test.DependencyID, res.Err)
+			fmt.Fprintf(os.Stderr, "Error running %v: %v\n", res.Test.DependencyID, res.Err)
 		}
 	}
 
 	test161.StopManager()
 
 	printRunSummary(tg, runCommandVars.verbose, useDeps)
+	logUsageStat(tg, desc, startTime, endTime)
 
 	if allCorrect {
 		return 0
@@ -148,31 +158,31 @@ func runTestGroup(tg *test161.TestGroup, useDeps bool) int {
 }
 
 func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder bool) {
-	headers := []*Heading{
-		&Heading{
-			Text:     "Test",
-			MinWidth: 30,
+	pd := &PrintData{
+		Headings: []*Heading{
+			&Heading{
+				Text:     "Test",
+				MinWidth: 30,
+			},
+			&Heading{
+				Text:     "Result",
+				MinWidth: 10,
+			},
+			&Heading{
+				Text:           "Memory Leaks",
+				RightJustified: true,
+			},
+			&Heading{
+				Text:           "Score",
+				MinWidth:       10,
+				RightJustified: true,
+			},
 		},
-		&Heading{
-			Text:     "Result",
-			MinWidth: 10,
-		},
-		&Heading{
-			Text:           "Memory Leaks",
-			RightJustified: true,
-		},
-		&Heading{
-			Text:           "Score",
-			MinWidth:       10,
-			RightJustified: true,
-		},
+		Config: defaultPrintConf,
+		Rows:   make(Rows, 0),
 	}
 
 	tests := getPrintOrder(tg, tryDependOrder)
-
-	totalPoints, totalAvail := uint(0), uint(0)
-
-	results := make([][]string, 0)
 
 	desc := []string{"Total Correct", "Total Incorrect",
 		"Total Skipped", "Total Aborted",
@@ -181,10 +191,21 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 	totals := []int{0, 0, 0, 0}
 
 	for _, test := range tests {
-		totalPoints += test.PointsEarned
-		totalAvail += test.PointsAvailable
+		var paint *color.Color = nil
+
+		switch test.Result {
+		case test161.TEST_RESULT_CORRECT:
+			paint = COLOR_SUCCESS
+		case test161.TEST_RESULT_INCORRECT:
+			paint = COLOR_FAIL
+		case test161.TEST_RESULT_SKIP:
+			paint = COLOR_SKIPPED
+		case test161.TEST_RESULT_ABORT:
+			paint = COLOR_ABORT
+		}
 
 		status := string(test.Result)
+
 		if test.Result == test161.TEST_RESULT_SKIP {
 			// Try to find a failed dependency
 			for _, dep := range test.ExpandedDeps {
@@ -206,14 +227,14 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 			}
 		}
 
-		row := []string{
-			test.DependencyID,
-			status,
-			leak,
-			fmt.Sprintf("%v/%v", test.PointsEarned, test.PointsAvailable),
+		row := []*Cell{
+			&Cell{Text: test.DependencyID},
+			&Cell{Text: status, CellColor: paint},
+			&Cell{Text: leak},
+			&Cell{Text: fmt.Sprintf("%v/%v", test.PointsEarned, test.PointsAvailable)},
 		}
 
-		results = append(results, row)
+		pd.Rows = append(pd.Rows, row)
 
 		switch test.Result {
 		case test161.TEST_RESULT_CORRECT:
@@ -229,29 +250,44 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 
 	test161.StopManager()
 
+	scores := splitScores(tg)
+
 	if verbosity != VERBOSE_WHISPER {
 		// Chop off the score if it's not a graded target
-		if totalAvail == 0 {
-			headers = headers[0 : len(headers)-1]
-			for i, row := range results {
-				results[i] = row[0 : len(row)-1]
+		if len(scores) == 0 {
+			pd.Headings = pd.Headings[0 : len(pd.Headings)-1]
+			for i, row := range pd.Rows {
+				pd.Rows[i] = row[0 : len(row)-1]
 			}
 		}
 		fmt.Println()
-		printColumns(headers, results, defaultPrintConf)
+		pd.Print()
 	}
 
 	// Print totals
 	fmt.Println()
 
+	// Total correct/incorrect/etc.
 	for i := 0; i < len(desc); i++ {
 		if i == 0 || totals[i] > 0 {
 			fmt.Printf("%-15v: %v/%v\n", desc[i], totals[i], len(tg.Tests))
 		}
 	}
 
-	if totalAvail > 0 {
-		fmt.Printf("\n%-15v: %v/%v\n", "Total Score", totalPoints, totalAvail)
+	fmt.Println()
+
+	bold := color.New(color.Bold).SprintFunc()
+
+	if len(scores) > 0 {
+		for _, entry := range scores {
+			name := entry.TargetName
+			if entry.IsMeta {
+				name = "(" + name + ")"
+			}
+			desc := name + " Score"
+			temp := fmt.Sprintf("%-15v: %v/%v\n", desc, entry.Earned, entry.Avail)
+			fmt.Printf(bold(temp))
+		}
 	}
 
 	fmt.Println()
@@ -261,6 +297,7 @@ func runTests() (int, []error) {
 
 	var target *test161.Target
 	var ok bool
+	exitcode := 0
 
 	// Try running as a Target first
 	if len(runCommandVars.tests) == 1 && !runCommandVars.isTag {
@@ -270,13 +307,13 @@ func runTests() (int, []error) {
 				return 1, errs
 			} else {
 				if runCommandVars.explain {
-					explain(tg)
+					exitcode, errs = explain(tg)
 				} else if runCommandVars.dryRun {
 					printDryRun(tg)
 				} else {
-					runTestGroup(tg, true)
+					runTestGroup(tg, true, runCommandVars.tests[0])
 				}
-				return 0, nil
+				return exitcode, errs
 			}
 		}
 	}
@@ -289,19 +326,28 @@ func runTests() (int, []error) {
 		Env:     env,
 	}
 
-	exitcode := 0
-
 	if tg, errs := test161.GroupFromConfig(config); len(errs) > 0 {
 		return 1, errs
 	} else {
+		desc := ""
+		for _, t := range runCommandVars.tests {
+			if !strings.HasSuffix(t, ".t") {
+				if len(desc) == 0 {
+					desc = t
+				} else {
+					desc = desc + ", " + t
+				}
+			}
+		}
+
 		if runCommandVars.explain {
-			explain(tg)
+			exitcode, errs = explain(tg)
 		} else if runCommandVars.dryRun {
 			printDryRun(tg)
 		} else {
-			exitcode = runTestGroup(tg, config.UseDeps)
+			exitcode = runTestGroup(tg, config.UseDeps, desc)
 		}
-		return exitcode, nil
+		return exitcode, errs
 	}
 }
 
@@ -313,22 +359,25 @@ func (t testsByID) Less(i, j int) bool { return t[i].DependencyID < t[j].Depende
 
 func printDryRun(tg *test161.TestGroup) {
 
-	headers := []*Heading{
-		&Heading{
-			Text:     "Test ID",
-			MinWidth: 30,
+	pd := &PrintData{
+		Headings: []*Heading{
+			&Heading{
+				Text:     "Test ID",
+				MinWidth: 30,
+			},
+			&Heading{
+				Text: "Test Name",
+			},
+			&Heading{
+				Text:           "Points",
+				RightJustified: true,
+			},
 		},
-		&Heading{
-			Text: "Test Name",
-		},
-		&Heading{
-			Text:           "Points",
-			RightJustified: true,
-		},
+		Rows:   make(Rows, 0),
+		Config: defaultPrintConf,
 	}
 
 	sorted := getPrintOrder(tg, true)
-	rows := make([][]string, 0)
 
 	for _, test := range sorted {
 		points := ""
@@ -337,17 +386,19 @@ func printDryRun(tg *test161.TestGroup) {
 		} else {
 			points = fmt.Sprintf("%v", test.PointsAvailable)
 		}
-		rows = append(rows, []string{
-			test.DependencyID, test.Name, points,
+		pd.Rows = append(pd.Rows, []*Cell{
+			&Cell{Text: test.DependencyID},
+			&Cell{Text: test.Name},
+			&Cell{Text: points},
 		})
 	}
 
 	fmt.Println()
-	printColumns(headers, rows, defaultPrintConf)
+	pd.Print()
 	fmt.Println()
 }
 
-func explain(tg *test161.TestGroup) {
+func explain(tg *test161.TestGroup) (int, []error) {
 
 	tests := getPrintOrder(tg, true)
 
@@ -368,7 +419,9 @@ func explain(tg *test161.TestGroup) {
 
 		// Merge in test161 defaults for any missing configuration values
 		test.SetEnv(env)
-		test.MergeAllDefaults()
+		if err := test.MergeAllDefaults(); err != nil {
+			return 1, []error{err}
+		}
 
 		// Test ID
 		fmt.Println(test.DependencyID)
@@ -445,6 +498,7 @@ func explain(tg *test161.TestGroup) {
 	}
 
 	fmt.Println()
+	return 0, nil
 }
 
 func getPrintOrder(tg *test161.TestGroup, tryDependOrder bool) []*test161.Test {
@@ -476,4 +530,65 @@ func getPrintOrder(tg *test161.TestGroup, tryDependOrder bool) []*test161.Test {
 	sort.Sort(testsByID(tests))
 
 	return tests
+}
+
+func splitScores(tg *test161.TestGroup) []*scoreMapEntry {
+	scores := make(map[string]*scoreMapEntry)
+	var entry *scoreMapEntry
+	var ok bool
+
+	for _, test := range tg.Tests {
+		// Update scores, but only if there is a target name
+		if len(test.TargetName) == 0 {
+			continue
+		}
+
+		if entry, ok = scores[test.TargetName]; !ok {
+			entry = &scoreMapEntry{
+				TargetName: test.TargetName,
+				Earned:     0,
+				Avail:      0,
+			}
+			scores[test.TargetName] = entry
+		}
+
+		entry.Avail += test.PointsAvailable
+		entry.Earned += test.PointsEarned
+	}
+
+	if len(scores) == 0 {
+		return nil
+	}
+
+	scoresSlice := make([]*scoreMapEntry, 0, len(scores))
+
+	// Sort it
+	for _, entry := range scores {
+		scoresSlice = append(scoresSlice, entry)
+	}
+
+	totalEarned := uint(0)
+
+	sort.Sort(scoresByTarget(scoresSlice))
+
+	for _, entry := range scoresSlice {
+		totalEarned += entry.Earned
+	}
+
+	// See if we can create an entry for the metatarget too.
+	if target, ok := env.Targets[scoresSlice[0].TargetName]; ok {
+		if len(target.MetaName) > 0 {
+			if metaTarget, ok := env.Targets[target.MetaName]; ok {
+				entry := &scoreMapEntry{
+					TargetName: metaTarget.Name,
+					Avail:      metaTarget.Points,
+					Earned:     totalEarned,
+					IsMeta:     true,
+				}
+				scoresSlice = append(scoresSlice, entry)
+			}
+		}
+	}
+	return scoresSlice
+
 }

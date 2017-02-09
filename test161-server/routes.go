@@ -52,6 +52,12 @@ var routes = []Route{
 		"/api-v1/validate",
 		validateSubmission,
 	},
+	Route{
+		"upload",
+		"POST",
+		"/api-v1/upload",
+		uploadFiles,
+	},
 }
 
 func NewRouter() *mux.Router {

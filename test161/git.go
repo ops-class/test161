@@ -123,7 +123,7 @@ func (git *gitRepo) commitFromHEAD(debug bool) (commit, ref string, err error) {
 		err = fmt.Errorf("Cannot determine local status: %v", err)
 		return
 	} else if dirty {
-		err = errors.New("Submission not permitted while changes exist in your working directory\nRun git status to see what files have changed.")
+		err = errors.New("Submission not permitted while changes exist in your working directory.\nRun 'git status' to see what files have changed.")
 		return
 	}
 

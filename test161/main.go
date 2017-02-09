@@ -72,7 +72,9 @@ func usage() {
 
     test161 submit [-debug] [-verify] [-no-cache] <target> <commit>
 
-    test161 list (targets|tags|tests) [-remote | -r]
+    test161 list tags [-s | -short] [tags]
+    test161 list targets [-remote | -r]
+    test161 list tests
 
     test161 config [-debug] [(add-user|del-user|change-token)] <username> <token>
     test161 config test161dir <dir>
@@ -129,9 +131,10 @@ previously cached copy.
 
 'test161 list' prints a variety of useful information. 'test161 list targets'
 shows the local targets available to test161; adding -r will show the remote
-targets instead. 'test161 list tags' shows a listing of tags with the tests in
-each tag. 'test161 list tests' lists all tests available to test161 along with
-their descriptions.
+targets instead. 'test161 list tags' shows a listing of tags, their
+descriptions, and tests for each tag. Adding -shprt will print the tests for a
+concise table of tag names and descriptions. 'test161 list tests' lists all
+tests available to test161 along with their descriptions.
 
 
 'test161 config' is used to view and change test161 configuration. When run with
@@ -190,6 +193,10 @@ var cmdTable = map[string]*test161Command{
 	},
 	"help": &test161Command{
 		cmd: doHelp,
+	},
+	"upload-usage": &test161Command{
+		cmd:    doUploadUsage,
+		reqEnv: true,
 	},
 }
 
