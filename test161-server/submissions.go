@@ -133,6 +133,7 @@ func submissionFromHttp(w http.ResponseWriter, r *http.Request, validateOnly boo
 		return nil
 	}
 
+	// Check to see if we're accepting submissions
 	if submissionMgr.Status() == test161.SM_NOT_ACCEPTING {
 		// We're trying to shut down
 		logger.Println("Rejecting due to SM_NOT_ACCEPTING")
@@ -141,12 +142,35 @@ func submissionFromHttp(w http.ResponseWriter, r *http.Request, validateOnly boo
 		return nil
 	}
 
+	// Validate the students and check if we're accepting staff-only submissions
+	if students, err := request.Validate(serverEnv); err != nil {
+		// Unprocessable entity
+		sendErrorCode(w, 422, err)
+		return nil
+	} else if err = checkStaffOnlySubmission(students); err != nil {
+		sendErrorCode(w, http.StatusServiceUnavailable, err)
+		return nil
+	}
+
 	return &request
+}
+
+func checkStaffOnlySubmission(students []*test161.Student) error {
+	if submissionMgr.Status() == test161.SM_STAFF_ONLY {
+		for _, student := range students {
+			if isStaff, _ := student.IsStaff(serverEnv); !isStaff {
+				err := errors.New("The submission server is currently not accepting new submissions from students")
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // createSubmission accepts POST requests
 func createSubmission(w http.ResponseWriter, r *http.Request) {
 
+	// This does some common validation checks too.
 	request := submissionFromHttp(w, r, false)
 	if request == nil {
 		return
@@ -154,6 +178,7 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 
 	// Make sure we can create the submission.  This checks for everything but run errors.
 	submission, errs := test161.NewSubmission(request, serverEnv)
+
 	if len(errs) > 0 {
 		w.Header().Set("Content-Type", JsonHeader)
 		w.WriteHeader(422) // unprocessable entity
@@ -183,14 +208,9 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 // validate accepts POST requests
 func validateSubmission(w http.ResponseWriter, r *http.Request) {
 
+	// This does some common validation checks too.
 	request := submissionFromHttp(w, r, true)
 	if request == nil {
-		return
-	}
-
-	if _, err := request.Validate(serverEnv); err != nil {
-		// Unprocessable entity
-		sendErrorCode(w, 422, err)
 		return
 	}
 
