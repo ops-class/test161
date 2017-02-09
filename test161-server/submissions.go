@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -24,19 +26,21 @@ var submissionMgr *test161.SubmissionManager
 
 // Environment config
 type SubmissionServerConfig struct {
-	CacheDir   string                 `yaml:"cachedir"`
-	Test161Dir string                 `yaml:"test161dir"`
-	OverlayDir string                 `yaml:"overlaydir"`
-	KeyDir     string                 `yaml:"keydir"`
-	UsageDir   string                 `yaml:"usagedir"`
-	MaxTests   uint                   `yaml:"max_tests"`
-	Database   string                 `yaml:"dbname"`
-	DBServer   string                 `yaml:"dbsever"`
-	DBUser     string                 `yaml:"dbuser"`
-	DBPassword string                 `yaml:"dbpw"`
-	DBTimeout  uint                   `yaml:"dbtimeout"`
-	APIPort    uint                   `yaml:"api_port"`
-	MinClient  test161.ProgramVersion `yaml:"min_client"`
+	CacheDir     string                 `yaml:"cachedir"`
+	Test161Dir   string                 `yaml:"test161dir"`
+	OverlayDir   string                 `yaml:"overlaydir"`
+	KeyDir       string                 `yaml:"keydir"`
+	UsageDir     string                 `yaml:"usagedir"`
+	MaxTests     uint                   `yaml:"max_tests"`
+	Database     string                 `yaml:"db_name"`
+	DBServers    []string               `yaml:"db_servers"`
+	DBUser       string                 `yaml:"db_user"`
+	DBReplicaSet string                 `yaml:"db_replica_set"`
+	DBPassword   string                 `yaml:"db_pw"`
+	DBTimeout    uint                   `yaml:"db_timeout"`
+	DBSSL        bool                   `yaml:"db_ssl"`
+	APIPort      uint                   `yaml:"api_port"`
+	MinClient    test161.ProgramVersion `yaml:"min_client"`
 }
 
 const CONF_FILE = ".test161-server.conf"
@@ -46,7 +50,7 @@ var defaultConfig = &SubmissionServerConfig{
 	Test161Dir: "../fixtures/",
 	MaxTests:   0,
 	Database:   "test161",
-	DBServer:   "localhost:27017",
+	DBServers:  []string{"localhost:27017"},
 	DBUser:     "",
 	DBPassword: "",
 	DBTimeout:  10,
@@ -322,17 +326,27 @@ func loadServerConfig() (*SubmissionServerConfig, error) {
 func (s *SubmissionServer) setUpEnvironment() error {
 	// MongoDB connection
 	mongoTestDialInfo := &mgo.DialInfo{
-		Username: s.conf.DBUser,
-		Password: s.conf.DBPassword,
-		Database: s.conf.Database,
-		Addrs:    []string{s.conf.DBServer},
-		Timeout:  time.Duration(s.conf.DBTimeout) * time.Second,
+		Username:       s.conf.DBUser,
+		Password:       s.conf.DBPassword,
+		Database:       s.conf.Database,
+		Addrs:          s.conf.DBServers,
+		ReplicaSetName: s.conf.DBReplicaSet,
+		Timeout:        time.Duration(s.conf.DBTimeout) * time.Second,
 	}
 
+	if s.conf.DBSSL {
+		logger.Println("Initializing SSL...")
+		mongoTestDialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
+			return tls.Dial("tcp", addr.String(), &tls.Config{})
+		}
+	}
+
+	logger.Println("Initializing connection to MongoDB...")
 	mongo, err := test161.NewMongoPersistence(mongoTestDialInfo)
 	if err != nil {
 		return err
 	}
+	logger.Println("Connected to MongoDB.")
 
 	// Submission environment
 	env, err := test161.NewEnvironment(s.conf.Test161Dir, mongo)
@@ -349,7 +363,7 @@ func (s *SubmissionServer) setUpEnvironment() error {
 	minClientVer = s.conf.MinClient
 	usageFailDir = s.conf.UsageDir
 
-	fmt.Println("Min client ver:", minClientVer)
+	logger.Println("Min client ver:", minClientVer)
 
 	// OK, we're good to go
 	serverEnv = env
