@@ -23,6 +23,19 @@ var runCommandVars struct {
 	tests      []string
 }
 
+type scoreMapEntry struct {
+	TargetName string
+	Earned     uint
+	Avail      uint
+	IsMeta     bool
+}
+
+type scoresByTarget []*scoreMapEntry
+
+func (a scoresByTarget) Len() int           { return len(a) }
+func (a scoresByTarget) Less(i, j int) bool { return a[i].TargetName < a[j].TargetName }
+func (a scoresByTarget) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
 func doRun() int {
 	if err := getRunArgs(); err != nil {
 		printRunError(err)
@@ -171,8 +184,6 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 
 	tests := getPrintOrder(tg, tryDependOrder)
 
-	totalPoints, totalAvail := uint(0), uint(0)
-
 	desc := []string{"Total Correct", "Total Incorrect",
 		"Total Skipped", "Total Aborted",
 	}
@@ -180,9 +191,6 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 	totals := []int{0, 0, 0, 0}
 
 	for _, test := range tests {
-		totalPoints += test.PointsEarned
-		totalAvail += test.PointsAvailable
-
 		var paint *color.Color = nil
 
 		switch test.Result {
@@ -242,9 +250,11 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 
 	test161.StopManager()
 
+	scores := splitScores(tg)
+
 	if verbosity != VERBOSE_WHISPER {
 		// Chop off the score if it's not a graded target
-		if totalAvail == 0 {
+		if len(scores) == 0 {
 			pd.Headings = pd.Headings[0 : len(pd.Headings)-1]
 			for i, row := range pd.Rows {
 				pd.Rows[i] = row[0 : len(row)-1]
@@ -257,14 +267,27 @@ func printRunSummary(tg *test161.TestGroup, verbosity string, tryDependOrder boo
 	// Print totals
 	fmt.Println()
 
+	// Total correct/incorrect/etc.
 	for i := 0; i < len(desc); i++ {
 		if i == 0 || totals[i] > 0 {
 			fmt.Printf("%-15v: %v/%v\n", desc[i], totals[i], len(tg.Tests))
 		}
 	}
 
-	if totalAvail > 0 {
-		fmt.Printf("\n%-15v: %v/%v\n", "Total Score", totalPoints, totalAvail)
+	fmt.Println()
+
+	bold := color.New(color.Bold).SprintFunc()
+
+	if len(scores) > 0 {
+		for _, entry := range scores {
+			name := entry.TargetName
+			if entry.IsMeta {
+				name = "(" + name + ")"
+			}
+			desc := name + " Score"
+			temp := fmt.Sprintf("%-15v: %v/%v\n", desc, entry.Earned, entry.Avail)
+			fmt.Printf(bold(temp))
+		}
 	}
 
 	fmt.Println()
@@ -507,4 +530,65 @@ func getPrintOrder(tg *test161.TestGroup, tryDependOrder bool) []*test161.Test {
 	sort.Sort(testsByID(tests))
 
 	return tests
+}
+
+func splitScores(tg *test161.TestGroup) []*scoreMapEntry {
+	scores := make(map[string]*scoreMapEntry)
+	var entry *scoreMapEntry
+	var ok bool
+
+	for _, test := range tg.Tests {
+		// Update scores, but only if there is a target name
+		if len(test.TargetName) == 0 {
+			continue
+		}
+
+		if entry, ok = scores[test.TargetName]; !ok {
+			entry = &scoreMapEntry{
+				TargetName: test.TargetName,
+				Earned:     0,
+				Avail:      0,
+			}
+			scores[test.TargetName] = entry
+		}
+
+		entry.Avail += test.PointsAvailable
+		entry.Earned += test.PointsEarned
+	}
+
+	if len(scores) == 0 {
+		return nil
+	}
+
+	scoresSlice := make([]*scoreMapEntry, 0, len(scores))
+
+	// Sort it
+	for _, entry := range scores {
+		scoresSlice = append(scoresSlice, entry)
+	}
+
+	totalEarned := uint(0)
+
+	sort.Sort(scoresByTarget(scoresSlice))
+
+	for _, entry := range scoresSlice {
+		totalEarned += entry.Earned
+	}
+
+	// See if we can create an entry for the metatarget too.
+	if target, ok := env.Targets[scoresSlice[0].TargetName]; ok {
+		if len(target.MetaName) > 0 {
+			if metaTarget, ok := env.Targets[target.MetaName]; ok {
+				entry := &scoreMapEntry{
+					TargetName: metaTarget.Name,
+					Avail:      metaTarget.Points,
+					Earned:     totalEarned,
+					IsMeta:     true,
+				}
+				scoresSlice = append(scoresSlice, entry)
+			}
+		}
+	}
+	return scoresSlice
+
 }

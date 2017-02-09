@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -26,13 +27,13 @@ type SubmissionUserInfo struct {
 // A SubmissionRequest represents the data required to run a test161 target
 // for evaluation by the test161 server.
 type SubmissionRequest struct {
-	Target         string                // Name of the target
-	Users          []*SubmissionUserInfo // Email addresses of users
-	Repository     string                // Git repository to clone
-	CommitID       string                // Git commit id to checkout after cloning
-	CommitRef      string                // The ref they're submitting with, if one is set
-	ClientVersion  ProgramVersion        // The version of test161 the client is running
-	EstimatedScore uint                  // The local score test161 computed
+	Target          string                // Name of the target
+	Users           []*SubmissionUserInfo // Email addresses of users
+	Repository      string                // Git repository to clone
+	CommitID        string                // Git commit id to checkout after cloning
+	CommitRef       string                // The ref they're submitting with, if one is set
+	ClientVersion   ProgramVersion        // The version of test161 the client is running
+	EstimatedScores map[string]uint       // The local score test161 computed
 }
 
 // UploadRequests are created by clients and provide the form fields for
@@ -70,9 +71,17 @@ type Submission struct {
 	IsStaff         bool   `bson:"is_staff"`
 
 	// Target details
-	TargetID        string `bson:"target_id"`
-	TargetName      string `bson:"target_name"`
-	TargetVersion   uint   `bson:"target_version"`
+	TargetID      string `bson:"target_id"`
+	TargetName    string `bson:"target_name"`
+	TargetVersion uint   `bson:"target_version"`
+	IsMetaTarget  bool   `bson:"is_meta_target"`
+
+	// Submitted target, which is different from target details if submitting
+	// to a subtarget of a metatarget.
+	SubmittedTargetID      string `bson:"submitted_target_id"`
+	SubmittedTargetName    string `bson:"submitted_target_name"`
+	SubmittedTargetVersion uint   `bson:"submitted_target_version"`
+
 	PointsAvailable uint   `bson:"max_score"`
 	TargetType      string `bson:"target_type"`
 
@@ -87,12 +96,23 @@ type Submission struct {
 	SubmissionTime time.Time `bson:"submission_time"`
 	CompletionTime time.Time `bson:"completion_time"`
 
-	Env *TestEnvironment `bson:"-"`
+	Env *TestEnvironment `bson:"-" json:"-"`
 
-	BuildTest *BuildTest `bson:"-"`
-	Tests     *TestGroup `bson:"-"`
+	BuildTest *BuildTest `bson:"-" json:"-"`
+	Tests     *TestGroup `bson:"-" json:"-"`
 
 	students []*Student
+
+	// Split information for meta/sub-targets. We store IDs for
+	// mongo/persistence, and keep references around in case we need them,
+	// and for testing.
+	OrigSubmissionID string `bson:"orig_submission_id"`
+	origTarget       *Target
+	SubSubmissionIDs []string `bson:"sub_submission_ids"`
+	subSubmissions   map[string]*Submission
+
+	// From the request, but we need it in case we split the submission.
+	estimatedScores map[string]uint
 }
 
 type TargetStats struct {
@@ -129,6 +149,13 @@ type Student struct {
 	// 0 == uncached, 1 == false, 2 == true
 	isStaff int
 }
+
+// Target stats sorting
+type StatsByName []*TargetStats
+
+func (a StatsByName) Len() int           { return len(a) }
+func (a StatsByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a StatsByName) Less(i, j int) bool { return a[i].TargetName < a[j].TargetName }
 
 // Keep track of pending submissions.  Keep this out of the database in case there are
 // communication issues so that we don't need to manually reset things in the DB.
@@ -283,18 +310,24 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 		return nil, []error{errors.New("Errors loading target on the server")}
 	}
 
+	id := uuid.NewV4().String()
+
 	s := &Submission{
-		ID:              uuid.NewV4().String(),
-		Repository:      request.Repository,
-		CommitID:        request.CommitID,
-		CommitRef:       request.CommitRef,
-		ClientVersion:   request.ClientVersion.String(),
-		EstimatedScore:  request.EstimatedScore,
-		TargetID:        target.ID,
-		TargetName:      target.Name,
-		TargetVersion:   target.Version,
-		PointsAvailable: target.Points,
-		TargetType:      target.Type,
+		ID:                     id,
+		Repository:             request.Repository,
+		CommitID:               request.CommitID,
+		CommitRef:              request.CommitRef,
+		ClientVersion:          request.ClientVersion.String(),
+		EstimatedScore:         uint(0),
+		TargetID:               target.ID,
+		TargetName:             target.Name,
+		TargetVersion:          target.Version,
+		SubmittedTargetID:      target.ID,
+		SubmittedTargetName:    target.Name,
+		SubmittedTargetVersion: target.Version,
+		PointsAvailable:        target.Points,
+		TargetType:             target.Type,
+		IsMetaTarget:           target.IsMetaTarget,
 
 		Status:      SUBMISSION_SUBMITTED,
 		Score:       uint(0),
@@ -307,6 +340,27 @@ func NewSubmission(request *SubmissionRequest, origenv *TestEnvironment) (*Submi
 		Env:       env,
 		BuildTest: buildTest,
 		Tests:     tg,
+
+		origTarget:       target,
+		OrigSubmissionID: id,
+		SubSubmissionIDs: []string{},
+		subSubmissions:   make(map[string]*Submission),
+
+		estimatedScores: request.EstimatedScores,
+	}
+
+	// If this is a subtarget, change the details and "submit to the metatarget".
+	if target.metaTarget != nil && !target.IsMetaTarget {
+		s.TargetID = target.metaTarget.ID
+		s.TargetName = target.metaTarget.Name
+		s.TargetVersion = target.metaTarget.Version
+		s.PointsAvailable = target.metaTarget.Points
+		s.IsMetaTarget = true
+	}
+
+	// This needs to come after the target name is adjusted for metatargets.
+	if est, ok := request.EstimatedScores[s.TargetName]; ok {
+		s.EstimatedScore = est
 	}
 
 	// We need the students to later update the students collection.  But,
@@ -405,13 +459,19 @@ func (student *Student) updateStats(submission *Submission) {
 		student.Stats = make([]*TargetStats, 0)
 	}
 
-	student.TotalSubmissions += 1
+	// Only update the student submission count for the original submission.
+	// This way, we won't increase it 4 times when they submit ASST3.
+	if submission.ID == submission.OrigSubmissionID {
+		student.TotalSubmissions += 1
+	}
 
 	// Find the TargetStats to update, or create a new one
 	stat := student.getStat(submission.TargetName)
 	if stat == nil {
 		stat = submission.TargetStats()
 		student.Stats = append(student.Stats, stat)
+		// Sort this so it looks right coming out of mongo
+		sort.Sort(StatsByName(student.Stats))
 	}
 
 	// Always increment submission count, but everything else depends on the
@@ -523,7 +583,9 @@ func (s *Submission) updateStudents() {
 			}
 		}
 	}
+}
 
+func (s *Submission) unlockStudents() {
 	userLock.Lock()
 	defer userLock.Unlock()
 
@@ -548,6 +610,86 @@ func (s *Submission) finish() {
 	}
 }
 
+// Clone the submission and update its details for the given target.
+// This requires us to copy the existing object and modify its tests list
+// and points to only include those tests that were requried for this
+// particular target.
+func (s *Submission) cloneAndUpdate(target *Target) *Submission {
+	var copy Submission = *s
+
+	copy.ID = uuid.NewV4().String()
+
+	// Target details
+	copy.TargetID = target.ID
+	copy.TargetName = target.Name
+	copy.TargetVersion = target.Version
+	copy.IsMetaTarget = false
+	copy.PointsAvailable = target.Points
+
+	// Results/tests
+	copy.Score = uint(0)
+	copy.EstimatedScore = uint(0)
+	copy.TestIDs = make([]string, 0)
+
+	copy.SubSubmissionIDs = make([]string, 0)
+	copy.subSubmissions = make(map[string]*Submission)
+
+	// Add build test
+	copy.TestIDs = append(copy.TestIDs, s.TestIDs[0])
+
+	// Find all tests that were needed for this sub-part
+	for _, test := range s.Tests.Tests {
+		if test.requiredBy[target.Name] {
+			copy.TestIDs = append(copy.TestIDs, test.ID)
+		}
+	}
+
+	if est, ok := s.estimatedScores[target.Name]; ok {
+		copy.EstimatedScore = est
+	}
+
+	return &copy
+}
+
+// Split the submission into multiple submissions based on the metatarget.
+func (s *Submission) split() []*Submission {
+	// For single target assignments, we skip this step.
+	if !s.IsMetaTarget {
+		return nil
+	}
+
+	// We need to create a submission for the original target, as well as
+	// all previous subtargets.
+	submissions := make([]*Submission, 0)
+
+	// Two cases:
+	//  1) The original target was a a metatarget. In this case, all of the targets
+	//     are stored in the previousSubtargets.
+	//  2) We upgraded to a metatarget. In that case, we need to add all of the
+	//     previous subtargets AND the original target.
+
+	if !s.origTarget.IsMetaTarget {
+		submissions = append(submissions, s.cloneAndUpdate(s.origTarget))
+	}
+
+	for _, target := range s.origTarget.previousSubTargets {
+		submissions = append(submissions, s.cloneAndUpdate(target))
+	}
+
+	return submissions
+}
+
+func (s *Submission) abort() {
+	s.Status = SUBMISSION_ABORTED
+	s.Score = 0
+	s.Performance = float64(0)
+}
+
+func (s *Submission) updateScore(test *Test) {
+	s.Score += test.PointsEarned
+	s.Env.Persistence.Notify(s, MSG_PERSIST_UPDATE, MSG_FIELD_SCORE)
+}
+
 // Synchronous submission runner
 func (s *Submission) Run() error {
 	// Run the build first.  Right now this is the only thing the front-end sees.
@@ -561,6 +703,7 @@ func (s *Submission) Run() error {
 		s.Env.Persistence = &DoNothingPersistence{}
 	}
 
+	defer s.unlockStudents()
 	defer s.finish()
 
 	// Build os161
@@ -613,17 +756,37 @@ func (s *Submission) Run() error {
 	runner := NewDependencyRunner(s.Tests)
 	done := runner.Run()
 
+	// Split up the target into multiple sub-targets. If splits is non-empty,
+	// we are now running the metatarget up to and including the original target.
+	// We want to do this *before* running the target so that the front-end can
+	// display each submission as running simultaneously.
+	splits := s.split()
+	for _, newSubmission := range splits {
+		s.Env.notifyAndLogErr("Create Split Submission", newSubmission, MSG_PERSIST_CREATE, 0)
+		defer newSubmission.finish()
+		s.SubSubmissionIDs = append(s.SubSubmissionIDs, newSubmission.ID)
+		s.subSubmissions[newSubmission.TargetName] = newSubmission
+	}
+
 	// Update the score unless a test aborts, then it's 0 and we abort (eventually)
 	for r := range done {
 		if s.Status == SUBMISSION_RUNNING {
 			if r.Test.Result == TEST_RESULT_ABORT {
-				s.Status = SUBMISSION_ABORTED
-				s.Score = 0
-				s.Performance = float64(0)
+				s.abort()
+				for _, other := range splits {
+					// Abort all
+					other.abort()
+				}
 			} else {
-				s.Score += r.Test.PointsEarned
-				s.Env.Persistence.Notify(s, MSG_PERSIST_UPDATE, MSG_FIELD_SCORE)
+				// Always update the metasubmission, and possibly subtarget submissions.
+				s.updateScore(r.Test)
+				for _, other := range splits {
+					if r.Test.TargetName == other.TargetName {
+						other.updateScore(r.Test)
+					}
+				}
 			}
+
 		}
 		if r.Err != nil {
 			s.Errors = append(s.Errors, fmt.Sprintf("%v", r.Err))

@@ -78,6 +78,7 @@ func envTargetHandler(env *TestEnvironment, f string) error {
 				env.Targets[t.Name] = t
 			}
 		}
+
 		if env.Persistence != nil {
 			return env.Persistence.Notify(t, MSG_TARGET_LOAD, 0)
 		} else {
@@ -176,7 +177,34 @@ func NewEnvironment(test161Dir string, pm PersistenceManager) (*TestEnvironment,
 		}
 	}
 
+	if err == nil {
+		err = env.linkMetaTargets()
+	}
+
 	return env, err
+}
+
+func (env *TestEnvironment) linkMetaTargets() error {
+	// First, if the target is a subtarget, link it to its metatarget
+	// and sibling subtargets.
+	for _, target := range env.Targets {
+		if len(target.MetaName) > 0 {
+			if err := target.initAsSubTarget(env); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Next, validate the metatargets
+	for _, target := range env.Targets {
+		if target.IsMetaTarget {
+			if err := target.initAsMetaTarget(env); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (env *TestEnvironment) TargetList() *TargetList {

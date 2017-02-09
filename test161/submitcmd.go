@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/ops-class/test161"
 	"io/ioutil"
 	"net/http"
@@ -28,7 +29,7 @@ var (
 const SubmitMsg = `
 The CSE 421/521 Collaboration Guidelines for this assignment are as follows:%v
 
-Your submission will receive an estimated score of %v/%v points.
+Your submission will receive the following estimated scores:%v
 
 Do you certify that you have followed the collaboration guidelines and wish to submit now?
 `
@@ -39,10 +40,7 @@ const NoUsersErr = `No users have been configured for test161. Please use 'test1
 
 // Run the submission locally, but as close to how the server would do it
 // as possible
-func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, errs []error) {
-
-	score = 0
-	available = 0
+func localSubmitTest(req *test161.SubmissionRequest) (scores []*scoreMapEntry, errs []error) {
 
 	var submission *test161.Submission
 
@@ -70,8 +68,7 @@ func localSubmitTest(req *test161.SubmissionRequest) (score, available uint, err
 
 	printRunSummary(submission.Tests, VERBOSE_LOUD, true)
 
-	score = submission.Score
-	available = submission.PointsAvailable
+	scores = splitScores(submission.Tests)
 
 	return
 }
@@ -180,25 +177,42 @@ func doSubmit() (exitcode int) {
 	// This is a good time to kick off a usage stats upload.
 	runTest161Uploader()
 
-	// We've verified what we can. Time to test things locally before submission.
-	score, avail := uint(0), uint(0)
-
 	// Local build
-	var errs []error
-	score, avail, errs = localSubmitTest(req)
+	scores, errs := localSubmitTest(req)
 	if len(errs) > 0 {
 		printRunErrors(errs)
 		return
 	}
 
+	hasPoints := false
+	for _, entry := range scores {
+		if entry.Earned > 0 {
+			hasPoints = true
+			break
+		}
+	}
+
 	// Don't bother proceeding if no points earned
-	if score == 0 && avail > 0 {
+	if !hasPoints {
 		fmt.Println("No points will be earned for this submission, cancelling submission.")
 		return
 	}
 
 	// Show score and collab policy, and give them a chance to cancel
-	fmt.Printf(SubmitMsg, collabMsg, score, avail)
+
+	scoreMsg := ""
+	bold := color.New(color.Bold).SprintFunc()
+
+	for _, entry := range scores {
+		name := entry.TargetName
+		if entry.IsMeta {
+			name = "(" + name + ")"
+		}
+		temp := fmt.Sprintf("\n%-15v: %v out of %v", name, entry.Earned, entry.Avail)
+		scoreMsg += bold(temp)
+	}
+
+	fmt.Printf(SubmitMsg, collabMsg, scoreMsg)
 	if text := getYesOrNo(); text == "no" {
 		fmt.Println()
 		fmt.Println("Submission request cancelled")
@@ -219,7 +233,10 @@ func doSubmit() (exitcode int) {
 	}
 
 	// Let the server know what we think we're going to get
-	req.EstimatedScore = score
+	req.EstimatedScores = make(map[string]uint)
+	for _, entry := range scores {
+		req.EstimatedScores[entry.TargetName] = entry.Earned
+	}
 
 	// Finally, submit
 	if err := submit(req); err == nil {
