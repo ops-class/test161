@@ -12,7 +12,7 @@ import (
 )
 
 type UploadHandler interface {
-	HandleFile(*multipart.FileHeader, *test161.UploadRequest) error
+	HandleFile(*multipart.FileHeader, *test161.UploadRequest, []*test161.Student) error
 	FileComplete(error)
 }
 
@@ -82,8 +82,10 @@ func uploadFiles(w http.ResponseWriter, r *http.Request) {
 	// If we are able to validate the users, we'll process the file contents.
 
 	var req test161.UploadRequest
+	var students []*test161.Student
+	var err error
 
-	if err := r.ParseMultipartForm(MAX_FILE_DOWNLOAD); err != nil {
+	if err = r.ParseMultipartForm(MAX_FILE_DOWNLOAD); err != nil {
 		logger.Println("Error parsing multi-part form:", err)
 		sendErrorCode(w, http.StatusBadRequest, err)
 		return
@@ -99,7 +101,7 @@ func uploadFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		json.Unmarshal([]byte(data[0]), &req)
-		if _, err := req.Validate(serverEnv); err != nil {
+		if students, err = req.Validate(serverEnv); err != nil {
 			sendErrorCode(w, 422, err)
 			return
 		}
@@ -118,7 +120,7 @@ func uploadFiles(w http.ResponseWriter, r *http.Request) {
 	for fname, headers := range r.MultipartForm.File {
 		fmt.Println("Processing", fname+"...")
 		for _, fheader := range headers {
-			err := handler.HandleFile(fheader, &req)
+			err := handler.HandleFile(fheader, &req, students)
 			handler.FileComplete(err)
 		}
 	}

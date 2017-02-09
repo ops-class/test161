@@ -24,13 +24,17 @@ type UsageStatsFileHandler struct {
 }
 
 func (handler *UsageStatsFileHandler) HandleFile(header *multipart.FileHeader,
-	req *test161.UploadRequest) error {
+	req *test161.UploadRequest, students []*test161.Student) error {
 
 	// We'll defer grunt work to upload reader and just collect inflated lines.
 	lineChan := make(chan string)
 	reader := NewUploadFileReader(true, lineChan)
 	handler.header = header
 	handler.hasError = false
+	staff := false
+	if len(students) > 0 {
+		staff, _ = students[0].IsStaff(serverEnv)
+	}
 
 	// We'll replace the user info with what comes in the validated request.
 	users := make([]string, 0)
@@ -48,6 +52,7 @@ func (handler *UsageStatsFileHandler) HandleFile(header *multipart.FileHeader,
 				logger.Println("Invalid usage JSON:", line)
 			} else {
 				usageStat.Users = users
+				usageStat.IsStaff = staff
 				if err = usageStat.Persist(serverEnv); err != nil {
 					logger.Println("Error saving stat:", err)
 				}

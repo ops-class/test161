@@ -14,6 +14,7 @@ type UsageStat struct {
 	Timestamp      time.Time  `bson:"timestamp" json:"timestamp"`
 	Version        int        `bson:"version" json:"version"`
 	Test161Version string     `bson:"test161_version" json:"test161_version"`
+	IsStaff        bool       `bson:"is_staff" json:"-"`
 	GroupInfo      *GroupStat `bson:"group_info" json:"group_info"`
 }
 
