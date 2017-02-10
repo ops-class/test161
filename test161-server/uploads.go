@@ -101,7 +101,7 @@ func uploadFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		json.Unmarshal([]byte(data[0]), &req)
-		if students, err = req.Validate(serverEnv); err != nil {
+		if students, err = req.Validate(submissionServer.GetEnv()); err != nil {
 			sendErrorCode(w, 422, err)
 			return
 		}

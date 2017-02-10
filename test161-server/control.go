@@ -30,9 +30,11 @@ func (sc *ServerCtrl) Control(msg *ControlRequest, reply *int) error {
 
 	*reply = 0
 
-	if submissionMgr == nil {
+	if submissionServer == nil || submissionServer.submissionMgr == nil {
 		return errors.New("SubmissionManager is not initialized")
 	}
+
+	submissionMgr := submissionServer.submissionMgr
 
 	switch msg.Message {
 	case CTRL_PAUSE:

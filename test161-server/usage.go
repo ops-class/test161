@@ -32,8 +32,10 @@ func (handler *UsageStatsFileHandler) HandleFile(header *multipart.FileHeader,
 	handler.header = header
 	handler.hasError = false
 	staff := false
+	env := submissionServer.GetEnv()
+
 	if len(students) > 0 {
-		staff, _ = students[0].IsStaff(serverEnv)
+		staff, _ = students[0].IsStaff(env)
 	}
 
 	// We'll replace the user info with what comes in the validated request.
@@ -53,7 +55,7 @@ func (handler *UsageStatsFileHandler) HandleFile(header *multipart.FileHeader,
 			} else {
 				usageStat.Users = users
 				usageStat.IsStaff = staff
-				if err = usageStat.Persist(serverEnv); err != nil {
+				if err = usageStat.Persist(env); err != nil {
 					logger.Println("Error saving stat:", err)
 				}
 			}

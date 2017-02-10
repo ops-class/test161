@@ -18,14 +18,6 @@ import (
 	"time"
 )
 
-// Submission Manager for test161
-
-// Environment for running test161 submissions
-var serverEnv *test161.TestEnvironment
-var submissionMgr *test161.SubmissionManager
-var staffOnlyTargets []string
-var disabledTargets []string
-
 // Environment config
 type SubmissionServerConfig struct {
 	CacheDir         string                 `yaml:"cachedir"`
@@ -67,8 +59,12 @@ var defaultConfig = &SubmissionServerConfig{
 var logger = log.New(os.Stderr, "test161-server: ", log.LstdFlags)
 
 type SubmissionServer struct {
-	conf *SubmissionServerConfig
+	conf          *SubmissionServerConfig
+	env           *test161.TestEnvironment
+	submissionMgr *test161.SubmissionManager
 }
+
+var submissionServer *SubmissionServer
 
 func NewSubmissionServer() (test161Server, error) {
 
@@ -96,14 +92,18 @@ func listTargets(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", JsonHeader)
 	w.WriteHeader(http.StatusOK)
 
-	list := serverEnv.TargetList()
+	list := submissionServer.listTargets()
 
 	if err := json.NewEncoder(w).Encode(list); err != nil {
 		logger.Println("Error encoding target list:", err)
 	}
 }
 
-func submissionFromHttp(w http.ResponseWriter, r *http.Request, validateOnly bool) *test161.SubmissionRequest {
+func (s *SubmissionServer) listTargets() *test161.TargetList {
+	return s.env.TargetList()
+}
+
+func submissionRequestFromHttp(w http.ResponseWriter, r *http.Request, validateOnly bool) *test161.SubmissionRequest {
 	var request test161.SubmissionRequest
 
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1*1024*1024))
@@ -135,43 +135,49 @@ func submissionFromHttp(w http.ResponseWriter, r *http.Request, validateOnly boo
 		return nil
 	}
 
-	// Check the client's version and make sure it's not too old
-	if request.ClientVersion.CompareTo(minClientVer) < 0 {
-		logger.Printf("Old request (version %v)\n", request.ClientVersion)
-		sendErrorCode(w, http.StatusNotAcceptable, errors.New(
-			"test161 version too old, test161-server requires version "+minClientVer.String()))
-		return nil
-	}
-
-	// Check to see if we're accepting submissions
-	if submissionMgr.Status() == test161.SM_NOT_ACCEPTING {
-		// We're trying to shut down
-		logger.Println("Rejecting due to SM_NOT_ACCEPTING")
-		sendErrorCode(w, http.StatusServiceUnavailable,
-			errors.New("The submission server is currently not accepting new submissions"))
-		return nil
-	}
-
-	// Validate the students and check if we're accepting staff-only submissions
-	if students, err := request.Validate(serverEnv); err != nil {
-		// Unprocessable entity
-		sendErrorCode(w, 422, err)
-		return nil
-	} else if err = checkStaffOnlySubmission(students); err != nil {
-		sendErrorCode(w, http.StatusServiceUnavailable, err)
-		return nil
-	} else if err = checkTargetBlacklists(students, request.Target); err != nil {
-		sendErrorCode(w, http.StatusServiceUnavailable, err)
-		return nil
-	}
-
 	return &request
 }
 
-func checkStaffOnlySubmission(students []*test161.Student) error {
-	if submissionMgr.Status() == test161.SM_STAFF_ONLY {
+func (s *SubmissionServer) validateRequest(request *test161.SubmissionRequest) (int, error) {
+
+	var err error
+
+	// Check the client's version and make sure it's not too old
+	if request.ClientVersion.CompareTo(s.conf.MinClient) < 0 {
+		logger.Printf("Old request (version %v)\n", request.ClientVersion)
+		err = errors.New("test161 version too old, test161-server requires version " + s.conf.MinClient.String())
+		return http.StatusNotAcceptable, err
+	}
+
+	// Check to see if we're accepting submissions
+	if s.submissionMgr.Status() == test161.SM_NOT_ACCEPTING {
+		// We're trying to shut down
+		logger.Println("Rejecting due to SM_NOT_ACCEPTING")
+		err = errors.New("The submission server is currently not accepting new submissions")
+		return http.StatusServiceUnavailable, err
+	}
+
+	// Validate the students and check if we're accepting staff-only submissions
+	if students, err := request.Validate(s.env); err != nil {
+		// Unprocessable entity
+		return 422, err
+	} else if err = s.checkStaffOnlySubmission(students); err != nil {
+		return http.StatusServiceUnavailable, err
+	} else if err = s.checkTargetBlacklists(students, request.Target); err != nil {
+		return http.StatusServiceUnavailable, err
+	}
+
+	return http.StatusOK, nil
+}
+
+func (s *SubmissionServer) GetEnv() *test161.TestEnvironment {
+	return s.env
+}
+
+func (s *SubmissionServer) checkStaffOnlySubmission(students []*test161.Student) error {
+	if s.submissionMgr.Status() == test161.SM_STAFF_ONLY {
 		for _, student := range students {
-			if isStaff, _ := student.IsStaff(serverEnv); !isStaff {
+			if isStaff, _ := student.IsStaff(s.env); !isStaff {
 				err := errors.New("The submission server is currently not accepting new submissions from students")
 				return err
 			}
@@ -180,8 +186,8 @@ func checkStaffOnlySubmission(students []*test161.Student) error {
 	return nil
 }
 
-func checkTargetBlacklists(students []*test161.Student, targetName string) error {
-	for _, name := range disabledTargets {
+func (s *SubmissionServer) checkTargetBlacklists(students []*test161.Student, targetName string) error {
+	for _, name := range s.conf.DisabledTargets {
 		if name == targetName {
 			return fmt.Errorf("The target '%v' is currently disabled on the server.", name)
 		}
@@ -189,14 +195,14 @@ func checkTargetBlacklists(students []*test161.Student, targetName string) error
 
 	isStaff := true
 
-	for _, s := range students {
-		if isStaff, _ = s.IsStaff(serverEnv); !isStaff {
+	for _, student := range students {
+		if isStaff, _ = student.IsStaff(s.env); !isStaff {
 			break
 		}
 	}
 
 	if !isStaff {
-		for _, name := range staffOnlyTargets {
+		for _, name := range s.conf.StaffOnlyTargets {
 			if name == targetName {
 				return fmt.Errorf("The target '%v' is currently disabled on the server for students.", name)
 			}
@@ -205,17 +211,39 @@ func checkTargetBlacklists(students []*test161.Student, targetName string) error
 	return nil
 }
 
+func (s *SubmissionServer) NewSubmission(request *test161.SubmissionRequest) (*test161.Submission, []error) {
+	return test161.NewSubmission(request, s.env)
+}
+
+func (s *SubmissionServer) RunAsync(submission *test161.Submission) {
+	// Run it!
+	go func() {
+		if err := s.submissionMgr.Run(submission); err != nil {
+			logger.Println("Error running submission:", err)
+		}
+	}()
+}
+
+func (s *SubmissionServer) CheckUserKeys(request *test161.SubmissionRequest) []*test161.RequestKeyResonse {
+	return request.CheckUserKeys(s.env)
+}
+
 // createSubmission accepts POST requests
 func createSubmission(w http.ResponseWriter, r *http.Request) {
 
-	// This does some common validation checks too.
-	request := submissionFromHttp(w, r, false)
+	request := submissionRequestFromHttp(w, r, false)
 	if request == nil {
 		return
 	}
 
+	// Validate with the submission server
+	if response, err := submissionServer.validateRequest(request); err != nil {
+		sendErrorCode(w, response, err)
+		return
+	}
+
 	// Make sure we can create the submission.  This checks for everything but run errors.
-	submission, errs := test161.NewSubmission(request, serverEnv)
+	submission, errs := submissionServer.NewSubmission(request)
 
 	if len(errs) > 0 {
 		w.Header().Set("Content-Type", JsonHeader)
@@ -234,25 +262,24 @@ func createSubmission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-
-	// Run it!
-	go func() {
-		if err := submissionMgr.Run(submission); err != nil {
-			logger.Println("Error running submission:", err)
-		}
-	}()
+	submissionServer.RunAsync(submission)
 }
 
 // validate accepts POST requests
 func validateSubmission(w http.ResponseWriter, r *http.Request) {
 
-	// This does some common validation checks too.
-	request := submissionFromHttp(w, r, true)
+	request := submissionRequestFromHttp(w, r, true)
 	if request == nil {
 		return
 	}
 
-	keyInfo := request.CheckUserKeys(serverEnv)
+	// Validate with the submission server
+	if response, err := submissionServer.validateRequest(request); err != nil {
+		sendErrorCode(w, response, err)
+		return
+	}
+
+	keyInfo := submissionServer.CheckUserKeys(request)
 	w.Header().Set("Content-Type", JsonHeader)
 	w.WriteHeader(http.StatusOK)
 
@@ -269,7 +296,7 @@ func getStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", JsonHeader)
 	w.WriteHeader(http.StatusOK)
 
-	stats := submissionMgr.CombinedStats()
+	stats := submissionServer.submissionMgr.CombinedStats()
 
 	if err := json.NewEncoder(w).Encode(stats); err != nil {
 		logger.Println("Error encoding stats:", err)
@@ -283,6 +310,10 @@ func apiUsage(w http.ResponseWriter, r *http.Request) {
 type KeygenRequest struct {
 	Email string
 	Token string
+}
+
+func (s *SubmissionServer) KeyGen(request *KeygenRequest) (string, error) {
+	return test161.KeyGen(request.Email, request.Token, s.env)
 }
 
 // Generate a public/private key pair for a particular user
@@ -307,7 +338,7 @@ func keygen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := test161.KeyGen(request.Email, request.Token, serverEnv)
+	key, err := submissionServer.KeyGen(&request)
 	if err != nil {
 		// Unprocessable entity
 		sendErrorCode(w, 422, err)
@@ -393,17 +424,13 @@ func (s *SubmissionServer) setUpEnvironment() error {
 	env.KeyDir = s.conf.KeyDir
 	env.Log = logger
 
-	// Set the min client version where the handler can access it
-	minClientVer = s.conf.MinClient
 	usageFailDir = s.conf.UsageDir
 
-	logger.Println("Min client ver:", minClientVer)
+	logger.Println("Min client ver:", s.conf.MinClient)
 
 	// OK, we're good to go
-	serverEnv = env
-	submissionMgr = test161.NewSubmissionManager(serverEnv)
-	staffOnlyTargets = s.conf.StaffOnlyTargets
-	disabledTargets = s.conf.DisabledTargets
+	s.env = env
+	s.submissionMgr = test161.NewSubmissionManager(s.env)
 
 	return nil
 }
@@ -422,5 +449,5 @@ func (s *SubmissionServer) Start() {
 
 func (s *SubmissionServer) Stop() {
 	test161.StopManager()
-	serverEnv.Persistence.Close()
+	s.env.Persistence.Close()
 }

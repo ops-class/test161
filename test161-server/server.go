@@ -102,6 +102,7 @@ func main() {
 		return
 	}
 	servers = append(servers, server)
+	submissionServer = server.(*SubmissionServer)
 
 	ctrl := &ControlServer{}
 	servers = append(servers, ctrl)
