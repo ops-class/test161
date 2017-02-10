@@ -23,39 +23,45 @@ import (
 // Environment for running test161 submissions
 var serverEnv *test161.TestEnvironment
 var submissionMgr *test161.SubmissionManager
+var staffOnlyTargets []string
+var disabledTargets []string
 
 // Environment config
 type SubmissionServerConfig struct {
-	CacheDir     string                 `yaml:"cachedir"`
-	Test161Dir   string                 `yaml:"test161dir"`
-	OverlayDir   string                 `yaml:"overlaydir"`
-	KeyDir       string                 `yaml:"keydir"`
-	UsageDir     string                 `yaml:"usagedir"`
-	MaxTests     uint                   `yaml:"max_tests"`
-	Database     string                 `yaml:"db_name"`
-	DBServers    []string               `yaml:"db_servers"`
-	DBUser       string                 `yaml:"db_user"`
-	DBReplicaSet string                 `yaml:"db_replica_set"`
-	DBPassword   string                 `yaml:"db_pw"`
-	DBTimeout    uint                   `yaml:"db_timeout"`
-	DBSSL        bool                   `yaml:"db_ssl"`
-	APIPort      uint                   `yaml:"api_port"`
-	MinClient    test161.ProgramVersion `yaml:"min_client"`
+	CacheDir         string                 `yaml:"cachedir"`
+	Test161Dir       string                 `yaml:"test161dir"`
+	OverlayDir       string                 `yaml:"overlaydir"`
+	KeyDir           string                 `yaml:"keydir"`
+	UsageDir         string                 `yaml:"usagedir"`
+	MaxTests         uint                   `yaml:"max_tests"`
+	Database         string                 `yaml:"db_name"`
+	DBServers        []string               `yaml:"db_servers"`
+	DBUser           string                 `yaml:"db_user"`
+	DBReplicaSet     string                 `yaml:"db_replica_set"`
+	DBPassword       string                 `yaml:"db_pw"`
+	DBTimeout        uint                   `yaml:"db_timeout"`
+	DBSSL            bool                   `yaml:"db_ssl"`
+	APIPort          uint                   `yaml:"api_port"`
+	MinClient        test161.ProgramVersion `yaml:"min_client"`
+	StaffOnlyTargets []string               `yaml:"staff_only_targets"`
+	DisabledTargets  []string               `yaml:"disabled_targets"`
 }
 
 const CONF_FILE = ".test161-server.conf"
 
 var defaultConfig = &SubmissionServerConfig{
-	CacheDir:   "/var/cache/test161/builds",
-	Test161Dir: "../fixtures/",
-	MaxTests:   0,
-	Database:   "test161",
-	DBServers:  []string{"localhost:27017"},
-	DBUser:     "",
-	DBPassword: "",
-	DBTimeout:  10,
-	APIPort:    4000,
-	MinClient:  test161.ProgramVersion{},
+	CacheDir:         "/var/cache/test161/builds",
+	Test161Dir:       "../fixtures/",
+	MaxTests:         0,
+	Database:         "test161",
+	DBServers:        []string{"localhost:27017"},
+	DBUser:           "",
+	DBPassword:       "",
+	DBTimeout:        10,
+	APIPort:          4000,
+	MinClient:        test161.ProgramVersion{},
+	StaffOnlyTargets: []string{},
+	DisabledTargets:  []string{},
 }
 
 var logger = log.New(os.Stderr, "test161-server: ", log.LstdFlags)
@@ -154,6 +160,9 @@ func submissionFromHttp(w http.ResponseWriter, r *http.Request, validateOnly boo
 	} else if err = checkStaffOnlySubmission(students); err != nil {
 		sendErrorCode(w, http.StatusServiceUnavailable, err)
 		return nil
+	} else if err = checkTargetBlacklists(students, request.Target); err != nil {
+		sendErrorCode(w, http.StatusServiceUnavailable, err)
+		return nil
 	}
 
 	return &request
@@ -165,6 +174,31 @@ func checkStaffOnlySubmission(students []*test161.Student) error {
 			if isStaff, _ := student.IsStaff(serverEnv); !isStaff {
 				err := errors.New("The submission server is currently not accepting new submissions from students")
 				return err
+			}
+		}
+	}
+	return nil
+}
+
+func checkTargetBlacklists(students []*test161.Student, targetName string) error {
+	for _, name := range disabledTargets {
+		if name == targetName {
+			return fmt.Errorf("The target '%v' is currently disabled on the server.", name)
+		}
+	}
+
+	isStaff := true
+
+	for _, s := range students {
+		if isStaff, _ = s.IsStaff(serverEnv); !isStaff {
+			break
+		}
+	}
+
+	if !isStaff {
+		for _, name := range staffOnlyTargets {
+			if name == targetName {
+				return fmt.Errorf("The target '%v' is currently disabled on the server for students.", name)
 			}
 		}
 	}
@@ -368,6 +402,8 @@ func (s *SubmissionServer) setUpEnvironment() error {
 	// OK, we're good to go
 	serverEnv = env
 	submissionMgr = test161.NewSubmissionManager(serverEnv)
+	staffOnlyTargets = s.conf.StaffOnlyTargets
+	disabledTargets = s.conf.DisabledTargets
 
 	return nil
 }
