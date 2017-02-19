@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/ops-class/test161"
-	color "gopkg.in/fatih/color.v1"
+	color "gopkg.in/fatih/color.v0"
 	"os"
 	"sort"
 	"strings"

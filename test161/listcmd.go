@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/ops-class/test161"
 	"github.com/parnurzeal/gorequest"
-	color "gopkg.in/fatih/color.v1"
+	color "gopkg.in/fatih/color.v0"
 	"net/http"
 	"os"
 	"sort"

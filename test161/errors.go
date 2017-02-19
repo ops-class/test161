@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	color "gopkg.in/fatih/color.v1"
+	color "gopkg.in/fatih/color.v0"
 	"os"
 )
 
