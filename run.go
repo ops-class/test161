@@ -872,6 +872,9 @@ func (t *Test) outputLineComplete() {
 
 	line.Line = line.Line[0 : pos+1]
 
+	// Clean up nulls
+	line.Line = strings.Replace(line.Line, "\x00", "", -1)
+
 	// Next, check if this is a secure line
 	if res := os161Secure.FindStringSubmatch(line.Line); len(res) == 5 {
 		// The message has the secprintf form, now verify that we trust this message.

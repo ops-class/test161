@@ -20,7 +20,7 @@ import (
 // Regular expressions for secure output. Only lines that match these expressions in
 // files that we trust will have SECRET replaced with the actual key.
 var (
-	secprintfExp = regexp.MustCompile(`.*secprintf\(SECRET, .+, "(.+)"\);.*`)
+	secprintfExp = regexp.MustCompile(`.*secprintf\(.*SECRET, .+, "(.+)"\);.*`)
 	successExp   = regexp.MustCompile(`.*success\(.+, SECRET, "(.+)"\);.*`)
 	partialExp   = regexp.MustCompile(`.*partial_credit\(SECRET, "(.+)",.+\);.*`)
 )
