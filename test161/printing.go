@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/fatih/color"
+	color "gopkg.in/fatih/color.v1"
 	"os"
 	"os/exec"
 	"strconv"
