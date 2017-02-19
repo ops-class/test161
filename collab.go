@@ -1,32 +1,41 @@
 package test161
 
 var collabMsgs = map[string]string{
-	"asst1": CollabMsgAsst1,
-	"asst2": CollabMsgAsst2,
+	"asst1":   CollabMsgAsst1,
+	"asst2":   CollabMsgAsst2,
+	"asst2.1": CollabMsgAsst2,
+	"asst2.2": CollabMsgAsst2,
+	"asst3":   CollabMsgAsst3,
+	"asst3.1": CollabMsgAsst3,
+	"asst3.2": CollabMsgAsst3,
+	"asst3.3": CollabMsgAsst3,
 }
 
 const CollabMsgAsst1 = `
- - Pair programming to complete the ASST1 implementation tasks is strongly encouraged.
+ - Pair programming to complete the implementation tasks is strongly
+   encouraged.
 
- - Answering the ASST1 code reading questions side-by-side with your partner is 
+ - Answering the code reading questions side-by-side with your partner is
    strongly encouraged.
  
- - Helping other students with Git, GDB, editing, and with other parts of the OS/161
-   toolchain is encouraged.
+ - Helping other students with Git, GDB, editing, and with other parts of the
+   OS/161 toolchain is encouraged.
 
- - Discussing the code reading questions and browsing the source tree with other students 
-   is encouraged.
+ - Discussing the code reading questions and browsing the source tree with
+   other students is encouraged.
 
- - Dividing the code reading questions and development tasks between partners is discouraged.
+ - Dividing the code reading questions and development tasks between partners
+   is discouraged.
 
- - Copying any answers from anyone who is not your partner or anywhere else and submitting
-   them as your own is cheating.
+ - Copying any answers from anyone who is not your partner or anywhere else and
+   submitting them as your own is cheating.
 
- - You may not refer to or incorporate any external sources without explicit permission.
-`
+ - You may not refer to or incorporate any external sources without explicit
+   permission.`
 
 const CollabMsgAsst2 = `
- - Pair programming to complete the implementation tasks is strongly encouraged.
+ - Pair programming to complete the implementation tasks is strongly
+   encouraged.
 
  - Writing a design document with your partner is strongly encouraged.
 
@@ -35,8 +44,8 @@ const CollabMsgAsst2 = `
    working on the file system system calls may finish first, at which point they
    can help and continue testing.
 
- - Answering the code reading questions side-by-side with your partner is  strongly
-   encouraged.
+ - Answering the code reading questions side-by-side with your partner is
+   strongly encouraged.
 
  - Discussing the code reading questions and browsing the source tree with other
    students is encouraged.
@@ -44,11 +53,41 @@ const CollabMsgAsst2 = `
  - Dividing the code reading questions and development tasks between partners is
    discouraged.
 
- - Any arrangement that results in one partner writing the entire design document is
-   cheating.
+ - Any arrangement that results in one partner writing the entire design
+   document is cheating.
 
- - Copying any answers from anyone who is not your partner or anywhere else and submitting
-   them as your own is cheating.
+ - Any arrangement that results in one partner writing all or almost all of the
+   code is cheating.
 
- - You may not refer to or incorporate any external sources without explicit permission.
-`
+ - Copying any answers from anyone who is not your partner or anywhere else and
+   submitting them as your own is cheating.
+
+ - You may not refer to or incorporate any external sources without explicit
+   permission.`
+
+const CollabMsgAsst3 = `
+ - Pair programming to complete the implementation tasks is strongly
+   encouraged.
+
+ - Writing a design document with your partner is strongly encouraged.
+
+ - Answering the code reading questions side-by-side with your partner is
+   strongly encouraged.
+
+ - Discussing the code reading questions and browsing the source tree with other
+   students is encouraged.
+
+ - Dividing the code reading questions and development tasks between partners is
+   discouraged.
+
+ - Any arrangement that results in one partner writing the entire design
+   document is cheating.
+
+ - Any arrangement that results in one partner writing all or almost all of the
+   code is cheating.
+
+ - Copying any answers from anyone who is not your partner or anywhere else and
+   submitting them as your own is cheating.
+
+ - You may not refer to or incorporate any external sources without explicit
+   permission.`
