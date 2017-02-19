@@ -605,8 +605,8 @@ func (t *BuildTest) addBuildCommands() error {
 
 	t.addCommand("./config "+t.conf.KConfig, confDir)
 	t.addCommand("bmake clean", compDir)
-	t.addCommand("bmake", compDir)
 	t.addCommand("bmake depend", compDir)
+	t.addCommand("bmake", compDir)
 	t.addCommand("bmake install", compDir)
 
 	return nil
