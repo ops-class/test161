@@ -1,0 +1,7 @@
+---
+name: metatest
+points: 100
+type: asst
+kconfig: ASST1
+is_meta_target: true
+sub_target_names: [meta.1, meta.2]

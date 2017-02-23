@@ -1,0 +1,9 @@
+---
+name: simple
+version: 1
+points: 50
+type: asst
+kconfig: DUMBVM
+tests:
+  - id: sync/sem1.t
+    points: 50

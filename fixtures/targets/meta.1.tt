@@ -1,0 +1,10 @@
+---
+name: meta.1
+version: 1
+points: 25
+type: asst
+kconfig: ASST1
+meta_name: metatest
+tests:
+  - id: sync/sem1.t
+    points: 25
