@@ -17,6 +17,17 @@ import (
 var validHead = regexp.MustCompile(`^HEAD\s+nsec\s+kinsns\s+uinsns\s+udud\s+idle\s+irqs\s+exns\s+disk\s+con\s+emu\s+net`)
 var validStat = regexp.MustCompile(`^DATA\s+(?P<Nsec>\d+)\s+(?P<Kinsns>\d+)\s+(?P<Uinsns>\d+)\s+(?P<Udud>\d+)\s+(?P<Idle>\d+)\s+(?P<IRQs>\d+)\s+(?P<Exns>\d+)\s+(?P<Disk>\d+)\s+(?P<Con>\d+)\s+(?P<Emu>\d+)\s+(?P<Net>\d+)`)
 
+// monitorError is a custom error type to differentiate monitor errors from
+// other stat errors, like I/O errors. This is useful for the runner loop that
+// might need to know why we shut down.
+type monitorError struct {
+	msg string
+}
+
+func (err *monitorError) Error() string {
+	return err.msg
+}
+
 type Stat struct {
 	initialized bool
 
@@ -309,30 +320,30 @@ func (t *Test) getStats() {
 		// Begin checks for various error conditions. No real rhyme or reason to
 		// the order here. We could return multiple errors but that would be a bit
 		// of a pain.
-		monitorError := ""
+		monitorErrorMsg := ""
 		if progressTime > float64(t.Monitor.ProgressTimeout) {
-			monitorError =
+			monitorErrorMsg =
 				fmt.Sprintf("no progress for %v s in %v mode", t.Monitor.ProgressTimeout, currentType)
 		} else if t.currentCommand.Timeout > 0 && commandTime > float64(t.currentCommand.Timeout) {
 			t.currentCommand.TimedOut = true
-			monitorError =
+			monitorErrorMsg =
 				fmt.Sprintf("command timed out after %v seconds", commandTime)
 		} else {
 			// Only run these checks if we have enough state
 			if uint(len(monitorCache)) >= t.Monitor.Window {
 				if currentType == "kernel" && monitorWindow.Uinsns > 0 {
-					monitorError = "non-zero user instructions during kernel operation"
+					monitorErrorMsg = "non-zero user instructions during kernel operation"
 				} else if t.Monitor.Kernel.EnableMin == "true" &&
 					float64(monitorWindow.Kinsns)/float64(monitorWindow.Insns) < t.Monitor.Kernel.Min {
-					monitorError = "insufficient kernel instructions (potential deadlock)"
+					monitorErrorMsg = "insufficient kernel instructions (potential deadlock)"
 				} else if float64(monitorWindow.Kinsns)/float64(monitorWindow.Insns) > t.Monitor.Kernel.Max {
-					monitorError = "too many kernel instructions (potential livelock)"
+					monitorErrorMsg = "too many kernel instructions (potential livelock)"
 				} else if currentType == "user" && t.Monitor.User.EnableMin == "true" &&
 					(float64(monitorWindow.Uinsns)/float64(monitorWindow.Insns) < t.Monitor.User.Min) {
-					monitorError = "insufficient user instructions"
+					monitorErrorMsg = "insufficient user instructions"
 				} else if currentType == "user" &&
 					(float64(monitorWindow.Uinsns)/float64(monitorWindow.Insns) > t.Monitor.User.Max) {
-					monitorError = "too many user instructions"
+					monitorErrorMsg = "too many user instructions"
 				}
 			}
 		}
@@ -340,7 +351,7 @@ func (t *Test) getStats() {
 		// Before we blow up check to make sure that we haven't moved on to a
 		// different command or disabled recording or monitoring while we've been
 		// calculating.
-		if monitorError != "" {
+		if monitorErrorMsg != "" {
 			t.statCond.L.Lock()
 			blowup := t.statRecord
 			t.statCond.L.Unlock()
@@ -349,7 +360,7 @@ func (t *Test) getStats() {
 				blowup = blowup && (currentCounter == t.commandCounter)
 				t.L.Unlock()
 				if blowup {
-					t.stopStats("monitor", monitorError, nil)
+					t.stopStats("monitor", monitorErrorMsg, &monitorError{monitorErrorMsg})
 					return
 				}
 			}

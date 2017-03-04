@@ -425,6 +425,7 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 		}
 		match, expectErr := t.sys161.ExpectRegexp(t.currentCommand.PromptPattern)
 		statActive, statErr := t.disableStats()
+		_, isMonitorErr := statErr.(*monitorError)
 
 		eof := false
 
@@ -435,16 +436,25 @@ func (t *Test) Run(env *TestEnvironment) (err error) {
 			t.allCorrect = false
 			t.currentCommand.PointsEarned = 0
 			break
-		} else if expectErr == io.EOF || len(match.Groups) == 0 {
+		} else if expectErr == io.EOF || len(match.Groups) == 0 || isMonitorErr {
 			// But is it reaaaally unexpected?
-			if t.currentCommand.Panic == CMD_OPT_NO &&
-				!(t.currentCommand.TimesOut != CMD_OPT_NO && t.currentCommand.TimedOut) {
+			expected := false
+			if !isMonitorErr && t.currentCommand.Panic != CMD_OPT_NO {
+				// Panicked and panics are expected
+				expected = true
+			} else if t.currentCommand.TimesOut != CMD_OPT_NO && t.currentCommand.TimedOut {
+				// The command is expected to timeout and it did
+				expected = true
+			}
+
+			if !expected {
 				t.addStatus("shutdown", "unexpected shutdown")
 				t.currentCommand.Status = COMMAND_STATUS_INCORRECT
 				t.allCorrect = false
 				t.currentCommand.PointsEarned = 0
 				break
 			} else {
+				// Continue on and evaluate the command for correctness
 				eof = true
 			}
 		} else if expectErr != nil {
