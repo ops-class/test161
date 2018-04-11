@@ -3,7 +3,7 @@ package test161
 import (
 	"errors"
 	"fmt"
-	"github.com/satori/go.uuid"
+	"github.com/kevinburke/go.uuid"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )

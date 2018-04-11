@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/ericaro/frontmatter"
 	"github.com/imdario/mergo"
-	"github.com/satori/go.uuid"
+	"github.com/kevinburke/go.uuid"
 	"io/ioutil"
 	"math/rand"
 	"reflect"

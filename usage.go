@@ -2,7 +2,7 @@ package test161
 
 import (
 	"encoding/json"
-	"github.com/satori/go.uuid"
+	"github.com/kevinburke/go.uuid"
 	"time"
 )
 

@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/satori/go.uuid"
+	"github.com/kevinburke/go.uuid"
 	"io/ioutil"
 	"os"
 	"os/exec"
