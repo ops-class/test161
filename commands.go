@@ -138,6 +138,23 @@ type ExpectedOutputLine struct {
 	KeyName string
 }
 
+func (ct *CommandTemplate) Clone() *CommandTemplate {
+	clone := *ct
+	clone.Output = make([]*TemplOutputLine, 0, len(ct.Output))
+	clone.Input = make([]string, 0, len(ct.Input))
+
+	for _, o := range ct.Output {
+		copy := *o
+		clone.Output = append(clone.Output, &copy)
+	}
+
+	for _, s := range ct.Input {
+		clone.Input = append(clone.Input, s)
+	}
+
+	return &clone
+}
+
 // Expand the golang text template using the provided tempate data.
 // We do this on a per-command instance basis, since output can change
 // depending on input.
@@ -233,11 +250,11 @@ func (c *Command) Instantiate(env *TestEnvironment) error {
 	}
 
 	// Individual tests can override the template in the commands files.
-	// This merges the command template on top of the overrides.
-	if err := mergo.Map(&c.Config, tmpl); err != nil {
+	// This merges the overrides on top of a copy of the command template.
+	tmpl = tmpl.Clone()
+	if err := mergo.Merge(tmpl, &c.Config, mergo.WithOverride); err != nil {
 		return err
 	}
-	tmpl = &c.Config
 	c.Panic = tmpl.Panic
 	c.TimesOut = tmpl.TimesOut
 	c.Timeout = tmpl.Timeout
